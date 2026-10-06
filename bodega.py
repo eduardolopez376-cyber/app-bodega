@@ -16,6 +16,15 @@ def conectar_bd():
         )
     ''')
     
+    # Asegurar que existan las nuevas columnas si la tabla ya existia previamente
+    cursor.execute("PRAGMA table_info(inventario)")
+    columnas = [col[1] for col in cursor.fetchall()]
+    
+    if "tipo" not in columnas:
+        cursor.execute("ALTER TABLE inventario ADD COLUMN tipo TEXT NOT NULL DEFAULT 'Material'")
+    if "stock_minimo" not in columnas:
+        cursor.execute("ALTER TABLE inventario ADD COLUMN stock_minimo INTEGER NOT NULL DEFAULT 5")
+    
     # Tabla de Operarios
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS operarios (
@@ -32,11 +41,20 @@ def conectar_bd():
             operario TEXT NOT NULL,
             codigo_material TEXT NOT NULL,
             cantidad INTEGER NOT NULL,
-            tipo TEXT NOT NULL,
+            tipo TEXT NOT NULL DEFAULT 'Material',
             estado TEXT NOT NULL DEFAULT 'Entregado',
             FOREIGN KEY (codigo_material) REFERENCES inventario (codigo)
         )
     ''')
+    
+    # Asegurar columnas en consumos
+    cursor.execute("PRAGMA table_info(consumos)")
+    columnas_consumos = [col[1] for col in cursor.fetchall()]
+    if "tipo" not in columnas_consumos:
+        cursor.execute("ALTER TABLE consumos ADD COLUMN tipo TEXT NOT NULL DEFAULT 'Material'")
+    if "estado" not in columnas_consumos:
+        cursor.execute("ALTER TABLE consumos ADD COLUMN estado TEXT NOT NULL DEFAULT 'Entregado'")
+
     conn.commit()
     conn.close()
 
