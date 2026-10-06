@@ -12,8 +12,14 @@ st.set_page_config(page_title="Control de Bodega - Metalgas", layout="wide", pag
 # Inicializar Base de Datos
 bodega.conectar_bd()
 
-st.title("📦 Sistema de Control de Bodega y Herramientas")
+col1, col2 = st.columns([1, 4])
 
+with col1:
+    st.image("WhatsApp Image 2026-10-06 at 6.50.00 PM", width=120)
+
+with col2:
+    st.title("Sistema de Control de Bodega y Herramientas")
+    
 # --- ALERTAS DE STOCK BAJO (SOLO MATERIALES) ---
 alertas = bodega.obtener_alertas_stock()
 if alertas:
