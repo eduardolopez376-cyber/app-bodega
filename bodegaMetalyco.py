@@ -18,7 +18,7 @@ with col1:
     st.image("WhatsApp Image 2026-10-06 at 6.50.00 PM.jpeg", width=120)
 
 with col2:
-    st.title("Sistema de Control de Bodega y Herramientas")
+    st.title("Sistema de Control de Bodega y Herramientas Metal&Co")
     
 # --- ALERTAS DE STOCK BAJO (SOLO MATERIALES) ---
 alertas = bodega.obtener_alertas_stock()
