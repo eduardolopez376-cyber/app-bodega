@@ -17,7 +17,6 @@ def conectar_bd():
         )
     ''')
     
-    # Adaptar columnas si la BD ya existía
     cursor.execute("PRAGMA table_info(inventario)")
     cols_inv = [col[1] for col in cursor.fetchall()]
     if "tipo" not in cols_inv:
@@ -125,7 +124,8 @@ def eliminar_item_inventario(codigo):
 def obtener_alertas_stock():
     conn = sqlite3.connect("bodega.db", check_same_thread=False)
     cursor = conn.cursor()
-    cursor.execute("SELECT codigo, nombre, tipo, cantidad, stock_minimo FROM inventario WHERE cantidad <= stock_minimo")
+    # Filtro estricto: Solo materiales con cantidad por debajo del stock mínimo
+    cursor.execute("SELECT codigo, nombre, tipo, cantidad, stock_minimo FROM inventario WHERE tipo = 'Material' AND cantidad <= stock_minimo")
     alertas = cursor.fetchall()
     conn.close()
     return alertas
