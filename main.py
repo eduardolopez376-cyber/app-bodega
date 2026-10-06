@@ -1,140 +1,161 @@
 import streamlit as st
 import pandas as pd
-import bodega  # Importa las funciones de tu archivo bodega.py
+import io
+import bodega
 
-# Configuración inicial de la página
-st.set_page_config(page_title="Sistema de Gestión de Bodega", page_icon="📦", layout="wide")
+st.set_page_config(page_title="Gestión de Bodega", page_icon="📦", layout="wide")
 
-# Inicializar la base de datos
+# Inicializar BD
 bodega.conectar_bd()
 
-st.title("📦 Sistema de Gestión de Bodega e Inventario")
+st.title("📦 Sistema de Control de Bodega")
 
-# Menú lateral para navegar entre secciones
-opcion = st.sidebar.radio(
-    "Selecciona una opción:",
-    ["📋 Ver Inventario", "➕ Agregar / Sumar Material", "📤 Registrar Entrega", "🗑️ Eliminar Material"]
-)
+pestana1, pestana2, pestana3, pestana4, pestana5 = st.tabs([
+    "📤 Entregas", 
+    "🛠️ Herramientas en Poder", 
+    "👥 Operarios", 
+    "📊 Reportes Excel", 
+    "📋 Inventario"
+])
 
-# ---------------------------------------------------------
-# OPCIÓN 1: VER INVENTARIO Y REPORTE (AQUÍ PEGAS EL CÓDIGO)
-# ---------------------------------------------------------
-if opcion == "📋 Ver Inventario":
-    st.header("Inventario Actual y Reorden")
-    items = bodega.obtener_inventario()
+# --- PESTAÑA 1: ENTREGAS ---
+with pestana1:
+    st.header("Registrar Salida de Material o Herramienta")
+    lista_operarios = bodega.obtener_operarios()
+    items_inv = bodega.obtener_inventario()
     
-    if items:
-        # Crear DataFrame para visualizar
-        df = pd.DataFrame(items, columns=["Código", "Nombre", "Cantidad", "Stock Mínimo"])
-        
-        # Resaltar filas con stock en o por debajo del mínimo
-        def resaltar_bajo_stock(val):
-            color = 'background-color: #ffcccc' if val['Cantidad'] <= val['Stock Mínimo'] else ''
-            return [color] * len(val)
-        
-        st.dataframe(df.style.apply(resaltar_bajo_stock, axis=1), use_container_width=True)
-        
-        # Filtrar materiales faltantes
-        df_faltantes = df[df["Cantidad"] <= df["Stock Mínimo"]].copy()
-        
-        if not df_faltantes.empty:
-            # Calcular cuántas unidades faltan para alcanzar el stock mínimo
-            df_faltantes["Cantidad a Pedir"] = df_faltantes["Stock Mínimo"] - df_faltantes["Cantidad"]
-            
-            st.warning(f"⚠️ **Alerta:** Hay {len(df_faltantes)} material(es) con stock en límite o crítico.")
-            st.subheader("🛒 Materiales a Solicitar")
-            st.dataframe(df_faltantes[["Código", "Nombre", "Cantidad", "Stock Mínimo", "Cantidad a Pedir"]], use_container_width=True)
-            
-            # Generar archivo Excel en memoria para descarga
-            import io
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df_faltantes.to_excel(writer, index=False, sheet_name='Materiales_A_Pedir')
-            excel_data = output.getvalue()
-            
-            # Botón de descarga
-            st.download_button(
-                label="📥 Descargar Reporte de Reorden (Excel)",
-                data=excel_data,
-                file_name="reporte_materiales_faltantes.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-        else:
-            st.success("✅ Todo el inventario se encuentra sobre el stock mínimo.")
+    if not lista_operarios:
+        st.warning("⚠️ Debes agregar al menos un operario en la pestaña '👥 Operarios' primero.")
+    elif not items_inv:
+        st.warning("⚠️ No hay elementos en el inventario.")
     else:
-        st.info("El inventario está vacío actualmente.")
+        col1, col2 = st.columns(2)
+        with col1:
+            op_seleccionado = st.selectbox("Seleccionar Operario:", lista_operarios)
+            # Formatear opciones de inventario
+            df_inv = pd.DataFrame(items_inv, columns=["Codigo", "Nombre", "Tipo", "Cantidad", "Stock Min"])
+            item_sel_str = st.selectbox("Seleccionar Ítem:", df_inv["Codigo"] + " - " + df_inv["Nombre"])
+            cod_item = item_sel_str.split(" - ")[0]
+            
+            row_item = df_inv[df_inv["Codigo"] == cod_item].iloc[0]
+            st.info(f"**Tipo:** {row_item['Tipo']} | **Disponible:** {row_item['Cantidad']}")
 
-# ---------------------------------------------------------
-# OPCIÓN 2: AGREGAR O SUMAR MATERIAL
-# ---------------------------------------------------------
-elif opcion == "➕ Agregar / Sumar Material":
-    st.header("Ingresar Material al Inventario")
-    st.caption("Si el código ya existe, la cantidad se sumará al inventario existente.")
-    
-    with st.form("form_agregar"):
-        codigo = st.text_input("Código del Material:").strip()
-        nombre = st.text_input("Nombre / Descripción:").strip()
-        cantidad = st.number_input("Cantidad a agregar:", min_value=1, step=1, value=1)
-        stock_minimo = st.number_input("Stock Mínimo recomendado:", min_value=1, step=1, value=5)
-        
-        submit = st.form_submit_button("Guardar Material")
-        
-        if submit:
-            if codigo and nombre:
-                bodega.agregar_o_sumar_material(codigo, nombre, cantidad, stock_minimo)
-                st.success(f"✅ Material '{nombre}' ({codigo}) guardado correctamente.")
-            else:
-                st.error("❌ Por favor completa el código y el nombre del material.")
-
-# ---------------------------------------------------------
-# OPCIÓN 3: REGISTRAR ENTREGA A OPERARIO
-# ---------------------------------------------------------
-elif opcion == "📤 Registrar Entrega":
-    st.header("Salida de Material para Operario")
-    items = bodega.obtener_inventario()
-    
-    if items:
-        opciones = {f"{item[0]} - {item[1]} (Disponible: {item[2]})": item[0] for item in items}
-        
-        operario = st.text_input("Nombre del Operario:").strip()
-        seleccion = st.selectbox("Selecciona el Material:", list(opciones.keys()))
-        cantidad_entregada = st.number_input("Cantidad a entregar:", min_value=1, step=1, value=1)
-        
-        if st.button("Registrar Salida", type="primary"):
-            if operario:
-                codigo_sel = opciones[seleccion]
-                exito = bodega.registrar_entrega_operario(codigo_sel, cantidad_entregada, operario)
-                
+        with col2:
+            cant_entregar = st.number_input("Cantidad a entregar:", min_value=1, value=1)
+            if st.button("🚀 Confirmar Entrega", use_container_width=True):
+                exito, msg = bodega.registrar_entrega(cod_item, cant_entregar, op_seleccionado)
                 if exito:
-                    st.success(f"✅ Entrega de {cantidad_entregada} unidad(es) registrada a {operario}.")
+                    st.success(f"✅ Se entregó a {op_seleccionado}.")
                     st.rerun()
                 else:
-                    st.error("❌ No hay suficiente stock disponible para realizar esta entrega.")
-            else:
-                st.error("❌ Ingresa el nombre del operario.")
-    else:
-        st.info("No hay materiales registrados en el inventario.")
+                    st.error(f"❌ Error: {msg}")
 
-# ---------------------------------------------------------
-# OPCIÓN 4: ELIMINAR MATERIAL
-# ---------------------------------------------------------
-elif opcion == "🗑️ Eliminar Material":
-    st.header("Eliminar Registro de Material")
-    items = bodega.obtener_inventario()
+# --- PESTAÑA 2: HERRAMIENTAS EN PODER ---
+with pestana2:
+    st.header("🛠️ Herramientas Prestadas por Operario")
+    movs = bodega.obtener_movimientos()
     
-    if items:
-        opciones = {f"{item[0]} - {item[1]} (Stock: {item[2]})": item[0] for item in items}
-        seleccion = st.selectbox("Selecciona el material a eliminar de la base de datos:", list(opciones.keys()))
+    if movs:
+        df_movs = pd.DataFrame(movs, columns=["ID", "Fecha", "Operario", "Codigo", "Nombre", "Cantidad", "Tipo", "Estado"])
+        prestados = df_movs[(df_movs["Tipo"] == "Herramienta") & (df_movs["Estado"] == "Prestado")]
         
-        confirmar = st.checkbox("Confirmo que deseo eliminar este material permanentemente.")
+        if prestados.empty:
+            st.success("🎉 No hay herramientas prestadas actualmente.")
+        else:
+            op_filtro = st.selectbox("Filtrar por Operario:", ["Todos"] + bodega.obtener_operarios())
+            if op_filtro != "Todos":
+                prestados = prestados[prestados["Operario"] == op_filtro]
+            
+            st.dataframe(prestados[["Fecha", "Operario", "Codigo", "Nombre", "Cantidad", "Estado"]], use_container_width=True)
+            
+            st.subheader("Registrar Devolución")
+            opciones_dev = {row["ID"]: f"{row['Operario']} - {row['Nombre']} (Cant: {row['Cantidad']})" for _, row in prestados.iterrows()}
+            id_dev = st.selectbox("Seleccionar herramienta a devolver:", list(opciones_dev.keys()), format_func=lambda x: opciones_dev[x])
+            
+            if st.button("🔄 Devolver a Bodega"):
+                row_dev = prestados[prestados["ID"] == id_dev].iloc[0]
+                bodega.registrar_devolucion_herramienta(id_dev, row_dev["Codigo"], row_dev["Cantidad"])
+                st.success("✅ Herramienta devuelta al inventario.")
+                st.rerun()
+    else:
+        st.info("No hay registros de movimientos.")
+
+# --- PESTAÑA 3: OPERARIOS ---
+with pestana3:
+    st.header("👥 Gestión de Operarios")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        nuevo_op = st.text_input("Nombre completo del Operario:")
+        if st.button("➕ Guardar Operario"):
+            if nuevo_op.strip():
+                if bodega.agregar_operario(nuevo_op):
+                    st.success(f"Operario '{nuevo_op}' guardado.")
+                    st.rerun()
+                else:
+                    st.error("El operario ya existe.")
+            else:
+                st.warning("Escribe un nombre válido.")
+    with col_b:
+        st.subheader("Lista de Operarios Registrados")
+        ops = bodega.obtener_operarios()
+        st.dataframe(pd.DataFrame(ops, columns=["Nombre del Operario"]), use_container_width=True)
+
+# --- PESTAÑA 4: EXCEL ---
+with pestana4:
+    st.header("📊 Exportar Reportes en Excel")
+    movs = bodega.obtener_movimientos()
+    
+    if movs:
+        df_movs = pd.DataFrame(movs, columns=["ID", "Fecha", "Operario", "Codigo", "Nombre", "Cantidad", "Tipo", "Estado"])
         
-        if st.button("Eliminar Definitivamente", type="primary"):
-            if confirmar:
-                codigo_sel = opciones[seleccion]
-                bodega.eliminar_material(codigo_sel)
-                st.success("✅ Material eliminado de la base de datos.")
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_movs.to_excel(writer, sheet_name="Historial General", index=False)
+            
+            mat_df = df_movs[df_movs["Tipo"] == "Material"]
+            if not mat_df.empty:
+                resumen = mat_df.groupby(["Operario", "Nombre"])["Cantidad"].sum().reset_index()
+                resumen.to_excel(writer, sheet_name="Consumo por Operario", index=False)
+                
+            herr_df = df_movs[(df_movs["Tipo"] == "Herramienta") & (df_movs["Estado"] == "Prestado")]
+            herr_df.to_excel(writer, sheet_name="Herramientas Prestadas", index=False)
+
+        output.seek(0)
+        st.download_button(
+            label="📥 Descargar Reporte Completo en Excel (.xlsx)",
+            data=output,
+            file_name="Reporte_Bodega.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+        st.dataframe(df_movs, use_container_width=True)
+    else:
+        st.info("No hay datos para exportar.")
+
+# --- PESTAÑA 5: INVENTARIO Y REGISTRO ---
+with pestana5:
+    st.header("📋 Gestión de Inventario")
+    
+    with st.expander("➕ Agregar / Actualizar Producto o Herramienta"):
+        col_i1, col_i2 = st.columns(2)
+        with col_i1:
+            cod = st.text_input("Código de Ítem:")
+            nom = st.text_input("Nombre / Descripción:")
+            tipo_item = st.selectbox("Tipo de Ítem:", ["Material", "Herramienta"])
+        with col_i2:
+            cant = st.number_input("Cantidad a Ingresar:", min_value=1, value=1)
+            min_st = st.number_input("Stock Mínimo:", min_value=1, value=5)
+            
+        if st.button("Guardar en Inventario"):
+            if cod and nom:
+                bodega.agregar_o_sumar_material(cod, nom, tipo_item, cant, min_st)
+                st.success("Guardado correctamente.")
                 st.rerun()
             else:
-                st.warning("⚠️ Debes marcar la casilla de confirmación para eliminar.")
-    else:
-        st.info("No hay materiales registrados para eliminar.")
+                st.warning("Completa los campos obligatorios.")
+
+    items = bodega.obtener_inventario()
+    if items:
+        df_i = pd.DataFrame(items, columns=["Código", "Nombre", "Tipo", "Cantidad", "Stock Mínimo"])
+        st.dataframe(df_i, use_container_width=True)
+    
