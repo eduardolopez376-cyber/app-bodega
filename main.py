@@ -14,10 +14,10 @@ bodega.conectar_bd()
 
 st.title("📦 Sistema de Control de Bodega y Herramientas")
 
-# --- ALERTAS DE STOCK BAJO ---
+# --- ALERTAS DE STOCK BAJO (SOLO MATERIALES) ---
 alertas = bodega.obtener_alertas_stock()
 if alertas:
-    st.warning(f"⚠️ **¡Alerta de Stock Bajo!** Hay {len(alertas)} ítem(s) que están por debajo o en su límite de stock mínimo:")
+    st.warning(f"⚠️ **¡Alerta de Recompra de Materiales!** Hay {len(alertas)} material(es) por debajo o en su límite de stock mínimo:")
     cols_alt = st.columns(min(len(alertas), 4))
     for idx, alt in enumerate(alertas):
         with cols_alt[idx % 4]:
@@ -229,12 +229,13 @@ with tab6:
             columns=["Operario", "Tipo Ítem", "Código", "Descripción", "Cantidad Total", "Estado", "Último Registro"]
         ) if cargos_totales else pd.DataFrame(columns=["Operario", "Tipo Ítem", "Código", "Descripción", "Cantidad Total", "Estado", "Último Registro"])
         
+        # Solo alertas para Tipo 'Material'
         alertas_data = bodega.obtener_alertas_stock()
         if alertas_data:
             df_pedir = pd.DataFrame(alertas_data, columns=["Código", "Nombre", "Tipo", "Stock Actual", "Stock Mínimo"])
             df_pedir["Cantidad Sugerida a Comprar"] = df_pedir["Stock Mínimo"] - df_pedir["Stock Actual"] + 5
         else:
-            df_pedir = pd.DataFrame([["N/A", "Sin necesidades de compra activas", "-", "-", "-", "-"]], 
+            df_pedir = pd.DataFrame([["N/A", "Sin necesidades de compra activas para materiales", "-", "-", "-", "-"]], 
                                     columns=["Código", "Nombre", "Tipo", "Stock Actual", "Stock Mínimo", "Cantidad Sugerida a Comprar"])
             
         df_inv_tot = pd.DataFrame(bodega.obtener_inventario(), columns=["Código", "Nombre", "Tipo", "Cantidad Disponible", "Stock Mínimo"])
@@ -251,9 +252,9 @@ with tab6:
             wb = writer.book
             
             # Estilos
-            header_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid") # Azul oscuro corporativo
+            header_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid") # Azul oscuro
             header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
-            zebra_fill = PatternFill(start_color="F2F4F7", end_color="F2F4F7", fill_type="solid") # Gris muy claro
+            zebra_fill = PatternFill(start_color="F2F4F7", end_color="F2F4F7", fill_type="solid") # Gris suave
             thin_border = Border(
                 left=Side(style="thin", color="D9D9D9"),
                 right=Side(style="thin", color="D9D9D9"),
@@ -297,4 +298,3 @@ with tab6:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
-
