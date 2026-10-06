@@ -23,8 +23,9 @@ if alertas:
 st.divider()
 
 # Menú principal por pestañas
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🚀 Entregas y Salidas",
+    "👷 Carga de Operarios",
     "🔨 Herramientas Prestadas",
     "📦 Gestión de Inventario",
     "👥 Gestión de Operarios",
@@ -73,9 +74,34 @@ with tab1:
                     st.error(msg)
 
 # ---------------------------------------------------------
-# PESTAÑA 2: HERRAMIENTAS PRESTADAS
+# PESTAÑA 2: CARGA DE OPERARIOS (PANTALLA VIVO)
 # ---------------------------------------------------------
 with tab2:
+    st.header("👷 Consulta de Materiales y Herramientas por Operario")
+    st.write("Consulta detallada de todo lo asignado o entregado a cada trabajador.")
+    
+    lista_operarios = bodega.obtener_operarios()
+    if lista_operarios:
+        opc_filtro = ["Todos"] + lista_operarios
+        operario_filtrado = st.selectbox("Filtrar por Operario Especifico:", opc_filtro)
+        
+        cargos = bodega.obtener_cargos_por_operario(operario_filtrado)
+        
+        if cargos:
+            df_cargos_view = pd.DataFrame(
+                cargos,
+                columns=["Operario", "Tipo Ítem", "Código", "Descripción", "Cantidad Total", "Estado", "Último Registro"]
+            )
+            st.dataframe(df_cargos_view, use_container_width=True)
+        else:
+            st.info("No hay registros ni entregas asignadas para el operario seleccionado.")
+    else:
+        st.info("No hay operarios registrados actualmente.")
+
+# ---------------------------------------------------------
+# PESTAÑA 3: HERRAMIENTAS PRESTADAS
+# ---------------------------------------------------------
+with tab3:
     st.header("🔨 Herramientas actualmente en poder de Operarios")
     
     herramientas_activas = bodega.obtener_herramientas_en_poder()
@@ -101,7 +127,6 @@ with tab2:
             st.write("")
             st.write("")
             if st.button("🟢 Devolver a Bodega", use_container_width=True):
-                # id_consumo, codigo_material, cantidad
                 bodega.registrar_devolucion_herramienta(dev_datos[0], dev_datos[3], dev_datos[5])
                 st.success(f"Herramienta '{dev_datos[4]}' devuelta por {dev_datos[2]} al inventario.")
                 st.rerun()
@@ -109,9 +134,9 @@ with tab2:
         st.info("🟢 No hay herramientas prestadas actualmente en poder de ningún operario.")
 
 # ---------------------------------------------------------
-# PESTAÑA 3: GESTIÓN DE INVENTARIO
+# PESTAÑA 4: GESTIÓN DE INVENTARIO
 # ---------------------------------------------------------
-with tab3:
+with tab4:
     st.header("📦 Control de Inventario (Agregar / Sumar / Eliminar)")
     
     st.subheader("1. Agregar o Sumar Stock")
@@ -145,7 +170,6 @@ with tab3:
         df_inv = pd.DataFrame(inv_data, columns=["Código", "Nombre", "Tipo", "Cantidad Disponible", "Stock Mínimo"])
         st.dataframe(df_inv, use_container_width=True)
         
-        # Eliminar ítem del inventario
         with st.expander("🗑️ Eliminar un ítem del Inventario"):
             opc_elim = {f"{item[0]} - {item[1]}": item[0] for item in inv_data}
             item_a_eliminar = st.selectbox("Selecciona el ítem que deseas eliminar:", list(opc_elim.keys()))
@@ -157,9 +181,9 @@ with tab3:
         st.info("El inventario está vacío.")
 
 # ---------------------------------------------------------
-# PESTAÑA 4: GESTIÓN DE OPERARIOS
+# PESTAÑA 5: GESTIÓN DE OPERARIOS
 # ---------------------------------------------------------
-with tab4:
+with tab5:
     st.header("👥 Administración de Operarios")
     
     col_op1, col_op2 = st.columns(2)
@@ -188,31 +212,37 @@ with tab4:
             st.info("No hay operarios registrados.")
 
 # ---------------------------------------------------------
-# PESTAÑA 5: REPORTES EN EXCEL
+# PESTAÑA 6: REPORTES EN EXCEL
 # ---------------------------------------------------------
-with tab5:
+with tab6:
     st.header("📊 Generar y Descargar Reportes en Excel")
-    st.write("Descarga un libro de Excel consolidado con las solicitudes de compra necesarias y el estado actual del personal.")
+    st.write("Descarga un archivo Excel detallado con todas las asignaciones de operarios, materiales a pedir e inventario general.")
     
     if st.button("📥 Generar Informe Completo en Excel", type="primary"):
         buffer = io.BytesIO()
         
-        # 1. Datos para pedir (Stock Bajo)
-        alertas_data = bodega.obtener_alertas_stock()
-        df_pedir = pd.DataFrame(alertas_data, columns=["Código", "Nombre", "Tipo", "Stock Actual", "Stock Mínimo"])
-        if not df_pedir.empty:
-            df_pedir["Sugerido a Comprar"] = df_pedir["Stock Mínimo"] - df_pedir["Stock Actual"] + 5
-            
-        # 2. Inventario Total
-        inv_data = bodega.obtener_inventario()
-        df_inv_tot = pd.DataFrame(inv_data, columns=["Código", "Nombre", "Tipo", "Cantidad", "Stock Mínimo"])
+        # 1. Carga General por Operario
+        cargos_totales = bodega.obtener_cargos_por_operario()
+        if cargos_totales:
+            df_cargos = pd.DataFrame(
+                cargos_totales,
+                columns=["Operario", "Tipo Ítem", "Código", "Descripción", "Cantidad Total", "Estado", "Último Registro"]
+            )
+        else:
+            df_cargos = pd.DataFrame(columns=["Operario", "Tipo Ítem", "Código", "Descripción", "Cantidad Total", "Estado", "Último Registro"])
         
-        # 3. Herramientas en Poder de Operarios
-        herramientas_data = bodega.obtener_herramientas_en_poder()
-        df_herramientas_ops = pd.DataFrame(
-            herramientas_data, 
-            columns=["ID Préstamo", "Fecha", "Operario", "Código", "Herramienta", "Cantidad"]
-        )
+        # 2. Materiales e insumos a Pedir (Stock Bajo)
+        alertas_data = bodega.obtener_alertas_stock()
+        if alertas_data:
+            df_pedir = pd.DataFrame(alertas_data, columns=["Código", "Nombre", "Tipo", "Stock Actual", "Stock Mínimo"])
+            df_pedir["Cantidad Sugerida a Comprar"] = df_pedir["Stock Mínimo"] - df_pedir["Stock Actual"] + 5
+        else:
+            df_pedir = pd.DataFrame([["N/A", "Sin necesidades de compra activas", "-", "-", "-", "-"]], 
+                                    columns=["Código", "Nombre", "Tipo", "Stock Actual", "Stock Mínimo", "Cantidad Sugerida a Comprar"])
+            
+        # 3. Inventario Total
+        inv_data = bodega.obtener_inventario()
+        df_inv_tot = pd.DataFrame(inv_data, columns=["Código", "Nombre", "Tipo", "Cantidad Disponible", "Stock Mínimo"])
         
         # 4. Historial Completo de Movimientos
         movs = bodega.obtener_historial_movimientos()
@@ -221,17 +251,17 @@ with tab5:
             columns=["ID", "Fecha", "Operario", "Código", "Ítem", "Cantidad", "Tipo", "Estado"]
         )
 
-        # Crear Excel con múltiples pestañas
+        # Crear libro de Excel con 4 hojas bien identificadas
         with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            df_cargos.to_excel(writer, sheet_name="Carga General por Operario", index=False)
             df_pedir.to_excel(writer, sheet_name="Materiales a Pedir", index=False)
-            df_herramientas_ops.to_excel(writer, sheet_name="Herramientas por Operario", index=False)
             df_inv_tot.to_excel(writer, sheet_name="Inventario Total", index=False)
             df_movs.to_excel(writer, sheet_name="Historial Completo", index=False)
             
         st.download_button(
             label="💾 Descargar Archivo Excel",
             data=buffer.getvalue(),
-            file_name=f"Reporte_Bodega_Metalgas_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
+            file_name=f"Reporte_Bodega_Metalgas_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
