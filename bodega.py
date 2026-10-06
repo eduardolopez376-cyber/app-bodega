@@ -17,7 +17,7 @@ def conectar_bd():
         )
     ''')
     
-    # Adaptar columnas si la BD ya existía sin ellas
+    # Adaptar columnas si la BD ya existía
     cursor.execute("PRAGMA table_info(inventario)")
     cols_inv = [col[1] for col in cursor.fetchall()]
     if "tipo" not in cols_inv:
@@ -178,6 +178,32 @@ def obtener_herramientas_en_poder():
         WHERE c.tipo = 'Herramienta' AND c.estado = 'Prestado'
         ORDER BY c.fecha DESC
     ''')
+    filas = cursor.fetchall()
+    conn.close()
+    return filas
+
+def obtener_cargos_por_operario(operario_filtro=None):
+    conn = sqlite3.connect("bodega.db", check_same_thread=False)
+    cursor = conn.cursor()
+    
+    query = '''
+        SELECT c.operario, c.tipo, c.codigo_material, i.nombre, SUM(c.cantidad) as total_cantidad, c.estado, MAX(c.fecha) as ultima_fecha
+        FROM consumos c
+        JOIN inventario i ON c.codigo_material = i.codigo
+        WHERE c.estado IN ('Prestado', 'Consumido')
+    '''
+    
+    params = []
+    if operario_filtro and operario_filtro != "Todos":
+        query += " AND c.operario = ?"
+        params.append(operario_filtro)
+        
+    query += '''
+        GROUP BY c.operario, c.tipo, c.codigo_material, i.nombre, c.estado
+        ORDER BY c.operario ASC, c.tipo DESC
+    '''
+    
+    cursor.execute(query, params)
     filas = cursor.fetchall()
     conn.close()
     return filas
