@@ -2,7 +2,7 @@ import psycopg2
 from datetime import datetime
 
 # Dirección de conexión a tu base de datos en Supabase
-DB_URL = "postgresql://postgres.ngwbaadrmzkbvoqeoync:[Metalgas2026]@aws-1-us-west-2.pooler.supabase.com:5432/postgres"
+DB_URL = "postgresql://postgres.ngwbaadrmzkbvoqeoync:Metalgas2026@aws-1-us-west-2.pooler.supabase.com:5432/postgres"
 def conectar_bd():
     conn = psycopg2.connect(DB_URL)
     cursor = conn.cursor()
