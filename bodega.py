@@ -1,11 +1,12 @@
 import sqlite3
+import pandas as pd
 from datetime import datetime
 
 def conectar_bd():
     conn = sqlite3.connect("bodega.db", check_same_thread=False)
     cursor = conn.cursor()
     
-    # Tabla de Inventario
+    # 1. Tabla Inventario
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS inventario (
             codigo TEXT PRIMARY KEY,
@@ -16,16 +17,15 @@ def conectar_bd():
         )
     ''')
     
-    # Asegurar que existan las nuevas columnas si la tabla ya existia previamente
+    # Adaptar columnas si la BD ya existía sin ellas
     cursor.execute("PRAGMA table_info(inventario)")
-    columnas = [col[1] for col in cursor.fetchall()]
-    
-    if "tipo" not in columnas:
+    cols_inv = [col[1] for col in cursor.fetchall()]
+    if "tipo" not in cols_inv:
         cursor.execute("ALTER TABLE inventario ADD COLUMN tipo TEXT NOT NULL DEFAULT 'Material'")
-    if "stock_minimo" not in columnas:
+    if "stock_minimo" not in cols_inv:
         cursor.execute("ALTER TABLE inventario ADD COLUMN stock_minimo INTEGER NOT NULL DEFAULT 5")
-    
-    # Tabla de Operarios
+
+    # 2. Tabla Operarios
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS operarios (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,7 +33,7 @@ def conectar_bd():
         )
     ''')
     
-    # Tabla de Consumos y Préstamos
+    # 3. Tabla Consumos y Préstamos
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS consumos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,12 +47,11 @@ def conectar_bd():
         )
     ''')
     
-    # Asegurar columnas en consumos
     cursor.execute("PRAGMA table_info(consumos)")
-    columnas_consumos = [col[1] for col in cursor.fetchall()]
-    if "tipo" not in columnas_consumos:
+    cols_cons = [col[1] for col in cursor.fetchall()]
+    if "tipo" not in cols_cons:
         cursor.execute("ALTER TABLE consumos ADD COLUMN tipo TEXT NOT NULL DEFAULT 'Material'")
-    if "estado" not in columnas_consumos:
+    if "estado" not in cols_cons:
         cursor.execute("ALTER TABLE consumos ADD COLUMN estado TEXT NOT NULL DEFAULT 'Entregado'")
 
     conn.commit()
@@ -68,6 +67,8 @@ def obtener_operarios():
     return [f[0] for f in filas]
 
 def agregar_operario(nombre):
+    if not nombre.strip():
+        return False
     conn = sqlite3.connect("bodega.db", check_same_thread=False)
     cursor = conn.cursor()
     try:
@@ -79,77 +80,113 @@ def agregar_operario(nombre):
     conn.close()
     return exito
 
+def eliminar_operario(nombre):
+    conn = sqlite3.connect("bodega.db", check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM operarios WHERE nombre = ?", (nombre,))
+    conn.commit()
+    conn.close()
+
 # --- INVENTARIO ---
-def agregar_o_sumar_material(codigo, nombre, tipo, cantidad_nueva, stock_minimo=5):
+def agregar_o_actualizar_item(codigo, nombre, tipo, cantidad, stock_minimo):
     conn = sqlite3.connect("bodega.db", check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute("SELECT cantidad FROM inventario WHERE codigo = ?", (codigo,))
-    resultado = cursor.fetchone()
-    if resultado:
-        nueva_cantidad = resultado[0] + cantidad_nueva
-        cursor.execute("UPDATE inventario SET cantidad = ?, tipo = ? WHERE codigo = ?", (nueva_cantidad, tipo, codigo))
+    res = cursor.fetchone()
+    if res:
+        nueva_cant = res[0] + cantidad
+        cursor.execute(
+            "UPDATE inventario SET nombre = ?, tipo = ?, cantidad = ?, stock_minimo = ? WHERE codigo = ?",
+            (nombre, tipo, nueva_cant, stock_minimo, codigo)
+        )
     else:
-        cursor.execute("INSERT INTO inventario VALUES (?, ?, ?, ?, ?)", (codigo, nombre, tipo, cantidad_nueva, stock_minimo))
+        cursor.execute(
+            "INSERT INTO inventario (codigo, nombre, tipo, cantidad, stock_minimo) VALUES (?, ?, ?, ?, ?)",
+            (codigo, nombre, tipo, cantidad, stock_minimo)
+        )
     conn.commit()
     conn.close()
 
 def obtener_inventario():
     conn = sqlite3.connect("bodega.db", check_same_thread=False)
     cursor = conn.cursor()
-    cursor.execute("SELECT codigo, nombre, tipo, cantidad, stock_minimo FROM inventario")
+    cursor.execute("SELECT codigo, nombre, tipo, cantidad, stock_minimo FROM inventario ORDER BY nombre ASC")
     items = cursor.fetchall()
     conn.close()
     return items
 
-def eliminar_material(codigo):
+def eliminar_item_inventario(codigo):
     conn = sqlite3.connect("bodega.db", check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute("DELETE FROM inventario WHERE codigo = ?", (codigo,))
     conn.commit()
     conn.close()
 
-# --- ENTREGAS Y HERRAMIENTAS ---
-def registrar_entrega(codigo, cantidad_entregada, operario):
+def obtener_alertas_stock():
+    conn = sqlite3.connect("bodega.db", check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute("SELECT codigo, nombre, tipo, cantidad, stock_minimo FROM inventario WHERE cantidad <= stock_minimo")
+    alertas = cursor.fetchall()
+    conn.close()
+    return alertas
+
+# --- SALIDAS Y DEVOLUCIONES ---
+def registrar_entrega(codigo, cantidad, operario):
     conn = sqlite3.connect("bodega.db", check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute("SELECT nombre, tipo, cantidad FROM inventario WHERE codigo = ?", (codigo,))
     item = cursor.fetchone()
     
-    if not item or item[2] < cantidad_entregada:
+    if not item:
         conn.close()
-        return False, "Stock insuficiente o ítem no existe"
+        return False, "El ítem especificado no existe."
     
-    tipo_item = item[1]
-    nuevo_stock = item[2] - cantidad_entregada
+    nom_item, tipo_item, cant_actual = item
+    
+    if cant_actual < cantidad:
+        conn.close()
+        return False, f"Stock insuficiente. Disponible: {cant_actual} unidades."
+    
+    nuevo_stock = cant_actual - cantidad
     fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    estado = "Prestado" if tipo_item == "Herramienta" else "Consumido"
+    estado_inicial = "Prestado" if tipo_item == "Herramienta" else "Consumido"
     
     cursor.execute("UPDATE inventario SET cantidad = ? WHERE codigo = ?", (nuevo_stock, codigo))
     cursor.execute(
         "INSERT INTO consumos (fecha, operario, codigo_material, cantidad, tipo, estado) VALUES (?, ?, ?, ?, ?, ?)",
-        (fecha_actual, operario, codigo, cantidad_entregada, tipo_item, estado)
+        (fecha_actual, operario, codigo, cantidad, tipo_item, estado_inicial)
     )
     conn.commit()
     conn.close()
-    return True, "Entrega registrada correctamente"
+    return True, f"Entrega de {tipo_item.lower()} registrada exitosamente."
 
 def registrar_devolucion_herramienta(id_consumo, codigo_material, cantidad):
     conn = sqlite3.connect("bodega.db", check_same_thread=False)
     cursor = conn.cursor()
-    
-    # Devolver stock
     cursor.execute("UPDATE inventario SET cantidad = cantidad + ? WHERE codigo = ?", (cantidad, codigo_material))
-    # Cambiar estado
     cursor.execute("UPDATE consumos SET estado = 'Devuelto' WHERE id = ?", (id_consumo,))
-    
     conn.commit()
     conn.close()
 
-def obtener_movimientos():
+def obtener_herramientas_en_poder():
     conn = sqlite3.connect("bodega.db", check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT c.id, c.fecha, c.operario, c.codigo_material, i.nombre, c.cantidad, c.tipo, c.estado 
+        SELECT c.id, c.fecha, c.operario, c.codigo_material, i.nombre, c.cantidad
+        FROM consumos c
+        JOIN inventario i ON c.codigo_material = i.codigo
+        WHERE c.tipo = 'Herramienta' AND c.estado = 'Prestado'
+        ORDER BY c.fecha DESC
+    ''')
+    filas = cursor.fetchall()
+    conn.close()
+    return filas
+
+def obtener_historial_movimientos():
+    conn = sqlite3.connect("bodega.db", check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT c.id, c.fecha, c.operario, c.codigo_material, i.nombre, c.cantidad, c.tipo, c.estado
         FROM consumos c
         JOIN inventario i ON c.codigo_material = i.codigo
         ORDER BY c.id DESC
