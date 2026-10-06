@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
 import io
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 import bodega
 
 # Configuración inicial de la página
@@ -50,8 +53,6 @@ with tab1:
         
         with col1:
             operario_sel = st.selectbox("Seleccionar Operario:", operarios)
-            
-            # Formatear opciones para el selector
             opciones_inv = {f"[{item[2]}] {item[1]} (Stock: {item[3]})": item for item in inventario_items}
             item_sel_key = st.selectbox("Seleccionar Material / Herramienta:", list(opciones_inv.keys()))
             item_datos = opciones_inv[item_sel_key]
@@ -74,7 +75,7 @@ with tab1:
                     st.error(msg)
 
 # ---------------------------------------------------------
-# PESTAÑA 2: CARGA DE OPERARIOS (PANTALLA VIVO)
+# PESTAÑA 2: CARGA DE OPERARIOS (PANTALLA EN VIVO)
 # ---------------------------------------------------------
 with tab2:
     st.header("👷 Consulta de Materiales y Herramientas por Operario")
@@ -212,26 +213,22 @@ with tab5:
             st.info("No hay operarios registrados.")
 
 # ---------------------------------------------------------
-# PESTAÑA 6: REPORTES EN EXCEL
+# PESTAÑA 6: REPORTES EN EXCEL ESTILIZADOS
 # ---------------------------------------------------------
 with tab6:
-    st.header("📊 Generar y Descargar Reportes en Excel")
-    st.write("Descarga un archivo Excel detallado con todas las asignaciones de operarios, materiales a pedir e inventario general.")
+    st.header("📊 Generar y Descargar Reporte Estilizado en Excel")
+    st.write("Genera un libro con formato corporativo (encabezados oscuros, filas alternadas y anchos ajustados).")
     
-    if st.button("📥 Generar Informe Completo en Excel", type="primary"):
+    if st.button("📥 Generar Informe Completo con Diseño", type="primary"):
         buffer = io.BytesIO()
         
-        # 1. Carga General por Operario
+        # Datasets
         cargos_totales = bodega.obtener_cargos_por_operario()
-        if cargos_totales:
-            df_cargos = pd.DataFrame(
-                cargos_totales,
-                columns=["Operario", "Tipo Ítem", "Código", "Descripción", "Cantidad Total", "Estado", "Último Registro"]
-            )
-        else:
-            df_cargos = pd.DataFrame(columns=["Operario", "Tipo Ítem", "Código", "Descripción", "Cantidad Total", "Estado", "Último Registro"])
+        df_cargos = pd.DataFrame(
+            cargos_totales,
+            columns=["Operario", "Tipo Ítem", "Código", "Descripción", "Cantidad Total", "Estado", "Último Registro"]
+        ) if cargos_totales else pd.DataFrame(columns=["Operario", "Tipo Ítem", "Código", "Descripción", "Cantidad Total", "Estado", "Último Registro"])
         
-        # 2. Materiales e insumos a Pedir (Stock Bajo)
         alertas_data = bodega.obtener_alertas_stock()
         if alertas_data:
             df_pedir = pd.DataFrame(alertas_data, columns=["Código", "Nombre", "Tipo", "Stock Actual", "Stock Mínimo"])
@@ -240,28 +237,64 @@ with tab6:
             df_pedir = pd.DataFrame([["N/A", "Sin necesidades de compra activas", "-", "-", "-", "-"]], 
                                     columns=["Código", "Nombre", "Tipo", "Stock Actual", "Stock Mínimo", "Cantidad Sugerida a Comprar"])
             
-        # 3. Inventario Total
-        inv_data = bodega.obtener_inventario()
-        df_inv_tot = pd.DataFrame(inv_data, columns=["Código", "Nombre", "Tipo", "Cantidad Disponible", "Stock Mínimo"])
-        
-        # 4. Historial Completo de Movimientos
-        movs = bodega.obtener_historial_movimientos()
-        df_movs = pd.DataFrame(
-            movs,
-            columns=["ID", "Fecha", "Operario", "Código", "Ítem", "Cantidad", "Tipo", "Estado"]
-        )
+        df_inv_tot = pd.DataFrame(bodega.obtener_inventario(), columns=["Código", "Nombre", "Tipo", "Cantidad Disponible", "Stock Mínimo"])
+        df_movs = pd.DataFrame(bodega.obtener_historial_movimientos(), columns=["ID", "Fecha", "Operario", "Código", "Ítem", "Cantidad", "Tipo", "Estado"])
 
-        # Crear libro de Excel con 4 hojas bien identificadas
+        # Generar Excel con formato
         with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
             df_cargos.to_excel(writer, sheet_name="Carga General por Operario", index=False)
             df_pedir.to_excel(writer, sheet_name="Materiales a Pedir", index=False)
             df_inv_tot.to_excel(writer, sheet_name="Inventario Total", index=False)
             df_movs.to_excel(writer, sheet_name="Historial Completo", index=False)
             
+            # Formato visual con openpyxl
+            wb = writer.book
+            
+            # Estilos
+            header_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid") # Azul oscuro corporativo
+            header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+            zebra_fill = PatternFill(start_color="F2F4F7", end_color="F2F4F7", fill_type="solid") # Gris muy claro
+            thin_border = Border(
+                left=Side(style="thin", color="D9D9D9"),
+                right=Side(style="thin", color="D9D9D9"),
+                top=Side(style="thin", color="D9D9D9"),
+                bottom=Side(style="thin", color="D9D9D9")
+            )
+            
+            for sheetname in wb.sheetnames:
+                ws = wb[sheetname]
+                ws.views.sheetView[0].showGridLines = True
+                
+                # Formatear Encabezado
+                for cell in ws[1]:
+                    cell.fill = header_fill
+                    cell.font = header_font
+                    cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                
+                # Formatear Celdas de Datos
+                for row_idx, row in enumerate(ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=1, max_col=ws.max_column), start=2):
+                    is_even = row_idx % 2 == 0
+                    for cell in row:
+                        cell.border = thin_border
+                        cell.alignment = Alignment(vertical="center")
+                        if is_even:
+                            cell.fill = zebra_fill
+                            
+                # Autoajustar ancho de columnas
+                for col in ws.columns:
+                    max_len = 0
+                    col_letter = get_column_letter(col[0].column)
+                    for cell in col:
+                        val_str = str(cell.value or '')
+                        if len(val_str) > max_len:
+                            max_len = len(val_str)
+                    ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+            
         st.download_button(
-            label="💾 Descargar Archivo Excel",
+            label="💾 Descargar Archivo Excel Estilizado",
             data=buffer.getvalue(),
             file_name=f"Reporte_Bodega_Metalgas_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
+
