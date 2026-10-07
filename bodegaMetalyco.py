@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import psycopg2
@@ -290,23 +289,67 @@ elif rol in ["admin", "produccion"]:
             st.error(f"Error en Reportes: {e}")
 
     with tab7:
-        st.subheader("⚙️ Administrar Usuarios y Credenciales")
+        st.subheader("⚙️ Administrar Usuarios, Contraseñas y Permisos")
         try:
             users_df = ejecutar_consulta("SELECT id, username, nombre, rol FROM usuarios")
             st.dataframe(users_df, use_container_width=True)
             
-            with st.expander("➕ Crear Nuevo Usuario para Login"):
-                nu_user = st.text_input("Nombre de Usuario (para ingresar)")
-                nu_pass = st.text_input("Contraseña Temporal")
-                nu_nom = st.text_input("Nombre Completo")
-                nu_rol = st.selectbox("Rol", ["operario", "produccion", "admin"])
-                
-                if st.button("Crear Usuario"):
-                    ejecutar_comando(
-                        "INSERT INTO usuarios (username, password, nombre, rol) VALUES (%s, %s, %s, %s)",
-                        (nu_user, nu_pass, nu_nom, nu_rol)
-                    )
-                    st.success("Usuario creado correctamente.")
-                    st.rerun()
+            col_add, col_edit, col_del = st.columns(3)
+            
+            # --- 1. CREAR NUEVO USUARIO ---
+            with col_add:
+                with st.expander("➕ Añadir Usuario"):
+                    nu_user = st.text_input("Usuario (Login)", key="add_user")
+                    nu_pass = st.text_input("Contraseña", type="password", key="add_pass")
+                    nu_nom = st.text_input("Nombre Completo", key="add_nom")
+                    nu_rol = st.selectbox("Rol/Permiso", ["operario", "produccion", "admin"], key="add_rol")
+                    
+                    if st.button("Guardar Usuario"):
+                        if nu_user and nu_pass and nu_nom:
+                            ejecutar_comando(
+                                "INSERT INTO usuarios (username, password, nombre, rol) VALUES (%s, %s, %s, %s)",
+                                (nu_user, nu_pass, nu_nom, nu_rol)
+                            )
+                            st.success("Usuario creado exitosamente.")
+                            st.rerun()
+                        else:
+                            st.warning("Completa todos los campos.")
+
+            # --- 2. EDITAR ROL O CAMBIAR CONTRASEÑA ---
+            with col_edit:
+                with st.expander("✏️ Editar Usuario / Clave"):
+                    lista_usuarios = users_df["username"].tolist()
+                    usr_sel = st.selectbox("Seleccionar Usuario", lista_usuarios, key="edit_usr_sel")
+                    
+                    nueva_clave = st.text_input("Nueva Contraseña (dejar vacío si no cambia)", type="password", key="edit_pass")
+                    nuevo_rol = st.selectbox("Cambiar Rol/Permiso", ["operario", "produccion", "admin"], key="edit_rol")
+                    
+                    if st.button("Actualizar Usuario"):
+                        if nueva_clave.strip():
+                            ejecutar_comando(
+                                "UPDATE usuarios SET password = %s, rol = %s WHERE username = %s",
+                                (nueva_clave, nuevo_rol, usr_sel)
+                            )
+                        else:
+                            ejecutar_comando(
+                                "UPDATE usuarios SET rol = %s WHERE username = %s",
+                                (nuevo_rol, usr_sel)
+                            )
+                        st.success(f"Usuario '{usr_sel}' actualizado.")
+                        st.rerun()
+
+            # --- 3. ELIMINAR USUARIO ---
+            with col_del:
+                with st.expander("🗑️ Eliminar Usuario"):
+                    usr_del_sel = st.selectbox("Usuario a Eliminar", users_df["username"].tolist(), key="del_usr_sel")
+                    
+                    if st.button("Confirmar Eliminación", type="primary"):
+                        if usr_del_sel == st.session_state["username"]:
+                            st.error("No puedes eliminar tu propia cuenta en uso.")
+                        else:
+                            ejecutar_comando("DELETE FROM usuarios WHERE username = %s", (usr_del_sel,))
+                            st.success(f"Usuario '{usr_del_sel}' eliminado.")
+                            st.rerun()
+                            
         except Exception as e:
-            st.error(f"Error en Usuarios: {e}")
+            st.error(f"Error en Gestión de Usuarios: {e}")
