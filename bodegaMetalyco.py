@@ -86,7 +86,6 @@ if not st.session_state["autenticado"]:
     st.title("🔑 Sistema Metal&Co")
     st.subheader("Inicio de Sesión")
     
-    # Columna del logo ampliada a 250px de ancho para mejor presencia visual
     c_logo, c_form = st.columns([1, 1], vertical_alignment="center")
     with c_logo:
         mostrar_logo(ancho=250)
@@ -220,9 +219,10 @@ if rol == "operario":
 # VISTA COMPLETA PARA ADMINISTRADOR Y PRODUCCIÓN
 # ====================================================
 elif rol in ["admin", "produccion"]:
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    tab1, tab_eq, tab_ref, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "📅 Programar", 
-        "⚙️ Equipos/Ref",
+        "⚙️ Equipos",
+        "📄 Referencias",
         "📊 Reportes", 
         "🚀 Entregas", 
         "🔨 Herramientas", 
@@ -287,8 +287,8 @@ elif rol in ["admin", "produccion"]:
                     edit_act = st.text_input("Actividad", value=row_sel["actividad"], key="e_act")
                     edit_meta = st.number_input("Meta Unidades", min_value=1, value=int(row_sel["meta_unidades"]), key="e_meta")
                     edit_estado = st.selectbox("Estado", ["PENDIENTE", "EN PROCESO", "FINALIZADO", "CANCELADO"], 
-                                               index=["PENDIENTE", "EN PROCESO", "FINALIZADO", "CANCELADO"].index(row_sel["estado"]) if row_sel["estado"] in ["PENDIENTE", "EN PROCESO", "FINALIZADO", "CANCELADO"] else 0, 
-                                               key="e_est")
+                                                index=["PENDIENTE", "EN PROCESO", "FINALIZADO", "CANCELADO"].index(row_sel["estado"]) if row_sel["estado"] in ["PENDIENTE", "EN PROCESO", "FINALIZADO", "CANCELADO"] else 0, 
+                                                key="e_est")
                     
                     if st.button("Guardar Cambios", use_container_width=True):
                         ejecutar_comando(
@@ -310,11 +310,9 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Programación: {e}")
 
-    # --- TAB 2: MÁQUINAS Y REFERENCIAS ---
-    with tab2:
-        st.subheader("⚙️ Máquinas y Referencias")
-        
-        st.write("#### 🛠️ Gestión de Máquinas")
+    # --- TAB 2: EQUIPOS Y MÁQUINAS ---
+    with tab_eq:
+        st.subheader("⚙️ Gestión de Máquinas y Equipos")
         try:
             df_maqs = ejecutar_consulta("SELECT * FROM maquinas")
             st.dataframe(df_maqs, use_container_width=True)
@@ -337,8 +335,9 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Máquinas: {e}")
 
-        st.write("---")
-        st.write("#### 📄 Gestión de Referencias")
+    # --- TAB 3: REFERENCIAS ---
+    with tab_ref:
+        st.subheader("📄 Gestión de Referencias de Productos")
         try:
             df_refs = ejecutar_consulta("SELECT * FROM referencias")
             st.dataframe(df_refs, use_container_width=True)
@@ -361,7 +360,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Referencias: {e}")
 
-    # --- TAB 3: REPORTES EXCEL ---
+    # --- TAB 4: REPORTES EXCEL ---
     with tab3:
         st.subheader("📊 Historial General de Producción")
         try:
@@ -394,7 +393,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en reportes: {e}")
 
-    # --- TAB 4: ENTREGAS Y SALIDAS ---
+    # --- TAB 5: ENTREGAS Y SALIDAS ---
     with tab4:
         st.subheader("Registrar Salida de Material")
         try:
@@ -421,7 +420,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Entregas: {e}")
 
-    # --- TAB 5: HERRAMIENTAS ---
+    # --- TAB 6: HERRAMIENTAS ---
     with tab5:
         st.subheader("Herramientas Prestadas")
         try:
@@ -444,7 +443,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Herramientas: {e}")
 
-    # --- TAB 6: INVENTARIO ---
+    # --- TAB 7: INVENTARIO ---
     with tab6:
         st.subheader("Gestión de Inventario")
         try:
@@ -475,7 +474,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Inventario: {e}")
 
-    # --- TAB 7: USUARIOS Y PERMISOS ---
+    # --- TAB 8: USUARIOS Y PERMISOS ---
     with tab7:
         st.subheader("⚙️ Administrar Usuarios")
         try:
