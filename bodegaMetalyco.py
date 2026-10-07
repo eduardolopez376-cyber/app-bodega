@@ -1,12 +1,4 @@
-Para solucionar de una vez el error FileNotFoundError, hagamos que el código revise si la imagen existe antes de cargarla. De esta manera, si la imagen no se encuentra o tiene otro nombre, la aplicación no se caerá con un error rojo y mostrará el formulario de inicio de sesión normalmente.
 
-Sigue estos pasos en GitHub:
-
-Abre el archivo bodegaMetalyco.py en GitHub y haz clic en el lápiz ✏️ para editar.
-
-Reemplaza TODO el contenido del archivo por este código actualizado:
-
-Python
 import streamlit as st
 import pandas as pd
 import psycopg2
