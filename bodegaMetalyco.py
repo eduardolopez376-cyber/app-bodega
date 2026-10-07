@@ -78,7 +78,7 @@ if not st.session_state["autenticado"]:
 # ----------------------------------------------------
 col_logo, col_titulo = st.columns([1, 5], vertical_alignment="center")
 with col_logo:
-    st.image("WhatsApp Image 2026-10-06 at 6.50.00 PM.jpeg", width=110)
+    st.image("WhatsApp Image 2026-10-06 at 6.50.00 PM.jpeg", width=120)
 with col_titulo:
     st.title("Sistema de Control de Bodega y Herramientas")
 
