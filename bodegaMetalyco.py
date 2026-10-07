@@ -2,12 +2,13 @@ import streamlit as st
 import pandas as pd
 import psycopg2
 import os
-from datetime import datetime
+import io
+from datetime import datetime, time
 
 # Configuración de página
 st.set_page_config(
-    page_title="Control de Bodega - Metal&Co",
-    page_icon="📦",
+    page_title="Control de Producción - Metal&Co",
+    page_icon="⚙️",
     layout="wide"
 )
 
@@ -59,7 +60,7 @@ if "autenticado" not in st.session_state:
     st.session_state["username"] = None
 
 if not st.session_state["autenticado"]:
-    st.title("🔑 Sistema de Control - Metal&Co")
+    st.title("🔑 Sistema de Control y Producción - Metal&Co")
     st.subheader("Inicio de Sesión")
     
     col1, col2 = st.columns([1, 2])
@@ -89,13 +90,13 @@ if not st.session_state["autenticado"]:
     st.stop()
 
 # ----------------------------------------------------
-# ENCABEZADO Y BARRA LATERAL (Cerrar Sesión)
+# ENCABEZADO Y BARRA LATERAL
 # ----------------------------------------------------
 col_logo, col_titulo = st.columns([1, 5], vertical_alignment="center")
 with col_logo:
     mostrar_logo(ancho=110)
 with col_titulo:
-    st.title("Sistema de Control de Bodega y Herramientas")
+    st.title("Sistema de Gestión de Producción y Bodega")
 
 st.sidebar.markdown(f"👤 **Usuario:** {st.session_state['nombre_usuario']}")
 st.sidebar.markdown(f"🔰 **Rol:** `{st.session_state['rol'].upper()}`")
@@ -104,32 +105,29 @@ if st.sidebar.button("🔒 Cerrar Sesión"):
     st.session_state["autenticado"] = False
     st.rerun()
 
-# ----------------------------------------------------
-# VISTAS SEGÚN ROL
-# ----------------------------------------------------
 rol = st.session_state["rol"]
 
 # ====================================================
 # VISTA EXCLUSIVA PARA OPERARIOS
 # ====================================================
 if rol == "operario":
-    st.subheader(f"📌 Panel del Operario: {st.session_state['nombre_usuario']}")
+    st.subheader(f"📌 Panel de Trabajo: {st.session_state['nombre_usuario']}")
     
-    tab_prog, tab_prod = st.tabs(["📋 Tareas y Materiales Asignados", "⚙️ Registrar Producción"])
+    tab_prog, tab_prod = st.tabs(["📋 Mi Programación del Día", "⚙️ Registrar Reporte de Producción"])
     
     with tab_prog:
-        st.write("### Mis Tareas Programadas para Hoy")
+        st.write("### Mis Tareas Asignadas para Hoy")
         try:
             tareas = ejecutar_consulta(
-                "SELECT fecha, tarea, estado FROM programacion_diaria WHERE operario_nombre = %s ORDER BY id DESC",
+                "SELECT hora_inicio, hora_fin, maquina, referencia, actividad, meta_unidades, estado FROM programacion_diaria WHERE operario_nombre = %s ORDER BY id DESC",
                 (st.session_state['nombre_usuario'],)
             )
             if not tareas.empty:
                 st.dataframe(tareas, use_container_width=True)
             else:
-                st.info("No tienes tareas programadas asignadas para hoy.")
+                st.info("No tienes tareas asignadas programadas actualmente.")
         except Exception as e:
-            st.error(f"Error al cargar tareas: {e}")
+            st.error(f"Error al cargar programación: {e}")
             
         st.write("### Mis Materiales y Herramientas a Cargo")
         try:
@@ -140,216 +138,268 @@ if rol == "operario":
             if not herramientas.empty:
                 st.dataframe(herramientas, use_container_width=True)
             else:
-                st.success("No tienes herramientas ni materiales pendientes de devolución.")
+                st.success("No tienes materiales pendientes a cargo.")
         except Exception as e:
-            st.error(f"Error al cargar materiales: {e}")
+            st.error(f"Error al cargar consumos: {e}")
 
     with tab_prod:
-        st.write("### Registrar Reporte Diario de Producción")
-        with st.form("form_reporte_operario"):
-            unidades = st.number_input("Cantidad de unidades producidas hoy", min_value=1, step=1)
-            obs = st.text_area("Observaciones o Novedades")
-            submit = st.form_submit_button("Guardar Registro de Producción")
+        st.write("### Registrar Tiempo y Unidades Producidas")
+        try:
+            # Traer lista de referencias y máquinas disponibles
+            ref_df = ejecutar_consulta("SELECT codigo FROM referencias")
+            maq_df = ejecutar_consulta("SELECT nombre FROM maquinas")
             
-            if submit:
-                try:
+            lista_refs = ref_df["codigo"].tolist() if not ref_df.empty else ["N/A"]
+            lista_maqs = maq_df["nombre"].tolist() if not maq_df.empty else ["N/A"]
+            
+            with st.form("form_reporte_operario"):
+                ref_selected = st.selectbox("Seleccionar Referencia Producida", lista_refs)
+                maq_selected = st.selectbox("Máquina Utilizada", lista_maqs)
+                
+                c_h1, c_h2 = st.columns(2)
+                with c_h1:
+                    h_inicio = st.time_input("Hora de Inicio de Producción", time(7, 0))
+                with c_h2:
+                    h_fin = st.time_input("Hora de Finalización de Producción", time(17, 0))
+                    
+                unidades = st.number_input("Cantidad de Unidades Producidas", min_value=1, step=1)
+                obs = st.text_area("Observaciones o Novedades en Planta")
+                
+                submit = st.form_submit_button("Guardar Registro de Producción")
+                
+                if submit:
                     ejecutar_comando(
-                        "INSERT INTO registro_produccion (operario_nombre, unidades_producidas, observaciones) VALUES (%s, %s, %s)",
-                        (st.session_state['nombre_usuario'], unidades, obs)
+                        """INSERT INTO registro_produccion 
+                        (operario_nombre, maquina, referencia, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones) 
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                        (st.session_state['nombre_usuario'], maq_selected, ref_selected, h_inicio, h_fin, unidades, obs)
                     )
-                    st.success("¡Registro de producción guardado exitosamente!")
-                except Exception as e:
-                    st.error(f"Error al registrar producción: {e}")
+                    st.success("¡Registro de producción guardado correctamente!")
+        except Exception as e:
+            st.error(f"Error al guardar reporte: {e}")
 
 # ====================================================
 # VISTA COMPLETA PARA ADMINISTRADOR Y PRODUCCIÓN
 # ====================================================
 elif rol in ["admin", "produccion"]:
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+        "📅 Programar Planta", 
+        "⚙️ Maquinas y Referencias",
+        "📊 Reportes Excel", 
         "🚀 Entregas y Salidas", 
-        "🔨 Herramientas Prestadas", 
-        "📦 Gestión de Inventario", 
-        "👥 Gestión de Operarios", 
-        "📅 Programar Producción", 
-        "📊 Reportes Producción",
-        "⚙️ Gestión Usuarios"
+        "🔨 Herramientas", 
+        "📦 Inventario", 
+        "⚙️ Usuarios y Permisos"
     ])
     
+    # --- TAB 1: PROGRAMAR PLANTA ---
     with tab1:
-        st.subheader("Registrar Salida de Material o Préstamo de Herramienta")
+        st.subheader("📅 Asignación de Turnos, Máquinas y Tareas a Operarios")
+        try:
+            ops = ejecutar_consulta("SELECT nombre FROM operarios")['nombre'].tolist()
+            maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
+            refs = ejecutar_consulta("SELECT codigo FROM referencias")['codigo'].tolist()
+            
+            if not ops or not maqs or not refs:
+                st.warning("Asegúrate de registrar Operarios, Máquinas y Referencias antes de programar.")
+            else:
+                with st.form("form_programacion"):
+                    col_p1, col_p2, col_p3 = st.columns(3)
+                    with col_p1:
+                        op_p = st.selectbox("Seleccionar Operario", ops)
+                        maq_p = st.selectbox("Asignar Máquina", maqs)
+                    with col_p2:
+                        ref_p = st.selectbox("Asignar Referencia", refs)
+                        act_p = st.text_input("Actividad / Operación (Ej: Corte, Plegado, Soldadura)")
+                    with col_p3:
+                        h_ini_p = st.time_input("Hora Inicio Turno", time(7, 0))
+                        h_fin_p = st.time_input("Hora Fin Turno", time(17, 0))
+                    
+                    meta_p = st.number_input("Meta de Unidades A Producir", min_value=1, value=100)
+                    btn_prog = st.form_submit_button("Asignar Programación al Operario")
+                    
+                    if btn_prog:
+                        ejecutar_comando(
+                            """INSERT INTO programacion_diaria 
+                            (operario_nombre, maquina, referencia, actividad, hora_inicio, hora_fin, meta_unidades) 
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                            (op_p, maq_p, ref_p, act_p, h_ini_p, h_fin_p, meta_p)
+                        )
+                        st.success(f"Programación asignada correctamente a {op_p}.")
+                        st.rerun()
+            
+            st.write("---")
+            st.write("### Programación Actual en Planta")
+            st.dataframe(ejecutar_consulta("SELECT * FROM programacion_diaria ORDER BY id DESC"), use_container_width=True)
+        except Exception as e:
+            st.error(f"Error en Programación: {e}")
+
+    # --- TAB 2: MÁQUINAS Y REFERENCIAS ---
+    with tab2:
+        st.subheader("⚙️ Configuración de Máquinas y Referencias de Producción")
+        c_m, c_r = st.columns(2)
+        
+        with c_m:
+            st.write("#### 🛠️ Gestión de Máquinas")
+            try:
+                st.dataframe(ejecutar_consulta("SELECT * FROM maquinas"), use_container_width=True)
+                with st.expander("➕ Crear Nueva Máquina"):
+                    m_nom = st.text_input("Nombre / Código de Máquina")
+                    m_tipo = st.text_input("Área / Tipo (Ej: Corte Laser, Dobladora)")
+                    if st.button("Guardar Máquina"):
+                        ejecutar_comando("INSERT INTO maquinas (nombre, tipo) VALUES (%s, %s)", (m_nom, m_tipo))
+                        st.success("Máquina agregada.")
+                        st.rerun()
+            except Exception as e:
+                st.error(f"Error en Máquinas: {e}")
+
+        with c_r:
+            st.write("#### 📄 Gestión de Referencias")
+            try:
+                st.dataframe(ejecutar_consulta("SELECT * FROM referencias"), use_container_width=True)
+                with st.expander("➕ Crear Nueva Referencia"):
+                    r_cod = st.text_input("Código de Referencia")
+                    r_desc = st.text_input("Descripción del Producto")
+                    if st.button("Guardar Referencia"):
+                        ejecutar_comando("INSERT INTO referencias (codigo, descripcion) VALUES (%s, %s)", (r_cod, r_desc))
+                        st.success("Referencia agregada.")
+                        st.rerun()
+            except Exception as e:
+                st.error(f"Error en Referencias: {e}")
+
+    # --- TAB 3: REPORTES EXCEL Y TIEMPOS ---
+    with tab3:
+        st.subheader("📊 Reporte Consolidado de Producción y Tiempos Trabajos")
+        try:
+            df_prod = ejecutar_consulta("SELECT * FROM registro_produccion ORDER BY fecha DESC")
+            
+            if not df_prod.empty:
+                # Calcular horas trabajadas si es posible
+                st.write("### Registros de Planta")
+                st.dataframe(df_prod, use_container_width=True)
+                
+                # Botón de Descarga Excel
+                buffer = io.BytesIO()
+                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                    df_prod.to_excel(writer, index=False, sheet_name='Produccion_Operarios')
+                
+                st.download_button(
+                    label="📥 Descargar Reporte Completo en Excel",
+                    data=buffer.getvalue(),
+                    file_name=f"Reporte_Produccion_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            else:
+                st.info("Aún no hay reportes registrados por los operarios.")
+        except Exception as e:
+            st.error(f"Error cargando reportes: {e}")
+
+    # --- TAB 4: ENTREGAS Y SALIDAS ---
+    with tab4:
+        st.subheader("Registrar Salida de Material o Préstamo")
         try:
             ops = ejecutar_consulta("SELECT nombre FROM operarios")['nombre'].tolist()
             mats = ejecutar_consulta("SELECT codigo, nombre, tipo FROM inventario")
             
-            if not ops:
-                st.warning("No hay operarios registrados. Ve a la pestaña '👥 Gestión de Operarios'.")
-            else:
-                op_sel = st.selectbox("Seleccionar Operario", ops)
-                mat_sel = st.selectbox("Seleccionar Material/Herramienta", mats['nombre'].tolist())
-                cant = st.number_input("Cantidad", min_value=1, value=1)
+            if ops and not mats.empty:
+                op_sel = st.selectbox("Operario", ops, key="ent_op")
+                mat_sel = st.selectbox("Material/Herramienta", mats['nombre'].tolist(), key="ent_mat")
+                cant = st.number_input("Cantidad", min_value=1, value=1, key="ent_cant")
                 
                 if st.button("Registrar Salida/Préstamo"):
                     row = mats[mats['nombre'] == mat_sel].iloc[0]
-                    cod = row['codigo']
-                    tipo = row['tipo']
-                    
+                    cod, tipo = row['codigo'], row['tipo']
                     estado = "PRESTADO" if tipo == "HERRAMIENTA" else "ENTREGADO"
                     
                     ejecutar_comando(
                         "INSERT INTO consumos (fecha, operario, codigo_material, cantidad, tipo, estado) VALUES (%s, %s, %s, %s, %s, %s)",
                         (datetime.now().strftime("%Y-%m-%d %H:%M"), op_sel, cod, cant, tipo, estado)
                     )
-                    
                     if tipo == "CONSUMIBLE":
                         ejecutar_comando("UPDATE inventario SET cantidad = cantidad - %s WHERE codigo = %s", (cant, cod))
-                    
-                    st.success(f"Registrado correctamente a {op_sel}.")
+                    st.success("Salida registrada.")
         except Exception as e:
             st.error(f"Error en Entregas: {e}")
 
-    with tab2:
-        st.subheader("Herramientas en Préstamo")
+    # --- TAB 5: HERRAMIENTAS ---
+    with tab5:
+        st.subheader("Herramientas Prestadas")
         try:
             prestados = ejecutar_consulta("SELECT id, fecha, operario, codigo_material, cantidad FROM consumos WHERE tipo = 'HERRAMIENTA' AND estado = 'PRESTADO'")
             st.dataframe(prestados, use_container_width=True)
-            
             if not prestados.empty:
-                id_dev = st.selectbox("Seleccionar ID para Devolución", prestados['id'].tolist())
+                id_dev = st.selectbox("ID a Devolver", prestados['id'].tolist())
                 if st.button("Marcar Devuelto"):
                     ejecutar_comando("UPDATE consumos SET estado = 'DEVUELTO' WHERE id = %s", (id_dev,))
-                    st.success("Herramienta devuelta al inventario.")
+                    st.success("Herramienta devuelta.")
                     st.rerun()
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"Error en Herramientas: {e}")
 
-    with tab3:
-        st.subheader("Inventario de Bodega")
+    # --- TAB 6: INVENTARIO ---
+    with tab6:
+        st.subheader("Gestión de Inventario")
         try:
             inv = ejecutar_consulta("SELECT * FROM inventario")
             st.dataframe(inv, use_container_width=True)
-            
-            with st.expander("➕ Agregar Nuevo Material u Herramienta"):
-                c_cod = st.text_input("Código")
-                c_nom = st.text_input("Nombre / Descripción")
+            with st.expander("➕ Agregar Insumo"):
+                c_cod = st.text_input("Código Insumo")
+                c_nom = st.text_input("Nombre")
                 c_tipo = st.selectbox("Tipo", ["CONSUMIBLE", "HERRAMIENTA"])
-                c_cant = st.number_input("Cantidad Inicial", min_value=0, value=1)
+                c_cant = st.number_input("Cantidad", min_value=0, value=1)
                 c_min = st.number_input("Stock Mínimo", min_value=0, value=5)
-                
-                if st.button("Guardar en Inventario"):
+                if st.button("Guardar Insumo"):
                     ejecutar_comando(
                         "INSERT INTO inventario (codigo, nombre, tipo, cantidad, stock_minimo) VALUES (%s, %s, %s, %s, %s)",
                         (c_cod, c_nom, c_tipo, c_cant, c_min)
                     )
-                    st.success("Material guardado.")
+                    st.success("Insumo Guardado.")
                     st.rerun()
         except Exception as e:
             st.error(f"Error en Inventario: {e}")
 
-    with tab4:
-        st.subheader("Lista de Operarios")
-        try:
-            ops_df = ejecutar_consulta("SELECT * FROM operarios")
-            st.dataframe(ops_df, use_container_width=True)
-            
-            with st.form("form_add_op"):
-                nom_op = st.text_input("Nombre Completo del Operario")
-                if st.form_submit_button("Añadir Operario"):
-                    ejecutar_comando("INSERT INTO operarios (nombre) VALUES (%s)", (nom_op,))
-                    st.success("Operario añadido.")
-                    st.rerun()
-        except Exception as e:
-            st.error(f"Error en Operarios: {e}")
-
-    with tab5:
-        st.subheader("📅 Programar Ordenes de Trabajo Diarias")
-        try:
-            ops_list = ejecutar_consulta("SELECT nombre FROM operarios")['nombre'].tolist()
-            if ops_list:
-                op_prog = st.selectbox("Operario a Asignar", ops_list)
-                tarea_prog = st.text_area("Descripción de la Tarea / Orden de Producción")
-                if st.button("Asignar Tarea"):
-                    ejecutar_comando(
-                        "INSERT INTO programacion_diaria (operario_nombre, tarea) VALUES (%s, %s)",
-                        (op_prog, tarea_prog)
-                    )
-                    st.success(f"Tarea asignada a {op_prog}.")
-            
-            st.write("---")
-            st.write("### Programación Actual")
-            st.dataframe(ejecutar_consulta("SELECT * FROM programacion_diaria ORDER BY id DESC"), use_container_width=True)
-        except Exception as e:
-            st.error(f"Error en Programación: {e}")
-
-    with tab6:
-        st.subheader("📊 Reportes de Producción Diaria por Operario")
-        try:
-            rep = ejecutar_consulta("SELECT * FROM registro_produccion ORDER BY fecha DESC")
-            st.dataframe(rep, use_container_width=True)
-        except Exception as e:
-            st.error(f"Error en Reportes: {e}")
-
+    # --- TAB 7: USUARIOS Y PERMISOS ---
     with tab7:
-        st.subheader("⚙️ Administrar Usuarios, Contraseñas y Permisos")
+        st.subheader("⚙️ Administrar Usuarios y Permisos")
         try:
             users_df = ejecutar_consulta("SELECT id, username, nombre, rol FROM usuarios")
             st.dataframe(users_df, use_container_width=True)
             
-            col_add, col_edit, col_del = st.columns(3)
-            
-            # --- 1. CREAR NUEVO USUARIO ---
-            with col_add:
-                with st.expander("➕ Añadir Usuario"):
-                    nu_user = st.text_input("Usuario (Login)", key="add_user")
-                    nu_pass = st.text_input("Contraseña", type="password", key="add_pass")
-                    nu_nom = st.text_input("Nombre Completo", key="add_nom")
-                    nu_rol = st.selectbox("Rol/Permiso", ["operario", "produccion", "admin"], key="add_rol")
-                    
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                with st.expander("➕ Crear Usuario"):
+                    u_user = st.text_input("Usuario", key="u1")
+                    u_pass = st.text_input("Clave", type="password", key="u2")
+                    u_nom = st.text_input("Nombre Completo", key="u3")
+                    u_rol = st.selectbox("Rol", ["operario", "produccion", "admin"], key="u4")
                     if st.button("Guardar Usuario"):
-                        if nu_user and nu_pass and nu_nom:
-                            ejecutar_comando(
-                                "INSERT INTO usuarios (username, password, nombre, rol) VALUES (%s, %s, %s, %s)",
-                                (nu_user, nu_pass, nu_nom, nu_rol)
-                            )
-                            st.success("Usuario creado exitosamente.")
-                            st.rerun()
-                        else:
-                            st.warning("Completa todos los campos.")
-
-            # --- 2. EDITAR ROL O CAMBIAR CONTRASEÑA ---
-            with col_edit:
-                with st.expander("✏️ Editar Usuario / Clave"):
-                    lista_usuarios = users_df["username"].tolist()
-                    usr_sel = st.selectbox("Seleccionar Usuario", lista_usuarios, key="edit_usr_sel")
-                    
-                    nueva_clave = st.text_input("Nueva Contraseña (dejar vacío si no cambia)", type="password", key="edit_pass")
-                    nuevo_rol = st.selectbox("Cambiar Rol/Permiso", ["operario", "produccion", "admin"], key="edit_rol")
-                    
-                    if st.button("Actualizar Usuario"):
-                        if nueva_clave.strip():
-                            ejecutar_comando(
-                                "UPDATE usuarios SET password = %s, rol = %s WHERE username = %s",
-                                (nueva_clave, nuevo_rol, usr_sel)
-                            )
-                        else:
-                            ejecutar_comando(
-                                "UPDATE usuarios SET rol = %s WHERE username = %s",
-                                (nuevo_rol, usr_sel)
-                            )
-                        st.success(f"Usuario '{usr_sel}' actualizado.")
+                        ejecutar_comando("INSERT INTO usuarios (username, password, nombre, rol) VALUES (%s, %s, %s, %s)", (u_user, u_pass, u_nom, u_rol))
+                        # Si es operario, también añadirlo a la lista de operarios de entrega
+                        if u_rol == "operario":
+                            ejecutar_comando("INSERT INTO operarios (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (u_nom,))
+                        st.success("Usuario creado.")
                         st.rerun()
-
-            # --- 3. ELIMINAR USUARIO ---
-            with col_del:
-                with st.expander("🗑️ Eliminar Usuario"):
-                    usr_del_sel = st.selectbox("Usuario a Eliminar", users_df["username"].tolist(), key="del_usr_sel")
-                    
-                    if st.button("Confirmar Eliminación", type="primary"):
-                        if usr_del_sel == st.session_state["username"]:
-                            st.error("No puedes eliminar tu propia cuenta en uso.")
+            with c2:
+                with st.expander("✏️ Editar Permisos/Clave"):
+                    usr_sel = st.selectbox("Usuario", users_df["username"].tolist(), key="e1")
+                    n_pass = st.text_input("Nueva Clave", type="password", key="e2")
+                    n_rol = st.selectbox("Nuevo Rol", ["operario", "produccion", "admin"], key="e3")
+                    if st.button("Actualizar"):
+                        if n_pass.strip():
+                            ejecutar_comando("UPDATE usuarios SET password = %s, rol = %s WHERE username = %s", (n_pass, n_rol, usr_sel))
                         else:
-                            ejecutar_comando("DELETE FROM usuarios WHERE username = %s", (usr_del_sel,))
-                            st.success(f"Usuario '{usr_del_sel}' eliminado.")
+                            ejecutar_comando("UPDATE usuarios SET rol = %s WHERE username = %s", (n_rol, usr_sel))
+                        st.success("Actualizado.")
+                        st.rerun()
+            with c3:
+                with st.expander("🗑️ Eliminar Usuario"):
+                    u_del = st.selectbox("Eliminar", users_df["username"].tolist(), key="d1")
+                    if st.button("Confirmar Borrado", type="primary"):
+                        if u_del != st.session_state["username"]:
+                            ejecutar_comando("DELETE FROM usuarios WHERE username = %s", (u_del,))
+                            st.success("Eliminado.")
                             st.rerun()
-                            
+                        else:
+                            st.error("No puedes borrar tu usuario en sesión.")
         except Exception as e:
-            st.error(f"Error en Gestión de Usuarios: {e}")
+            st.error(f"Error en Usuarios: {e}")
