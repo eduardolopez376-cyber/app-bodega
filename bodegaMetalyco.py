@@ -1,3 +1,4 @@
+import streamlit as str_lib
 import streamlit as st
 import pandas as pd
 import psycopg2
@@ -129,6 +130,12 @@ with col_titulo:
 st.sidebar.markdown(f"👤 **Usuario:** {st.session_state['nombre_usuario']}")
 st.sidebar.markdown(f"🔰 **Rol:** `{str(st.session_state['rol']).upper()}`")
 
+st.sidebar.markdown("---")
+# BOTÓN DE ACTUALIZACIÓN RÁPIDA (SIN PERDER SESIÓN)
+if st.sidebar.button("🔄 Actualizar Datos", use_container_width=True):
+    st.rerun()
+
+st.sidebar.markdown("---")
 if st.sidebar.button("🔒 Cerrar Sesión", use_container_width=True):
     st.session_state["autenticado"] = False
     st.session_state["rol"] = None
