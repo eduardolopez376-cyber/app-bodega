@@ -74,7 +74,7 @@ def ejecutar_comando(query, params=None):
     conn.close()
 
 # ----------------------------------------------------
-# CONTROL DE SESIÓN Y LOGIN
+# CONTROL DE SESIÓN Y LOGIN (Persistente)
 # ----------------------------------------------------
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
@@ -126,12 +126,15 @@ st.sidebar.markdown(f"🔰 **Rol:** `{st.session_state['rol'].upper()}`")
 
 if st.sidebar.button("🔒 Cerrar Sesión", use_container_width=True):
     st.session_state["autenticado"] = False
+    st.session_state["rol"] = None
+    st.session_state["nombre_usuario"] = None
+    st.session_state["username"] = None
     st.rerun()
 
 rol = st.session_state["rol"]
 
 # ====================================================
-# VISTA EXCLUSIVA PARA OPERARIOS (CON TAREAS PENDIENTES QUE DESAPARECEN)
+# VISTA EXCLUSIVA PARA OPERARIOS
 # ====================================================
 if rol == "operario":
     st.subheader(f"📌 Hola, {st.session_state['nombre_usuario']}")
@@ -143,7 +146,6 @@ if rol == "operario":
         fecha_operario = st.date_input("Selecciona el día a consultar", value=datetime.now().date(), key="cal_op_dia")
         
         try:
-            # Solo muestra las tareas que NO estén finalizadas o canceladas
             tareas = ejecutar_consulta(
                 """SELECT id, hora_inicio, hora_fin, maquina, referencia, actividad, meta_unidades, estado 
                    FROM programacion_diaria 
@@ -173,11 +175,10 @@ if rol == "operario":
             st.error(f"Error al cargar consumos: {e}")
 
     with tab_prod:
-        st.write("### Registrar Producción y Completar Tarea")
+        st.write("### Registrar Producción y Avance de Tarea")
         try:
-            # Traer solo las tareas pendientes del día de hoy para que las seleccione
             tareas_pendientes = ejecutar_consulta(
-                """SELECT id, actividad, maquina, referencia FROM programacion_diaria 
+                """SELECT id, actividad, maquina, referencia, meta_unidades FROM programacion_diaria 
                    WHERE operario_nombre = %s AND fecha = CURRENT_DATE AND estado NOT IN ('FINALIZADO', 'CANCELADO')""",
                 (st.session_state['nombre_usuario'],)
             )
@@ -185,9 +186,8 @@ if rol == "operario":
             if tareas_pendientes.empty:
                 st.warning("No tienes tareas pendientes asignadas para hoy para reportar.")
             else:
-                # Crear opciones descriptivas para el selectbox
                 lista_opciones = [
-                    f"ID #{row['id']} - {row['actividad']} (Máq: {row['maquina']} | Ref: {row['referencia']})" 
+                    f"ID #{row['id']} - {row['actividad']} (Meta: {row['meta_unidades']} u. | Máq: {row['maquina']})" 
                     for _, row in tareas_pendientes.iterrows()
                 ]
                 
@@ -197,20 +197,18 @@ if rol == "operario":
                     h_inicio = st.time_input("Hora de Inicio Real", time(7, 0))
                     h_fin = st.time_input("Hora de Finalización Real", time(17, 0))
                         
-                    unidades = st.number_input("Unidades Producidas", min_value=1, step=1)
-                    obs = st.text_area("Observaciones / Novedades")
+                    unidades = st.number_input("Unidades Producidas Realmente", min_value=1, step=1)
+                    obs = st.text_area("Observaciones / Novedades (Ej: Faltaron 10 unidades por falla de máquina)")
                     
-                    submit = st.form_submit_button("Guardar y Finalizar Tarea", type="primary", use_container_width=True)
+                    submit = st.form_submit_button("Guardar Registro de Producción", type="primary", use_container_width=True)
                     
                     if submit:
-                        # Extraer el ID de la tarea seleccionada del texto
                         id_tarea_str = tarea_elegida_str.split(" - ")[0].replace("ID #", "")
                         id_tarea = int(id_tarea_str)
-                        
-                        # Obtener detalles de esa tarea para guardarlos en el registro de producción
                         row_t = tareas_pendientes[tareas_pendientes['id'] == id_tarea].iloc[0]
+                        meta_original = int(row_t['meta_unidades'])
                         
-                        # 1. Guardar en registro de producción
+                        # Guardar producción real hecha
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
                             (operario_nombre, maquina, referencia, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones) 
@@ -218,13 +216,20 @@ if rol == "operario":
                             (st.session_state['nombre_usuario'], row_t['maquina'], row_t['referencia'], h_inicio, h_fin, unidades, obs)
                         )
                         
-                        # 2. Marcar la tarea como FINALIZADA para que desaparezca de pendientes
-                        ejecutar_comando(
-                            "UPDATE programacion_diaria SET estado = 'FINALIZADO' WHERE id = %s",
-                            (id_tarea,)
-                        )
+                        # Validar si cumplió la meta o quedó pendiente
+                        if unidades >= meta_original:
+                            # Se completó la meta, se finaliza
+                            ejecutar_comando("UPDATE programacion_diaria SET estado = 'FINALIZADO' WHERE id = %s", (id_tarea,))
+                            st.success("¡Meta cumplida! Tarea finalizada correctamente.")
+                        else:
+                            # Quedaron unidades pendientes: actualizamos la meta restante o dejamos nota para reagendar
+                            faltantes = meta_original - unidades
+                            ejecutar_comando(
+                                "UPDATE programacion_diaria SET meta_unidades = %s, estado = 'PENDIENTE PARCIAL' WHERE id = %s",
+                                (faltantes, id_tarea)
+                            )
+                            st.warning(f"Se registraron {unidades} unidades. Quedan {faltantes} pendientes que seguirán en tu lista para reagendar.")
                         
-                        st.success("¡Producción guardada y tarea completada con éxito!")
                         st.rerun()
 
             st.write("---")
@@ -323,9 +328,10 @@ elif rol in ["admin", "produccion"]:
                     edit_ref = st.selectbox("Referencia", refs, index=idx_ref, key="e_ref_c")
                     edit_act = st.text_input("Actividad", value=row_sel["actividad"], key="e_act_c")
                     edit_meta = st.number_input("Meta Unidades", min_value=1, value=int(row_sel["meta_unidades"]), key="e_meta_c")
-                    edit_estado = st.selectbox("Estado", ["PENDIENTE", "EN PROCESO", "FINALIZADO", "CANCELADO"], 
-                                                index=["PENDIENTE", "EN PROCESO", "FINALIZADO", "CANCELADO"].index(row_sel["estado"]) if row_sel["estado"] in ["PENDIENTE", "EN PROCESO", "FINALIZADO", "CANCELADO"] else 0, 
-                                                key="e_est_c")
+                    
+                    estados_posibles = ["PENDIENTE", "PENDIENTE PARCIAL", "EN PROCESO", "FINALIZADO", "CANCELADO"]
+                    idx_est = estados_posibles.index(row_sel["estado"]) if row_sel["estado"] in estados_posibles else 0
+                    edit_estado = st.selectbox("Estado", estados_posibles, index=idx_est, key="e_est_c")
                     
                     if st.button("Guardar Cambios", use_container_width=True):
                         ejecutar_comando(
