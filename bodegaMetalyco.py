@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Estilos CSS optimizados para dispositivos móviles
+# Estilos CSS optimizados
 st.markdown("""
     <style>
         .block-container {
@@ -74,14 +74,18 @@ def ejecutar_comando(query, params=None):
     conn.close()
 
 # ----------------------------------------------------
-# CONTROL DE SESIÓN Y LOGIN (Persistente)
+# INICIALIZACIÓN BLINDADA DEL ESTADO DE SESIÓN
 # ----------------------------------------------------
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
+if "rol" not in st.session_state:
     st.session_state["rol"] = None
+if "nombre_usuario" not in st.session_state:
     st.session_state["nombre_usuario"] = None
+if "username" not in st.session_state:
     st.session_state["username"] = None
 
+# PANTALLA DE LOGIN
 if not st.session_state["autenticado"]:
     st.title("🔑 Sistema Metal&Co")
     st.subheader("Inicio de Sesión")
@@ -90,29 +94,31 @@ if not st.session_state["autenticado"]:
     with c_logo:
         mostrar_logo(ancho=250)
     with c_form:
-        user_input = st.text_input("Usuario", key="login_user")
-        pass_input = st.text_input("Contraseña", type="password", key="login_pass")
-        
-        if st.button("Ingresar", type="primary", use_container_width=True):
-            try:
-                res = ejecutar_consulta(
-                    "SELECT username, nombre, rol FROM usuarios WHERE username = %s AND password = %s",
-                    (user_input, pass_input)
-                )
-                if not res.empty:
-                    st.session_state["autenticado"] = True
-                    st.session_state["username"] = res.iloc[0]["username"]
-                    st.session_state["nombre_usuario"] = res.iloc[0]["nombre"]
-                    st.session_state["rol"] = res.iloc[0]["rol"]
-                    st.rerun()
-                else:
-                    st.error("Usuario o contraseña incorrectos")
-            except Exception as e:
-                st.error(f"Error de conexión: {e}")
+        with st.form("form_login"):
+            user_input = st.text_input("Usuario")
+            pass_input = st.text_input("Contraseña", type="password")
+            submit_login = st.form_submit_button("Ingresar", type="primary", use_container_width=True)
+            
+            if submit_login:
+                try:
+                    res = ejecutar_consulta(
+                        "SELECT username, nombre, rol FROM usuarios WHERE username = %s AND password = %s",
+                        (user_input, pass_input)
+                    )
+                    if not res.empty:
+                        st.session_state["autenticado"] = True
+                        st.session_state["username"] = res.iloc[0]["username"]
+                        st.session_state["nombre_usuario"] = res.iloc[0]["nombre"]
+                        st.session_state["rol"] = res.iloc[0]["rol"]
+                        st.rerun()
+                    else:
+                        st.error("Usuario o contraseña incorrectos")
+                except Exception as e:
+                    st.error(f"Error de conexión: {e}")
     st.stop()
 
 # ----------------------------------------------------
-# ENCABEZADO Y BARRA LATERAL
+# ENCABEZADO Y BARRA LATERAL (Usuarios Logueados)
 # ----------------------------------------------------
 col_logo, col_titulo = st.columns([1, 4], vertical_alignment="center")
 with col_logo:
@@ -121,7 +127,7 @@ with col_titulo:
     st.title("Metal&Co - Planta")
 
 st.sidebar.markdown(f"👤 **Usuario:** {st.session_state['nombre_usuario']}")
-st.sidebar.markdown(f"🔰 **Rol:** `{st.session_state['rol'].upper()}`")
+st.sidebar.markdown(f"🔰 **Rol:** `{str(st.session_state['rol']).upper()}`")
 
 if st.sidebar.button("🔒 Cerrar Sesión", use_container_width=True):
     st.session_state["autenticado"] = False
@@ -267,7 +273,6 @@ elif rol in ["admin", "produccion"]:
         fecha_seleccionada = st.date_input("Selecciona el día a consultar/programar", value=datetime.now().date(), key="cal_admin_dia")
         
         try:
-            # Obtiene los operarios directamente de la tabla usuarios (nombre completo de quienes tienen rol 'operario')
             ops_df = ejecutar_consulta("SELECT nombre FROM usuarios WHERE rol = 'operario'")
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
             
