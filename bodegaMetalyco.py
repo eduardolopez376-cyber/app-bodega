@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from sqlalchemy import create_engine, text
+import psycopg2
 from datetime import datetime
 
 # Configuración de página
@@ -10,23 +10,29 @@ st.set_page_config(
     layout="wide"
 )
 
-# Conexión a Base de Datos en Supabase
-# IMPORTANTE: Reemplaza con tu contraseña real si no es 'Metalgas2026'
-DB_URL = "postgresql://postgres.ngwbaadrmzkbvoqeoync:Metalgas2026@aws-1-us-west-2.pooler.supabase.com:6543/postgres?sslmode=require"
-
-@st.cache_resource
-def conectar_bd():
-    return create_engine(DB_URL)
-
-engine = conectar_bd()
+# Parámetros de Conexión a Supabase
+DB_PARAMS = {
+    "dbname": "postgres",
+    "user": "postgres.ngwbaadrmzkbvoqeoync",
+    "password": "Metalgas2026", # Reemplaza por tu clave si es diferente
+    "host": "aws-1-us-west-2.pooler.supabase.com",
+    "port": "6543",
+    "sslmode": "require"
+}
 
 def ejecutar_consulta(query, params=None):
-    with engine.connect() as conn:
-        return pd.read_sql(text(query), conn, params=params)
+    conn = psycopg2.connect(**DB_PARAMS)
+    df = pd.read_sql_query(query, conn, params=params)
+    conn.close()
+    return df
 
 def ejecutar_comando(query, params=None):
-    with engine.begin() as conn:
-        conn.execute(text(query), params or {})
+    conn = psycopg2.connect(**DB_PARAMS)
+    cur = conn.cursor()
+    cur.execute(query, params or ())
+    conn.commit()
+    cur.close()
+    conn.close()
 
 # ----------------------------------------------------
 # CONTROL DE SESIÓN Y LOGIN
@@ -51,8 +57,8 @@ if not st.session_state["autenticado"]:
         if st.button("Ingresar", type="primary"):
             try:
                 res = ejecutar_consulta(
-                    "SELECT username, nombre, rol FROM usuarios WHERE username = :u AND password = :p",
-                    {"u": user_input, "p": pass_input}
+                    "SELECT username, nombre, rol FROM usuarios WHERE username = %s AND password = %s",
+                    (user_input, pass_input)
                 )
                 if not res.empty:
                     st.session_state["autenticado"] = True
@@ -100,8 +106,8 @@ if rol == "operario":
         st.write("### Mis Tareas Programadas para Hoy")
         try:
             tareas = ejecutar_consulta(
-                "SELECT fecha, tarea, estado FROM programacion_diaria WHERE operario_nombre = :n ORDER BY id DESC",
-                {"n": st.session_state['nombre_usuario']}
+                "SELECT fecha, tarea, estado FROM programacion_diaria WHERE operario_nombre = %s ORDER BY id DESC",
+                (st.session_state['nombre_usuario'],)
             )
             if not tareas.empty:
                 st.dataframe(tareas, use_container_width=True)
@@ -113,8 +119,8 @@ if rol == "operario":
         st.write("### Mis Materiales y Herramientas a Cargo")
         try:
             herramientas = ejecutar_consulta(
-                "SELECT fecha, codigo_material, cantidad, tipo FROM consumos WHERE operario = :n AND estado = 'PRESTADO'",
-                {"n": st.session_state['nombre_usuario']}
+                "SELECT fecha, codigo_material, cantidad, tipo FROM consumos WHERE operario = %s AND estado = 'PRESTADO'",
+                (st.session_state['nombre_usuario'],)
             )
             if not herramientas.empty:
                 st.dataframe(herramientas, use_container_width=True)
@@ -133,8 +139,8 @@ if rol == "operario":
             if submit:
                 try:
                     ejecutar_comando(
-                        "INSERT INTO registro_produccion (operario_nombre, unidades_producidas, observaciones) VALUES (:n, :u, :o)",
-                        {"n": st.session_state['nombre_usuario'], "u": unidades, "o": obs}
+                        "INSERT INTO registro_produccion (operario_nombre, unidades_producidas, observaciones) VALUES (%s, %s, %s)",
+                        (st.session_state['nombre_usuario'], unidades, obs)
                     )
                     st.success("¡Registro de producción guardado exitosamente!")
                 except Exception as e:
@@ -156,7 +162,6 @@ elif rol in ["admin", "produccion"]:
     
     with tab1:
         st.subheader("Registrar Salida de Material o Préstamo de Herramienta")
-        # Tu formulario de entregas existente
         try:
             ops = ejecutar_consulta("SELECT nombre FROM operarios")['nombre'].tolist()
             mats = ejecutar_consulta("SELECT codigo, nombre, tipo FROM inventario")
@@ -176,12 +181,12 @@ elif rol in ["admin", "produccion"]:
                     estado = "PRESTADO" if tipo == "HERRAMIENTA" else "ENTREGADO"
                     
                     ejecutar_comando(
-                        "INSERT INTO consumos (fecha, operario, codigo_material, cantidad, tipo, estado) VALUES (:f, :op, :c, :cant, :t, :e)",
-                        {"f": datetime.now().strftime("%Y-%m-%d %H:%M"), "op": op_sel, "c": cod, "cant": cant, "t": tipo, "e": estado}
+                        "INSERT INTO consumos (fecha, operario, codigo_material, cantidad, tipo, estado) VALUES (%s, %s, %s, %s, %s, %s)",
+                        (datetime.now().strftime("%Y-%m-%d %H:%M"), op_sel, cod, cant, tipo, estado)
                     )
                     
                     if tipo == "CONSUMIBLE":
-                        ejecutar_comando("UPDATE inventario SET cantidad = cantidad - :cant WHERE codigo = :c", {"cant": cant, "c": cod})
+                        ejecutar_comando("UPDATE inventario SET cantidad = cantidad - %s WHERE codigo = %s", (cant, cod))
                     
                     st.success(f"Registrado correctamente a {op_sel}.")
         except Exception as e:
@@ -196,7 +201,7 @@ elif rol in ["admin", "produccion"]:
             if not prestados.empty:
                 id_dev = st.selectbox("Seleccionar ID para Devolución", prestados['id'].tolist())
                 if st.button("Marcar Devuelto"):
-                    ejecutar_comando("UPDATE consumos SET estado = 'DEVUELTO' WHERE id = :id", {"id": id_dev})
+                    ejecutar_comando("UPDATE consumos SET estado = 'DEVUELTO' WHERE id = %s", (id_dev,))
                     st.success("Herramienta devuelta al inventario.")
                     st.rerun()
         except Exception as e:
@@ -217,8 +222,8 @@ elif rol in ["admin", "produccion"]:
                 
                 if st.button("Guardar en Inventario"):
                     ejecutar_comando(
-                        "INSERT INTO inventario (codigo, nombre, tipo, cantidad, stock_minimo) VALUES (:c, :n, :t, :cant, :m)",
-                        {"c": c_cod, "n": c_nom, "t": c_tipo, "cant": c_cant, "m": c_min}
+                        "INSERT INTO inventario (codigo, nombre, tipo, cantidad, stock_minimo) VALUES (%s, %s, %s, %s, %s)",
+                        (c_cod, c_nom, c_tipo, c_cant, c_min)
                     )
                     st.success("Material guardado.")
                     st.rerun()
@@ -234,7 +239,7 @@ elif rol in ["admin", "produccion"]:
             with st.form("form_add_op"):
                 nom_op = st.text_input("Nombre Completo del Operario")
                 if st.form_submit_button("Añadir Operario"):
-                    ejecutar_comando("INSERT INTO operarios (nombre) VALUES (:n)", {"n": nom_op})
+                    ejecutar_comando("INSERT INTO operarios (nombre) VALUES (%s)", (nom_op,))
                     st.success("Operario añadido.")
                     st.rerun()
         except Exception as e:
@@ -249,8 +254,8 @@ elif rol in ["admin", "produccion"]:
                 tarea_prog = st.text_area("Descripción de la Tarea / Orden de Producción")
                 if st.button("Asignar Tarea"):
                     ejecutar_comando(
-                        "INSERT INTO programacion_diaria (operario_nombre, tarea) VALUES (:o, :t)",
-                        {"o": op_prog, "t": tarea_prog}
+                        "INSERT INTO programacion_diaria (operario_nombre, tarea) VALUES (%s, %s)",
+                        (op_prog, tarea_prog)
                     )
                     st.success(f"Tarea asignada a {op_prog}.")
             
@@ -282,12 +287,10 @@ elif rol in ["admin", "produccion"]:
                 
                 if st.button("Crear Usuario"):
                     ejecutar_comando(
-                        "INSERT INTO usuarios (username, password, nombre, rol) VALUES (:u, :p, :n, :r)",
-                        {"u": nu_user, "p": nu_pass, "n": nu_nom, "r": nu_rol}
+                        "INSERT INTO usuarios (username, password, nombre, rol) VALUES (%s, %s, %s, %s)",
+                        (nu_user, nu_pass, nu_nom, nu_rol)
                     )
                     st.success("Usuario creado correctamente.")
                     st.rerun()
         except Exception as e:
             st.error(f"Error en Usuarios: {e}")
-   
-
