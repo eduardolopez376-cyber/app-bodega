@@ -557,4 +557,4 @@ elif rol in ["admin", "produccion"]:
                     else:
                         st.error("No puedes borrar tu propio usuario.")
         except Exception as e:
-            st.error(f"Error en Usuarios: {e}"
+            st.error(f"Error en Usuarios: {e}")
