@@ -207,14 +207,12 @@ if rol == "operario":
                         row_t = tareas_pendientes[tareas_pendientes['id'] == id_tarea].iloc[0]
                         meta_original = int(row_t['meta_unidades'])
                         
-                        # Generar texto de reporte detallando si hubo parciales
                         if unidades < meta_original:
                             faltantes = meta_original - unidades
                             obs_final = f"⚠️ PRODUCCIÓN PARCIAL: Hizo {unidades} de {meta_original} meta. Faltaron {faltantes} unidades por reagendar. Nota: {obs_usuario}"
                         else:
                             obs_final = f"✅ Meta cumplida ({unidades}/{meta_original}). {obs_usuario}"
                         
-                        # Guardar el reporte formal en la base de datos
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
                             (operario_nombre, maquina, referencia, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones) 
@@ -222,7 +220,6 @@ if rol == "operario":
                             (st.session_state['nombre_usuario'], row_t['maquina'], row_t['referencia'], h_inicio, h_fin, unidades, obs_final)
                         )
                         
-                        # Marcar tarea como finalizada para que desaparezca de pendientes del operario
                         ejecutar_comando(
                             "UPDATE programacion_diaria SET estado = 'FINALIZADO' WHERE id = %s",
                             (id_tarea,)
@@ -270,12 +267,15 @@ elif rol in ["admin", "produccion"]:
         fecha_seleccionada = st.date_input("Selecciona el día a consultar/programar", value=datetime.now().date(), key="cal_admin_dia")
         
         try:
-            ops = ejecutar_consulta("SELECT nombre FROM operarios")['nombre'].tolist()
+            # Obtiene los operarios directamente de la tabla usuarios (nombre completo de quienes tienen rol 'operario')
+            ops_df = ejecutar_consulta("SELECT nombre FROM usuarios WHERE rol = 'operario'")
+            ops = ops_df['nombre'].tolist() if not ops_df.empty else []
+            
             maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
             refs = ejecutar_consulta("SELECT codigo FROM referencias")['codigo'].tolist()
             
             if not ops or not maqs or not refs:
-                st.warning("Registra Operarios, Máquinas y Referencias primero.")
+                st.warning("⚠️ Asegúrate de tener al menos un usuario registrado con rol 'operario', una máquina y una referencia creadas.")
             else:
                 with st.expander(f"➕ Asignar Tarea para el día {fecha_seleccionada}", expanded=False):
                     with st.form(f"form_programacion_{fecha_seleccionada}"):
@@ -404,7 +404,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Referencias: {e}")
 
-    # --- TAB 4: REPORTES EXCEL (Con borrado de reportes viejos) ---
+    # --- TAB 4: REPORTES EXCEL ---
     with tab3:
         st.subheader("📊 Historial General de Producción y Reportes Parciales")
         try:
@@ -440,7 +440,8 @@ elif rol in ["admin", "produccion"]:
     with tab4:
         st.subheader("Registrar Salida de Material")
         try:
-            ops = ejecutar_consulta("SELECT nombre FROM operarios")['nombre'].tolist()
+            ops_df = ejecutar_consulta("SELECT nombre FROM usuarios WHERE rol = 'operario'")
+            ops = ops_df['nombre'].tolist() if not ops_df.empty else []
             mats = ejecutar_consulta("SELECT codigo, nombre, tipo FROM inventario")
             
             if ops and not mats.empty:
@@ -531,8 +532,6 @@ elif rol in ["admin", "produccion"]:
                 u_rol = st.selectbox("Rol", ["operario", "produccion", "admin"], key="u4")
                 if st.button("Guardar Usuario", use_container_width=True):
                     ejecutar_comando("INSERT INTO usuarios (username, password, nombre, rol) VALUES (%s, %s, %s, %s)", (u_user, u_pass, u_nom, u_rol))
-                    if u_rol == "operario":
-                        ejecutar_comando("INSERT INTO operarios (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (u_nom,))
                     st.success("Usuario creado.")
                     st.rerun()
 
@@ -558,4 +557,4 @@ elif rol in ["admin", "produccion"]:
                     else:
                         st.error("No puedes borrar tu propio usuario.")
         except Exception as e:
-            st.error(f"Error en Usuarios: {e}")
+            st.error(f"Error en Usuarios: {e}"
