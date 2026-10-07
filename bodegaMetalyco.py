@@ -213,7 +213,6 @@ if rol == "operario":
                         else:
                             obs_final = f"Meta cumplida ({unidades}/{meta_original}). {obs_usuario}"
                         
-                        # 1. Guardar en registro de producción con el detalle de pendientes para el reporte
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
                             (operario_nombre, maquina, referencia, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones) 
@@ -221,7 +220,6 @@ if rol == "operario":
                             (st.session_state['nombre_usuario'], row_t['maquina'], row_t['referencia'], h_inicio, h_fin, unidades, obs_final)
                         )
                         
-                        # 2. Marcar la tarea como FINALIZADA para que desaparezca de pendientes del operario
                         ejecutar_comando(
                             "UPDATE programacion_diaria SET estado = 'FINALIZADO' WHERE id = %s",
                             (id_tarea,)
@@ -266,55 +264,4 @@ elif rol in ["admin", "produccion"]:
     with tab1:
         st.subheader("📅 Programación de Planta por Fecha")
         
-        fecha_seleccionada = st.date_input("Selecciona el día a consultar/programar", value=datetime.now().date(), key="cal_admin_dia")
-        
-        try:
-            ops = ejecutar_consulta("SELECT nombre FROM operarios")['nombre'].tolist()
-            maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
-            refs = ejecutar_consulta("SELECT codigo FROM referencias")['codigo'].tolist()
-            
-            if not ops or not maqs or not refs:
-                st.warning("Registra Operarios, Máquinas y Referencias primero.")
-            else:
-                with st.expander(f"➕ Asignar Tarea para el día {fecha_seleccionada}", expanded=False):
-                    with st.form(f"form_programacion_{fecha_seleccionada}"):
-                        op_p = st.selectbox("Operario", ops)
-                        maq_p = st.selectbox("Máquina", maqs)
-                        ref_p = st.selectbox("Referencia", refs)
-                        act_p = st.text_input("Actividad (Ej: Corte, Plegado)")
-                        
-                        col_h1, col_h2 = st.columns(2)
-                        with col_h1:
-                            h_ini_p = st.time_input("Inicio Turno", time(7, 0))
-                        with col_h2:
-                            h_fin_p = st.time_input("Fin Turno", time(17, 0))
-                        
-                        meta_p = st.number_input("Meta de Unidades", min_value=1, value=100)
-                        btn_prog = st.form_submit_button("Guardar Programación", type="primary", use_container_width=True)
-                        
-                        if btn_prog:
-                            ejecutar_comando(
-                                """INSERT INTO programacion_diaria 
-                                (fecha, operario_nombre, maquina, referencia, actividad, hora_inicio, hora_fin, meta_unidades, estado) 
-                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE')""",
-                                (fecha_seleccionada, op_p, maq_p, ref_p, act_p, h_ini_p, h_fin_p, meta_p)
-                            )
-                            st.success(f"Asignado a {op_p} para el día {fecha_seleccionada}.")
-                            st.rerun()
-            
-            st.write("---")
-            st.write(f"### Actividades Programadas para el: **{fecha_seleccionada}**")
-            
-            df_prog_actual = ejecutar_consulta(
-                "SELECT * FROM programacion_diaria WHERE fecha = %s ORDER BY id DESC", 
-                (fecha_seleccionada,)
-            )
-            
-            if not df_prog_actual.empty:
-                st.dataframe(df_prog_actual, use_container_width=True)
-                
-                with st.expander("✏️ Editar Programación de este día"):
-                    id_edit = st.selectbox("ID a Modificar", df_prog_actual["id"].tolist(), key="edit_prog_id_cal")
-                    row_sel = df_prog_actual[df_prog_actual["id"] == id_edit].iloc[0]
-                    
-                    idx_op = ops.index(row_sel["operario_nombre"]) if row_sel["operario_nombre"] in ops else 0
+        fecha_seleccionada = st.date_input("Selecciona el día a consultar/programar", value=datetime.now().date(), key
