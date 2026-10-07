@@ -1,6 +1,16 @@
+Para solucionar de una vez el error FileNotFoundError, hagamos que el código revise si la imagen existe antes de cargarla. De esta manera, si la imagen no se encuentra o tiene otro nombre, la aplicación no se caerá con un error rojo y mostrará el formulario de inicio de sesión normalmente.
+
+Sigue estos pasos en GitHub:
+
+Abre el archivo bodegaMetalyco.py en GitHub y haz clic en el lápiz ✏️ para editar.
+
+Reemplaza TODO el contenido del archivo por este código actualizado:
+
+Python
 import streamlit as st
 import pandas as pd
 import psycopg2
+import os
 from datetime import datetime
 
 # Configuración de página
@@ -10,11 +20,25 @@ st.set_page_config(
     layout="wide"
 )
 
+# Buscar imagen disponible en el directorio
+NOMBRES_LOGO = ["WhatsApp Image 2026-10-06 at 6.50.00 PM.jpeg", "logo.jpeg", "logo.png", "logo.jpg"]
+LOGO_PATH = None
+for nombre in NOMBRES_LOGO:
+    if os.path.exists(nombre):
+        LOGO_PATH = nombre
+        break
+
+def mostrar_logo(ancho=120):
+    if LOGO_PATH:
+        st.image(LOGO_PATH, width=ancho)
+    else:
+        st.write("📦 **Metal&Co**")
+
 # Parámetros de Conexión a Supabase
 DB_PARAMS = {
     "dbname": "postgres",
     "user": "postgres.ngwbaadrmzkbvoqeoync",
-    "password": "Metalgas2026", # Reemplaza por tu clave si es diferente
+    "password": "Metalgas2026",
     "host": "aws-1-us-west-2.pooler.supabase.com",
     "port": "6543",
     "sslmode": "require"
@@ -49,7 +73,7 @@ if not st.session_state["autenticado"]:
     
     col1, col2 = st.columns([1, 2])
     with col1:
-        st.image("logo.jpeg", width=120)
+        mostrar_logo(ancho=130)
     with col2:
         user_input = st.text_input("Usuario")
         pass_input = st.text_input("Contraseña", type="password")
@@ -78,7 +102,7 @@ if not st.session_state["autenticado"]:
 # ----------------------------------------------------
 col_logo, col_titulo = st.columns([1, 5], vertical_alignment="center")
 with col_logo:
-    st.image("WhatsApp Image 2026-10-06 at 6.50.00 PM.jpeg", width=120)
+    mostrar_logo(ancho=110)
 with col_titulo:
     st.title("Sistema de Control de Bodega y Herramientas")
 
