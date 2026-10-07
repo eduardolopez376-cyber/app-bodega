@@ -86,9 +86,10 @@ if not st.session_state["autenticado"]:
     st.title("🔑 Sistema Metal&Co")
     st.subheader("Inicio de Sesión")
     
-    c_logo, c_form = st.columns([1, 2])
+    # Columna del logo ampliada a 250px de ancho para mejor presencia visual
+    c_logo, c_form = st.columns([1, 1], vertical_alignment="center")
     with c_logo:
-        mostrar_logo(ancho=110)
+        mostrar_logo(ancho=250)
     with c_form:
         user_input = st.text_input("Usuario")
         pass_input = st.text_input("Contraseña", type="password")
@@ -117,7 +118,7 @@ if not st.session_state["autenticado"]:
 # ----------------------------------------------------
 col_logo, col_titulo = st.columns([1, 4], vertical_alignment="center")
 with col_logo:
-    mostrar_logo(ancho=80)
+    mostrar_logo(ancho=100)
 with col_titulo:
     st.title("Metal&Co - Planta")
 
@@ -141,7 +142,6 @@ if rol == "operario":
     with tab_prog:
         st.write("### Mis Tareas Asignadas para HOY")
         try:
-            # FILTRO: Solo muestra tareas asignadas para la fecha de HOY (CURRENT_DATE)
             tareas = ejecutar_consulta(
                 """SELECT hora_inicio, hora_fin, maquina, referencia, actividad, meta_unidades, estado 
                    FROM programacion_diaria 
@@ -199,7 +199,6 @@ if rol == "operario":
                     )
                     st.success("¡Registro guardado con éxito!")
 
-            # Muestra solo lo que el operario ha producido el día de HOY
             st.write("---")
             st.write("### Mis Reportes de HOY")
             reportes_hoy = ejecutar_consulta(
@@ -218,7 +217,7 @@ if rol == "operario":
             st.error(f"Error al cargar formulario de reporte: {e}")
 
 # ====================================================
-# VISTA COMPLETA PARA ADMINISTRADOR Y PRODUCCIÓN (HISTORIAL COMPLETO)
+# VISTA COMPLETA PARA ADMINISTRADOR Y PRODUCCIÓN
 # ====================================================
 elif rol in ["admin", "produccion"]:
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
