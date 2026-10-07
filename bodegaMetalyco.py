@@ -7,7 +7,7 @@ from datetime import datetime, time
 
 # Configuración de página
 st.set_page_config(
-    page_title="Control de Producción - Metal&Co",
+    page_title="Control de Producción y Bodega - Metal&Co",
     page_icon="⚙️",
     layout="wide"
 )
@@ -236,13 +236,11 @@ elif rol in ["admin", "produccion"]:
             if not df_prog_actual.empty:
                 col_e1, col_e2 = st.columns(2)
                 
-                # --- EDITAR PROGRAMACIÓN ---
                 with col_e1:
                     with st.expander("✏️ Editar Programación Existente"):
                         id_edit = st.selectbox("Seleccionar ID a Modificar", df_prog_actual["id"].tolist(), key="edit_prog_id")
                         row_sel = df_prog_actual[df_prog_actual["id"] == id_edit].iloc[0]
                         
-                        # Preselección de datos
                         idx_op = ops.index(row_sel["operario_nombre"]) if row_sel["operario_nombre"] in ops else 0
                         idx_maq = maqs.index(row_sel["maquina"]) if row_sel["maquina"] in maqs else 0
                         idx_ref = refs.index(row_sel["referencia"]) if row_sel["referencia"] in refs else 0
@@ -266,7 +264,6 @@ elif rol in ["admin", "produccion"]:
                             st.success("Programación modificada con éxito.")
                             st.rerun()
 
-                # --- ELIMINAR PROGRAMACIÓN ---
                 with col_e2:
                     with st.expander("🗑️ Eliminar Programación"):
                         id_del = st.selectbox("Seleccionar ID a Eliminar", df_prog_actual["id"].tolist(), key="del_prog_id")
@@ -287,28 +284,48 @@ elif rol in ["admin", "produccion"]:
         with c_m:
             st.write("#### 🛠️ Gestión de Máquinas")
             try:
-                st.dataframe(ejecutar_consulta("SELECT * FROM maquinas"), use_container_width=True)
+                df_maqs = ejecutar_consulta("SELECT * FROM maquinas")
+                st.dataframe(df_maqs, use_container_width=True)
+                
                 with st.expander("➕ Crear Nueva Máquina"):
-                    m_nom = st.text_input("Nombre / Código de Máquina")
-                    m_tipo = st.text_input("Área / Tipo (Ej: Corte Laser, Dobladora)")
+                    m_nom = st.text_input("Nombre / Código de Máquina", key="add_m_nom")
+                    m_tipo = st.text_input("Área / Tipo (Ej: Corte Laser, Dobladora)", key="add_m_tipo")
                     if st.button("Guardar Máquina"):
                         ejecutar_comando("INSERT INTO maquinas (nombre, tipo) VALUES (%s, %s)", (m_nom, m_tipo))
                         st.success("Máquina agregada.")
                         st.rerun()
+
+                if not df_maqs.empty and rol == "admin":
+                    with st.expander("🗑️ Eliminar Máquina (Solo Admin)"):
+                        m_del = st.selectbox("Seleccionar Máquina a Borrar", df_maqs["nombre"].tolist(), key="del_m_sel")
+                        if st.button("Eliminar Máquina", type="primary"):
+                            ejecutar_comando("DELETE FROM maquinas WHERE nombre = %s", (m_del,))
+                            st.success(f"Máquina '{m_del}' eliminada.")
+                            st.rerun()
             except Exception as e:
                 st.error(f"Error en Máquinas: {e}")
 
         with c_r:
             st.write("#### 📄 Gestión de Referencias")
             try:
-                st.dataframe(ejecutar_consulta("SELECT * FROM referencias"), use_container_width=True)
+                df_refs = ejecutar_consulta("SELECT * FROM referencias")
+                st.dataframe(df_refs, use_container_width=True)
+                
                 with st.expander("➕ Crear Nueva Referencia"):
-                    r_cod = st.text_input("Código de Referencia")
-                    r_desc = st.text_input("Descripción del Producto")
+                    r_cod = st.text_input("Código de Referencia", key="add_r_cod")
+                    r_desc = st.text_input("Descripción del Producto", key="add_r_desc")
                     if st.button("Guardar Referencia"):
                         ejecutar_comando("INSERT INTO referencias (codigo, descripcion) VALUES (%s, %s)", (r_cod, r_desc))
                         st.success("Referencia agregada.")
                         st.rerun()
+
+                if not df_refs.empty and rol == "admin":
+                    with st.expander("🗑️ Eliminar Referencia (Solo Admin)"):
+                        r_del = st.selectbox("Seleccionar Referencia a Borrar", df_refs["codigo"].tolist(), key="del_r_sel")
+                        if st.button("Eliminar Referencia", type="primary"):
+                            ejecutar_comando("DELETE FROM referencias WHERE codigo = %s", (r_del,))
+                            st.success(f"Referencia '{r_del}' eliminada.")
+                            st.rerun()
             except Exception as e:
                 st.error(f"Error en Referencias: {e}")
 
@@ -332,6 +349,14 @@ elif rol in ["admin", "produccion"]:
                     file_name=f"Reporte_Produccion_{datetime.now().strftime('%Y%m%d')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
+
+                if rol == "admin":
+                    with st.expander("🗑️ Eliminar Registro de Producción (Solo Admin)"):
+                        prod_del = st.selectbox("Seleccionar ID de Reporte a Eliminar", df_prod["id"].tolist(), key="del_prod_sel")
+                        if st.button("Eliminar Reporte", type="primary"):
+                            ejecutar_comando("DELETE FROM registro_produccion WHERE id = %s", (prod_del,))
+                            st.success(f"Reporte #{prod_del} eliminado.")
+                            st.rerun()
             else:
                 st.info("Aún no hay reportes registrados por los operarios.")
         except Exception as e:
@@ -366,38 +391,58 @@ elif rol in ["admin", "produccion"]:
 
     # --- TAB 5: HERRAMIENTAS ---
     with tab5:
-        st.subheader("Herramientas Prestadas")
+        st.subheader("Herramientas Prestadas y Control")
         try:
             prestados = ejecutar_consulta("SELECT id, fecha, operario, codigo_material, cantidad FROM consumos WHERE tipo = 'HERRAMIENTA' AND estado = 'PRESTADO'")
             st.dataframe(prestados, use_container_width=True)
             if not prestados.empty:
-                id_dev = st.selectbox("ID a Devolver", prestados['id'].tolist())
+                id_dev = st.selectbox("ID a Devolver", prestados['id'].tolist(), key="dev_id")
                 if st.button("Marcar Devuelto"):
                     ejecutar_comando("UPDATE consumos SET estado = 'DEVUELTO' WHERE id = %s", (id_dev,))
                     st.success("Herramienta devuelta.")
                     st.rerun()
+
+                if rol == "admin":
+                    with st.expander("🗑️ Eliminar Préstamo (Solo Admin)"):
+                        del_pres = st.selectbox("ID de Registro a Eliminar", prestados['id'].tolist(), key="del_pres_id")
+                        if st.button("Eliminar Registro de Préstamo", type="primary"):
+                            ejecutar_comando("DELETE FROM consumos WHERE id = %s", (del_pres,))
+                            st.success(f"Registro #{del_pres} eliminado.")
+                            st.rerun()
         except Exception as e:
             st.error(f"Error en Herramientas: {e}")
 
     # --- TAB 6: INVENTARIO ---
     with tab6:
-        st.subheader("Gestión de Inventario")
+        st.subheader("Gestión de Inventario y Materiales")
         try:
             inv = ejecutar_consulta("SELECT * FROM inventario")
             st.dataframe(inv, use_container_width=True)
-            with st.expander("➕ Agregar Insumo"):
-                c_cod = st.text_input("Código Insumo")
-                c_nom = st.text_input("Nombre")
-                c_tipo = st.selectbox("Tipo", ["CONSUMIBLE", "HERRAMIENTA"])
-                c_cant = st.number_input("Cantidad", min_value=0, value=1)
-                c_min = st.number_input("Stock Mínimo", min_value=0, value=5)
-                if st.button("Guardar Insumo"):
-                    ejecutar_comando(
-                        "INSERT INTO inventario (codigo, nombre, tipo, cantidad, stock_minimo) VALUES (%s, %s, %s, %s, %s)",
-                        (c_cod, c_nom, c_tipo, c_cant, c_min)
-                    )
-                    st.success("Insumo Guardado.")
-                    st.rerun()
+            
+            c_inv_add, c_inv_del = st.columns(2)
+            with c_inv_add:
+                with st.expander("➕ Agregar Insumo / Herramienta"):
+                    c_cod = st.text_input("Código Insumo", key="inv_add_cod")
+                    c_nom = st.text_input("Nombre", key="inv_add_nom")
+                    c_tipo = st.selectbox("Tipo", ["CONSUMIBLE", "HERRAMIENTA"], key="inv_add_tipo")
+                    c_cant = st.number_input("Cantidad Initial", min_value=0, value=1, key="inv_add_cant")
+                    c_min = st.number_input("Stock Mínimo", min_value=0, value=5, key="inv_add_min")
+                    if st.button("Guardar Insumo"):
+                        ejecutar_comando(
+                            "INSERT INTO inventario (codigo, nombre, tipo, cantidad, stock_minimo) VALUES (%s, %s, %s, %s, %s)",
+                            (c_cod, c_nom, c_tipo, c_cant, c_min)
+                        )
+                        st.success("Insumo Guardado.")
+                        st.rerun()
+
+            if not inv.empty and rol == "admin":
+                with c_inv_del:
+                    with st.expander("🗑️ Eliminar del Inventario (Solo Admin)"):
+                        inv_del_cod = st.selectbox("Seleccionar Código a Borrar", inv["codigo"].tolist(), key="inv_del_sel")
+                        if st.button("Eliminar Insumo del Sistema", type="primary"):
+                            ejecutar_comando("DELETE FROM inventario WHERE codigo = %s", (inv_del_cod,))
+                            st.success(f"Insumo con código '{inv_del_cod}' eliminado.")
+                            st.rerun()
         except Exception as e:
             st.error(f"Error en Inventario: {e}")
 
@@ -445,4 +490,3 @@ elif rol in ["admin", "produccion"]:
                             st.error("No puedes borrar tu usuario en sesión.")
         except Exception as e:
             st.error(f"Error en Usuarios: {e}")
- 
