@@ -131,7 +131,7 @@ if st.sidebar.button("🔒 Cerrar Sesión", use_container_width=True):
 rol = st.session_state["rol"]
 
 # ====================================================
-# VISTA EXCLUSIVA PARA OPERARIOS (CON CALENDARIO)
+# VISTA EXCLUSIVA PARA OPERARIOS (CON TAREAS PENDIENTES QUE DESAPARECEN)
 # ====================================================
 if rol == "operario":
     st.subheader(f"📌 Hola, {st.session_state['nombre_usuario']}")
@@ -143,17 +143,18 @@ if rol == "operario":
         fecha_operario = st.date_input("Selecciona el día a consultar", value=datetime.now().date(), key="cal_op_dia")
         
         try:
+            # Solo muestra las tareas que NO estén finalizadas o canceladas
             tareas = ejecutar_consulta(
-                """SELECT hora_inicio, hora_fin, maquina, referencia, actividad, meta_unidades, estado 
+                """SELECT id, hora_inicio, hora_fin, maquina, referencia, actividad, meta_unidades, estado 
                    FROM programacion_diaria 
-                   WHERE operario_nombre = %s AND fecha = %s 
+                   WHERE operario_nombre = %s AND fecha = %s AND estado NOT IN ('FINALIZADO', 'CANCELADO')
                    ORDER BY id DESC""",
                 (st.session_state['nombre_usuario'], fecha_operario)
             )
             if not tareas.empty:
                 st.dataframe(tareas, use_container_width=True)
             else:
-                st.info(f"No tienes tareas programadas para el día {fecha_operario}.")
+                st.info(f"No tienes tareas pendientes para el día {fecha_operario}.")
         except Exception as e:
             st.error(f"Error al cargar programación: {e}")
             
@@ -172,34 +173,59 @@ if rol == "operario":
             st.error(f"Error al cargar consumos: {e}")
 
     with tab_prod:
-        st.write("### Registrar Producción de HOY")
+        st.write("### Registrar Producción y Completar Tarea")
         try:
-            ref_df = ejecutar_consulta("SELECT codigo FROM referencias")
-            maq_df = ejecutar_consulta("SELECT nombre FROM maquinas")
+            # Traer solo las tareas pendientes del día de hoy para que las seleccione
+            tareas_pendientes = ejecutar_consulta(
+                """SELECT id, actividad, maquina, referencia FROM programacion_diaria 
+                   WHERE operario_nombre = %s AND fecha = CURRENT_DATE AND estado NOT IN ('FINALIZADO', 'CANCELADO')""",
+                (st.session_state['nombre_usuario'],)
+            )
             
-            lista_refs = ref_df["codigo"].tolist() if not ref_df.empty else ["N/A"]
-            lista_maqs = maq_df["nombre"].tolist() if not maq_df.empty else ["N/A"]
-            
-            with st.form("form_reporte_operario"):
-                ref_selected = st.selectbox("Referencia Producida", lista_refs)
-                maq_selected = st.selectbox("Máquina Utilizada", lista_maqs)
+            if tareas_pendientes.empty:
+                st.warning("No tienes tareas pendientes asignadas para hoy para reportar.")
+            else:
+                # Crear opciones descriptivas para el selectbox
+                lista_opciones = [
+                    f"ID #{row['id']} - {row['actividad']} (Máq: {row['maquina']} | Ref: {row['referencia']})" 
+                    for _, row in tareas_pendientes.iterrows()
+                ]
                 
-                h_inicio = st.time_input("Hora de Inicio", time(7, 0))
-                h_fin = st.time_input("Hora de Finalización", time(17, 0))
+                with st.form("form_reporte_operario"):
+                    tarea_elegida_str = st.selectbox("Selecciona la Tarea a Registrar", lista_opciones)
                     
-                unidades = st.number_input("Unidades Producidas", min_value=1, step=1)
-                obs = st.text_area("Observaciones / Novedades")
-                
-                submit = st.form_submit_button("Guardar Reporte", type="primary", use_container_width=True)
-                
-                if submit:
-                    ejecutar_comando(
-                        """INSERT INTO registro_produccion 
-                        (operario_nombre, maquina, referencia, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones) 
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                        (st.session_state['nombre_usuario'], maq_selected, ref_selected, h_inicio, h_fin, unidades, obs)
-                    )
-                    st.success("¡Registro guardado con éxito!")
+                    h_inicio = st.time_input("Hora de Inicio Real", time(7, 0))
+                    h_fin = st.time_input("Hora de Finalización Real", time(17, 0))
+                        
+                    unidades = st.number_input("Unidades Producidas", min_value=1, step=1)
+                    obs = st.text_area("Observaciones / Novedades")
+                    
+                    submit = st.form_submit_button("Guardar y Finalizar Tarea", type="primary", use_container_width=True)
+                    
+                    if submit:
+                        # Extraer el ID de la tarea seleccionada del texto
+                        id_tarea_str = tarea_elegida_str.split(" - ")[0].replace("ID #", "")
+                        id_tarea = int(id_tarea_str)
+                        
+                        # Obtener detalles de esa tarea para guardarlos en el registro de producción
+                        row_t = tareas_pendientes[tareas_pendientes['id'] == id_tarea].iloc[0]
+                        
+                        # 1. Guardar en registro de producción
+                        ejecutar_comando(
+                            """INSERT INTO registro_produccion 
+                            (operario_nombre, maquina, referencia, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones) 
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                            (st.session_state['nombre_usuario'], row_t['maquina'], row_t['referencia'], h_inicio, h_fin, unidades, obs)
+                        )
+                        
+                        # 2. Marcar la tarea como FINALIZADA para que desaparezca de pendientes
+                        ejecutar_comando(
+                            "UPDATE programacion_diaria SET estado = 'FINALIZADO' WHERE id = %s",
+                            (id_tarea,)
+                        )
+                        
+                        st.success("¡Producción guardada y tarea completada con éxito!")
+                        st.rerun()
 
             st.write("---")
             st.write("### Mis Reportes de HOY")
@@ -237,7 +263,6 @@ elif rol in ["admin", "produccion"]:
     with tab1:
         st.subheader("📅 Programación de Planta por Fecha")
         
-        # Selector de fecha (Calendario) para Admin/Producción
         fecha_seleccionada = st.date_input("Selecciona el día a consultar/programar", value=datetime.now().date(), key="cal_admin_dia")
         
         try:
@@ -267,8 +292,8 @@ elif rol in ["admin", "produccion"]:
                         if btn_prog:
                             ejecutar_comando(
                                 """INSERT INTO programacion_diaria 
-                                (fecha, operario_nombre, maquina, referencia, actividad, hora_inicio, hora_fin, meta_unidades) 
-                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                                (fecha, operario_nombre, maquina, referencia, actividad, hora_inicio, hora_fin, meta_unidades, estado) 
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE')""",
                                 (fecha_seleccionada, op_p, maq_p, ref_p, act_p, h_ini_p, h_fin_p, meta_p)
                             )
                             st.success(f"Asignado a {op_p} para el día {fecha_seleccionada}.")
