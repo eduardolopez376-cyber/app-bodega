@@ -74,7 +74,7 @@ def ejecutar_comando(query, params=None):
     conn.close()
 
 # ----------------------------------------------------
-# CONTROL DE SESIÓN Y LOGIN (Estable contra recargas)
+# CONTROL DE SESIÓN Y LOGIN (Persistente)
 # ----------------------------------------------------
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
@@ -207,12 +207,14 @@ if rol == "operario":
                         row_t = tareas_pendientes[tareas_pendientes['id'] == id_tarea].iloc[0]
                         meta_original = int(row_t['meta_unidades'])
                         
+                        # Generar texto de reporte detallando si hubo parciales
                         if unidades < meta_original:
                             faltantes = meta_original - unidades
-                            obs_final = f"PRODUCCIÓN PARCIAL: Hizo {unidades} de {meta_original} meta. Faltaron {faltantes} unidades por reagendar. Nota: {obs_usuario}"
+                            obs_final = f"⚠️ PRODUCCIÓN PARCIAL: Hizo {unidades} de {meta_original} meta. Faltaron {faltantes} unidades por reagendar. Nota: {obs_usuario}"
                         else:
-                            obs_final = f"Meta cumplida ({unidades}/{meta_original}). {obs_usuario}"
+                            obs_final = f"✅ Meta cumplida ({unidades}/{meta_original}). {obs_usuario}"
                         
+                        # Guardar el reporte formal en la base de datos
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
                             (operario_nombre, maquina, referencia, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones) 
@@ -220,6 +222,7 @@ if rol == "operario":
                             (st.session_state['nombre_usuario'], row_t['maquina'], row_t['referencia'], h_inicio, h_fin, unidades, obs_final)
                         )
                         
+                        # Marcar tarea como finalizada para que desaparezca de pendientes del operario
                         ejecutar_comando(
                             "UPDATE programacion_diaria SET estado = 'FINALIZADO' WHERE id = %s",
                             (id_tarea,)
@@ -260,7 +263,7 @@ elif rol in ["admin", "produccion"]:
         "⚙️ Usuarios"
     ])
     
-    # --- TAB 1: PROGRAMAR PLANTA CON CALENDARIO ---
+    # --- TAB 1: PROGRAMAR PLANTA ---
     with tab1:
         st.subheader("📅 Programación de Planta por Fecha")
         
@@ -401,9 +404,9 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Referencias: {e}")
 
-    # --- TAB 4: REPORTES EXCEL ---
+    # --- TAB 4: REPORTES EXCEL (Con borrado de reportes viejos) ---
     with tab3:
-        st.subheader("📊 Historial General de Producción")
+        st.subheader("📊 Historial General de Producción y Reportes Parciales")
         try:
             df_prod = ejecutar_consulta("SELECT * FROM registro_produccion ORDER BY fecha DESC")
             
