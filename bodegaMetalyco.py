@@ -10,20 +10,18 @@ st.set_page_config(
     page_title="Control de Producción - Metal&Co",
     page_icon="⚙️",
     layout="wide",
-    initial_sidebar_state="collapsed" # Mantiene el menú lateral recogido por defecto en celular
+    initial_sidebar_state="collapsed"
 )
 
-# Estilos CSS optimizados para dispositivos móviles táctiles
+# Estilos CSS optimizados para dispositivos móviles
 st.markdown("""
     <style>
-        /* Ajustar márgenes para pantallas pequeñas */
         .block-container {
             padding-top: 1.5rem;
             padding-bottom: 2rem;
             padding-left: 1rem;
             padding-right: 1rem;
         }
-        /* Botones principales más grandes y fáciles de tocar en pantallas táctiles */
         .stButton>button {
             width: 100%;
             height: 3rem;
@@ -31,7 +29,6 @@ st.markdown("""
             font-weight: bold;
             border-radius: 8px;
         }
-        /* Ajuste de tipografía en inputs */
         input {
             font-size: 1rem !important;
         }
@@ -89,7 +86,6 @@ if not st.session_state["autenticado"]:
     st.title("🔑 Sistema Metal&Co")
     st.subheader("Inicio de Sesión")
     
-    # Diseño responsivo en login
     c_logo, c_form = st.columns([1, 2])
     with c_logo:
         mostrar_logo(ancho=110)
@@ -135,28 +131,32 @@ if st.sidebar.button("🔒 Cerrar Sesión", use_container_width=True):
 rol = st.session_state["rol"]
 
 # ====================================================
-# VISTA EXCLUSIVA PARA OPERARIOS (OPTIMIZADA MÓVIL)
+# VISTA EXCLUSIVA PARA OPERARIOS (SOLO DÍA ACTUAL)
 # ====================================================
 if rol == "operario":
     st.subheader(f"📌 Hola, {st.session_state['nombre_usuario']}")
     
-    tab_prog, tab_prod = st.tabs(["📋 Mi Programación", "⚙️ Reportar Producción"])
+    tab_prog, tab_prod = st.tabs(["📋 Mi Programación del Día", "⚙️ Registrar Producción"])
     
     with tab_prog:
-        st.write("### Mis Tareas de Hoy")
+        st.write("### Mis Tareas Asignadas para HOY")
         try:
+            # FILTRO: Solo muestra tareas asignadas para la fecha de HOY (CURRENT_DATE)
             tareas = ejecutar_consulta(
-                "SELECT hora_inicio, hora_fin, maquina, referencia, actividad, meta_unidades, estado FROM programacion_diaria WHERE operario_nombre = %s ORDER BY id DESC",
+                """SELECT hora_inicio, hora_fin, maquina, referencia, actividad, meta_unidades, estado 
+                   FROM programacion_diaria 
+                   WHERE operario_nombre = %s AND fecha = CURRENT_DATE 
+                   ORDER BY id DESC""",
                 (st.session_state['nombre_usuario'],)
             )
             if not tareas.empty:
                 st.dataframe(tareas, use_container_width=True)
             else:
-                st.info("No tienes tareas programadas para hoy.")
+                st.info("No tienes tareas programadas para el día de hoy.")
         except Exception as e:
             st.error(f"Error al cargar programación: {e}")
             
-        st.write("### Mis Materiales a Cargo")
+        st.write("### Mis Materiales A Cargo")
         try:
             herramientas = ejecutar_consulta(
                 "SELECT fecha, codigo_material, cantidad, tipo FROM consumos WHERE operario = %s AND estado = 'PRESTADO'",
@@ -165,12 +165,12 @@ if rol == "operario":
             if not herramientas.empty:
                 st.dataframe(herramientas, use_container_width=True)
             else:
-                st.success("Sin materiales o herramientas a cargo.")
+                st.success("Sin materiales o herramientas pendientes de devolución.")
         except Exception as e:
             st.error(f"Error al cargar consumos: {e}")
 
     with tab_prod:
-        st.write("### Registrar Producción Diaria")
+        st.write("### Registrar Producción de HOY")
         try:
             ref_df = ejecutar_consulta("SELECT codigo FROM referencias")
             maq_df = ejecutar_consulta("SELECT nombre FROM maquinas")
@@ -182,7 +182,6 @@ if rol == "operario":
                 ref_selected = st.selectbox("Referencia Producida", lista_refs)
                 maq_selected = st.selectbox("Máquina Utilizada", lista_maqs)
                 
-                # Horarios adaptados
                 h_inicio = st.time_input("Hora de Inicio", time(7, 0))
                 h_fin = st.time_input("Hora de Finalización", time(17, 0))
                     
@@ -199,11 +198,27 @@ if rol == "operario":
                         (st.session_state['nombre_usuario'], maq_selected, ref_selected, h_inicio, h_fin, unidades, obs)
                     )
                     st.success("¡Registro guardado con éxito!")
+
+            # Muestra solo lo que el operario ha producido el día de HOY
+            st.write("---")
+            st.write("### Mis Reportes de HOY")
+            reportes_hoy = ejecutar_consulta(
+                """SELECT hora_inicio_real, hora_fin_real, maquina, referencia, unidades_producidas, observaciones 
+                   FROM registro_produccion 
+                   WHERE operario_nombre = %s AND fecha::date = CURRENT_DATE 
+                   ORDER BY id DESC""",
+                (st.session_state['nombre_usuario'],)
+            )
+            if not reportes_hoy.empty:
+                st.dataframe(reportes_hoy, use_container_width=True)
+            else:
+                st.caption("Aún no has registrado producciones hoy.")
+
         except Exception as e:
-            st.error(f"Error al guardar reporte: {e}")
+            st.error(f"Error al cargar formulario de reporte: {e}")
 
 # ====================================================
-# VISTA COMPLETA PARA ADMINISTRADOR Y PRODUCCIÓN
+# VISTA COMPLETA PARA ADMINISTRADOR Y PRODUCCIÓN (HISTORIAL COMPLETO)
 # ====================================================
 elif rol in ["admin", "produccion"]:
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
@@ -254,7 +269,7 @@ elif rol in ["admin", "produccion"]:
                             st.rerun()
             
             st.write("---")
-            st.write("### Programación Actual")
+            st.write("### Historial de Programación en Planta")
             df_prog_actual = ejecutar_consulta("SELECT * FROM programacion_diaria ORDER BY id DESC")
             st.dataframe(df_prog_actual, use_container_width=True)
 
@@ -349,7 +364,7 @@ elif rol in ["admin", "produccion"]:
 
     # --- TAB 3: REPORTES EXCEL ---
     with tab3:
-        st.subheader("📊 Reportes de Producción")
+        st.subheader("📊 Historial General de Producción")
         try:
             df_prod = ejecutar_consulta("SELECT * FROM registro_produccion ORDER BY fecha DESC")
             
@@ -361,7 +376,7 @@ elif rol in ["admin", "produccion"]:
                     df_prod.to_excel(writer, index=False, sheet_name='Produccion_Operarios')
                 
                 st.download_button(
-                    label="📥 Descargar Reporte Excel",
+                    label="📥 Descargar Reporte Histórico Completo en Excel",
                     data=buffer.getvalue(),
                     file_name=f"Reporte_Produccion_{datetime.now().strftime('%Y%m%d')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
