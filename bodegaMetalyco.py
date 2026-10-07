@@ -131,30 +131,33 @@ if st.sidebar.button("🔒 Cerrar Sesión", use_container_width=True):
 rol = st.session_state["rol"]
 
 # ====================================================
-# VISTA EXCLUSIVA PARA OPERARIOS (SOLO DÍA ACTUAL)
+# VISTA EXCLUSIVA PARA OPERARIOS (CON CALENDARIO)
 # ====================================================
 if rol == "operario":
     st.subheader(f"📌 Hola, {st.session_state['nombre_usuario']}")
     
-    tab_prog, tab_prod = st.tabs(["📋 Mi Programación del Día", "⚙️ Registrar Producción"])
+    tab_prog, tab_prod = st.tabs(["📋 Mi Programación por Día", "⚙️ Registrar Producción"])
     
     with tab_prog:
-        st.write("### Mis Tareas Asignadas para HOY")
+        st.write("### Consulta tus Tareas Asignadas")
+        fecha_operario = st.date_input("Selecciona el día a consultar", value=datetime.now().date(), key="cal_op_dia")
+        
         try:
             tareas = ejecutar_consulta(
                 """SELECT hora_inicio, hora_fin, maquina, referencia, actividad, meta_unidades, estado 
                    FROM programacion_diaria 
-                   WHERE operario_nombre = %s AND fecha = CURRENT_DATE 
+                   WHERE operario_nombre = %s AND fecha = %s 
                    ORDER BY id DESC""",
-                (st.session_state['nombre_usuario'],)
+                (st.session_state['nombre_usuario'], fecha_operario)
             )
             if not tareas.empty:
                 st.dataframe(tareas, use_container_width=True)
             else:
-                st.info("No tienes tareas programadas para el día de hoy.")
+                st.info(f"No tienes tareas programadas para el día {fecha_operario}.")
         except Exception as e:
             st.error(f"Error al cargar programación: {e}")
             
+        st.write("---")
         st.write("### Mis Materiales A Cargo")
         try:
             herramientas = ejecutar_consulta(
@@ -230,9 +233,13 @@ elif rol in ["admin", "produccion"]:
         "⚙️ Usuarios"
     ])
     
-    # --- TAB 1: PROGRAMAR PLANTA ---
+    # --- TAB 1: PROGRAMAR PLANTA CON CALENDARIO ---
     with tab1:
-        st.subheader("📅 Programación de Planta")
+        st.subheader("📅 Programación de Planta por Fecha")
+        
+        # Selector de fecha (Calendario) para Admin/Producción
+        fecha_seleccionada = st.date_input("Selecciona el día a consultar/programar", value=datetime.now().date(), key="cal_admin_dia")
+        
         try:
             ops = ejecutar_consulta("SELECT nombre FROM operarios")['nombre'].tolist()
             maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
@@ -241,8 +248,8 @@ elif rol in ["admin", "produccion"]:
             if not ops or not maqs or not refs:
                 st.warning("Registra Operarios, Máquinas y Referencias primero.")
             else:
-                with st.expander("➕ Asignar Tarea a Operario", expanded=True):
-                    with st.form("form_programacion"):
+                with st.expander(f"➕ Asignar Tarea para el día {fecha_seleccionada}", expanded=False):
+                    with st.form(f"form_programacion_{fecha_seleccionada}"):
                         op_p = st.selectbox("Operario", ops)
                         maq_p = st.selectbox("Máquina", maqs)
                         ref_p = st.selectbox("Referencia", refs)
@@ -260,35 +267,40 @@ elif rol in ["admin", "produccion"]:
                         if btn_prog:
                             ejecutar_comando(
                                 """INSERT INTO programacion_diaria 
-                                (operario_nombre, maquina, referencia, actividad, hora_inicio, hora_fin, meta_unidades) 
-                                VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                                (op_p, maq_p, ref_p, act_p, h_ini_p, h_fin_p, meta_p)
+                                (fecha, operario_nombre, maquina, referencia, actividad, hora_inicio, hora_fin, meta_unidades) 
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                                (fecha_seleccionada, op_p, maq_p, ref_p, act_p, h_ini_p, h_fin_p, meta_p)
                             )
-                            st.success(f"Asignado a {op_p}.")
+                            st.success(f"Asignado a {op_p} para el día {fecha_seleccionada}.")
                             st.rerun()
             
             st.write("---")
-            st.write("### Historial de Programación en Planta")
-            df_prog_actual = ejecutar_consulta("SELECT * FROM programacion_diaria ORDER BY id DESC")
-            st.dataframe(df_prog_actual, use_container_width=True)
-
+            st.write(f"### Actividades Programadas para el: **{fecha_seleccionada}**")
+            
+            df_prog_actual = ejecutar_consulta(
+                "SELECT * FROM programacion_diaria WHERE fecha = %s ORDER BY id DESC", 
+                (fecha_seleccionada,)
+            )
+            
             if not df_prog_actual.empty:
-                with st.expander("✏️ Editar Programación Existente"):
-                    id_edit = st.selectbox("ID a Modificar", df_prog_actual["id"].tolist(), key="edit_prog_id")
+                st.dataframe(df_prog_actual, use_container_width=True)
+                
+                with st.expander("✏️ Editar Programación de este día"):
+                    id_edit = st.selectbox("ID a Modificar", df_prog_actual["id"].tolist(), key="edit_prog_id_cal")
                     row_sel = df_prog_actual[df_prog_actual["id"] == id_edit].iloc[0]
                     
                     idx_op = ops.index(row_sel["operario_nombre"]) if row_sel["operario_nombre"] in ops else 0
                     idx_maq = maqs.index(row_sel["maquina"]) if row_sel["maquina"] in maqs else 0
                     idx_ref = refs.index(row_sel["referencia"]) if row_sel["referencia"] in refs else 0
                     
-                    edit_op = st.selectbox("Operario", ops, index=idx_op, key="e_op")
-                    edit_maq = st.selectbox("Máquina", maqs, index=idx_maq, key="e_maq")
-                    edit_ref = st.selectbox("Referencia", refs, index=idx_ref, key="e_ref")
-                    edit_act = st.text_input("Actividad", value=row_sel["actividad"], key="e_act")
-                    edit_meta = st.number_input("Meta Unidades", min_value=1, value=int(row_sel["meta_unidades"]), key="e_meta")
+                    edit_op = st.selectbox("Operario", ops, index=idx_op, key="e_op_c")
+                    edit_maq = st.selectbox("Máquina", maqs, index=idx_maq, key="e_maq_c")
+                    edit_ref = st.selectbox("Referencia", refs, index=idx_ref, key="e_ref_c")
+                    edit_act = st.text_input("Actividad", value=row_sel["actividad"], key="e_act_c")
+                    edit_meta = st.number_input("Meta Unidades", min_value=1, value=int(row_sel["meta_unidades"]), key="e_meta_c")
                     edit_estado = st.selectbox("Estado", ["PENDIENTE", "EN PROCESO", "FINALIZADO", "CANCELADO"], 
                                                 index=["PENDIENTE", "EN PROCESO", "FINALIZADO", "CANCELADO"].index(row_sel["estado"]) if row_sel["estado"] in ["PENDIENTE", "EN PROCESO", "FINALIZADO", "CANCELADO"] else 0, 
-                                                key="e_est")
+                                                key="e_est_c")
                     
                     if st.button("Guardar Cambios", use_container_width=True):
                         ejecutar_comando(
@@ -301,11 +313,13 @@ elif rol in ["admin", "produccion"]:
                         st.rerun()
 
                 with st.expander("🗑️ Eliminar Programación"):
-                    id_del = st.selectbox("ID a Eliminar", df_prog_actual["id"].tolist(), key="del_prog_id")
+                    id_del = st.selectbox("ID a Eliminar", df_prog_actual["id"].tolist(), key="del_prog_id_c")
                     if st.button("Confirmar Eliminación", type="primary", use_container_width=True):
                         ejecutar_comando("DELETE FROM programacion_diaria WHERE id = %s", (id_del,))
                         st.success(f"ID #{id_del} eliminado.")
                         st.rerun()
+            else:
+                st.info(f"No hay actividades programadas para la fecha {fecha_seleccionada}.")
 
         except Exception as e:
             st.error(f"Error en Programación: {e}")
