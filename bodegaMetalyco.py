@@ -145,7 +145,6 @@ if rol == "operario":
     with tab_prod:
         st.write("### Registrar Tiempo y Unidades Producidas")
         try:
-            # Traer lista de referencias y máquinas disponibles
             ref_df = ejecutar_consulta("SELECT codigo FROM referencias")
             maq_df = ejecutar_consulta("SELECT nombre FROM maquinas")
             
@@ -203,34 +202,80 @@ elif rol in ["admin", "produccion"]:
             if not ops or not maqs or not refs:
                 st.warning("Asegúrate de registrar Operarios, Máquinas y Referencias antes de programar.")
             else:
-                with st.form("form_programacion"):
-                    col_p1, col_p2, col_p3 = st.columns(3)
-                    with col_p1:
-                        op_p = st.selectbox("Seleccionar Operario", ops)
-                        maq_p = st.selectbox("Asignar Máquina", maqs)
-                    with col_p2:
-                        ref_p = st.selectbox("Asignar Referencia", refs)
-                        act_p = st.text_input("Actividad / Operación (Ej: Corte, Plegado, Soldadura)")
-                    with col_p3:
-                        h_ini_p = st.time_input("Hora Inicio Turno", time(7, 0))
-                        h_fin_p = st.time_input("Hora Fin Turno", time(17, 0))
-                    
-                    meta_p = st.number_input("Meta de Unidades A Producir", min_value=1, value=100)
-                    btn_prog = st.form_submit_button("Asignar Programación al Operario")
-                    
-                    if btn_prog:
-                        ejecutar_comando(
-                            """INSERT INTO programacion_diaria 
-                            (operario_nombre, maquina, referencia, actividad, hora_inicio, hora_fin, meta_unidades) 
-                            VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                            (op_p, maq_p, ref_p, act_p, h_ini_p, h_fin_p, meta_p)
-                        )
-                        st.success(f"Programación asignada correctamente a {op_p}.")
-                        st.rerun()
+                with st.expander("➕ Crear Nueva Programación", expanded=True):
+                    with st.form("form_programacion"):
+                        col_p1, col_p2, col_p3 = st.columns(3)
+                        with col_p1:
+                            op_p = st.selectbox("Seleccionar Operario", ops)
+                            maq_p = st.selectbox("Asignar Máquina", maqs)
+                        with col_p2:
+                            ref_p = st.selectbox("Asignar Referencia", refs)
+                            act_p = st.text_input("Actividad / Operación (Ej: Corte, Plegado, Soldadura)")
+                        with col_p3:
+                            h_ini_p = st.time_input("Hora Inicio Turno", time(7, 0))
+                            h_fin_p = st.time_input("Hora Fin Turno", time(17, 0))
+                        
+                        meta_p = st.number_input("Meta de Unidades A Producir", min_value=1, value=100)
+                        btn_prog = st.form_submit_button("Asignar Programación al Operario")
+                        
+                        if btn_prog:
+                            ejecutar_comando(
+                                """INSERT INTO programacion_diaria 
+                                (operario_nombre, maquina, referencia, actividad, hora_inicio, hora_fin, meta_unidades) 
+                                VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                                (op_p, maq_p, ref_p, act_p, h_ini_p, h_fin_p, meta_p)
+                            )
+                            st.success(f"Programación asignada correctamente a {op_p}.")
+                            st.rerun()
             
             st.write("---")
             st.write("### Programación Actual en Planta")
-            st.dataframe(ejecutar_consulta("SELECT * FROM programacion_diaria ORDER BY id DESC"), use_container_width=True)
+            df_prog_actual = ejecutar_consulta("SELECT * FROM programacion_diaria ORDER BY id DESC")
+            st.dataframe(df_prog_actual, use_container_width=True)
+
+            if not df_prog_actual.empty:
+                col_e1, col_e2 = st.columns(2)
+                
+                # --- EDITAR PROGRAMACIÓN ---
+                with col_e1:
+                    with st.expander("✏️ Editar Programación Existente"):
+                        id_edit = st.selectbox("Seleccionar ID a Modificar", df_prog_actual["id"].tolist(), key="edit_prog_id")
+                        row_sel = df_prog_actual[df_prog_actual["id"] == id_edit].iloc[0]
+                        
+                        # Preselección de datos
+                        idx_op = ops.index(row_sel["operario_nombre"]) if row_sel["operario_nombre"] in ops else 0
+                        idx_maq = maqs.index(row_sel["maquina"]) if row_sel["maquina"] in maqs else 0
+                        idx_ref = refs.index(row_sel["referencia"]) if row_sel["referencia"] in refs else 0
+                        
+                        edit_op = st.selectbox("Operario", ops, index=idx_op, key="e_op")
+                        edit_maq = st.selectbox("Máquina", maqs, index=idx_maq, key="e_maq")
+                        edit_ref = st.selectbox("Referencia", refs, index=idx_ref, key="e_ref")
+                        edit_act = st.text_input("Actividad", value=row_sel["actividad"], key="e_act")
+                        edit_meta = st.number_input("Meta Unidades", min_value=1, value=int(row_sel["meta_unidades"]), key="e_meta")
+                        edit_estado = st.selectbox("Estado", ["PENDIENTE", "EN PROCESO", "FINALIZADO", "CANCELADO"], 
+                                                   index=["PENDIENTE", "EN PROCESO", "FINALIZADO", "CANCELADO"].index(row_sel["estado"]) if row_sel["estado"] in ["PENDIENTE", "EN PROCESO", "FINALIZADO", "CANCELADO"] else 0, 
+                                                   key="e_est")
+                        
+                        if st.button("Guardar Cambios de Programación"):
+                            ejecutar_comando(
+                                """UPDATE programacion_diaria 
+                                SET operario_nombre = %s, maquina = %s, referencia = %s, actividad = %s, meta_unidades = %s, estado = %s 
+                                WHERE id = %s""",
+                                (edit_op, edit_maq, edit_ref, edit_act, edit_meta, edit_estado, id_edit)
+                            )
+                            st.success("Programación modificada con éxito.")
+                            st.rerun()
+
+                # --- ELIMINAR PROGRAMACIÓN ---
+                with col_e2:
+                    with st.expander("🗑️ Eliminar Programación"):
+                        id_del = st.selectbox("Seleccionar ID a Eliminar", df_prog_actual["id"].tolist(), key="del_prog_id")
+                        
+                        if st.button("Confirmar Eliminación de Registro", type="primary"):
+                            ejecutar_comando("DELETE FROM programacion_diaria WHERE id = %s", (id_del,))
+                            st.success(f"Programación ID #{id_del} eliminada.")
+                            st.rerun()
+
         except Exception as e:
             st.error(f"Error en Programación: {e}")
 
@@ -274,11 +319,9 @@ elif rol in ["admin", "produccion"]:
             df_prod = ejecutar_consulta("SELECT * FROM registro_produccion ORDER BY fecha DESC")
             
             if not df_prod.empty:
-                # Calcular horas trabajadas si es posible
                 st.write("### Registros de Planta")
                 st.dataframe(df_prod, use_container_width=True)
                 
-                # Botón de Descarga Excel
                 buffer = io.BytesIO()
                 with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
                     df_prod.to_excel(writer, index=False, sheet_name='Produccion_Operarios')
@@ -374,7 +417,6 @@ elif rol in ["admin", "produccion"]:
                     u_rol = st.selectbox("Rol", ["operario", "produccion", "admin"], key="u4")
                     if st.button("Guardar Usuario"):
                         ejecutar_comando("INSERT INTO usuarios (username, password, nombre, rol) VALUES (%s, %s, %s, %s)", (u_user, u_pass, u_nom, u_rol))
-                        # Si es operario, también añadirlo a la lista de operarios de entrega
                         if u_rol == "operario":
                             ejecutar_comando("INSERT INTO operarios (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (u_nom,))
                         st.success("Usuario creado.")
@@ -403,3 +445,4 @@ elif rol in ["admin", "produccion"]:
                             st.error("No puedes borrar tu usuario en sesión.")
         except Exception as e:
             st.error(f"Error en Usuarios: {e}")
+ 
