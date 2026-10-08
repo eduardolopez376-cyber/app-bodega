@@ -7,7 +7,7 @@ from datetime import datetime, time
 
 # Configuración de página con diseño ajustado a móviles
 st.set_page_config(
-    page_title="Control de Producción - Metal&Co",
+    page_title="Control de Producción - Industrias Metal&Co",
     page_icon="⚙️",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -47,7 +47,7 @@ def mostrar_logo(ancho=100):
     if LOGO_PATH:
         st.image(LOGO_PATH, width=ancho)
     else:
-        st.write("📦 **Metal&Co**")
+        st.write("📦 **Industrias Metal&Co**")
 
 # Parámetros de Conexión a Supabase
 DB_PARAMS = {
@@ -128,7 +128,7 @@ if "form_key_counter" not in st.session_state:
 
 # PANTALLA DE LOGIN
 if not st.session_state["autenticado"]:
-    st.title("🔑 Sistema Metal&Co")
+    st.title("🔑 Sistema Industrias Metal&Co")
     st.subheader("Inicio de Sesión")
     
     c_logo, c_form = st.columns([1, 1], vertical_alignment="center")
@@ -165,7 +165,7 @@ col_logo, col_titulo = st.columns([1, 4], vertical_alignment="center")
 with col_logo:
     mostrar_logo(ancho=100)
 with col_titulo:
-    st.title("Metal&Co - Planta")
+    st.title("Industrias Metal&Co")
 
 st.sidebar.markdown(f"👤 **Usuario:** {st.session_state['nombre_usuario']}")
 st.sidebar.markdown(f"🔰 **Rol:** `{str(st.session_state['rol']).upper()}`")
