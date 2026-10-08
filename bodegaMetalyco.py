@@ -36,7 +36,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Buscar imagen disponible en el directorio
-NOMBRES_LOGO = ["Gemini_Generated_Image_dxxfwxdxxfwxdxxf.jpg", "logo.jpeg", "logo.png", "logo.jpg"]
+NOMBRES_LOGO = ["WhatsApp Image 2026-10-06 at 6.50.00 PM.jpeg", "logo.jpeg", "logo.png", "logo.jpg"]
 LOGO_PATH = None
 for nombre in NOMBRES_LOGO:
     if os.path.exists(nombre):
@@ -76,6 +76,14 @@ def ejecutar_comando(query, params=None):
 # Inicializar y actualizar tablas del sistema
 def inicializar_tablas_sistema():
     try:
+        # Tabla de Clientes
+        ejecutar_comando("""
+            CREATE TABLE IF NOT EXISTS clientes (
+                id SERIAL PRIMARY KEY,
+                nombre VARCHAR(150) UNIQUE NOT NULL
+            );
+        """)
+
         # Tabla de Servicios Prestados
         ejecutar_comando("""
             CREATE TABLE IF NOT EXISTS servicios_prestados (
@@ -92,12 +100,10 @@ def inicializar_tablas_sistema():
             );
         """)
 
-        # Asegurar columna tipo_propiedad en máquinas
+        # Asegurar columnas necesarias en tablas existentes
         ejecutar_comando("""
             ALTER TABLE maquinas ADD COLUMN IF NOT EXISTS tipo_propiedad VARCHAR(50) DEFAULT 'PROPIA';
         """)
-
-        # Asegurar columnas en registro_produccion para control de máquinas alquiladas y horas
         ejecutar_comando("""
             ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS numero_oc VARCHAR(100);
         """)
@@ -107,10 +113,12 @@ def inicializar_tablas_sistema():
         ejecutar_comando("""
             ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS horas_trabajadas NUMERIC(5,2) DEFAULT 0;
         """)
-        
-        # Asegurar columna numero_oc en programacion_diaria
         ejecutar_comando("""
             ALTER TABLE programacion_diaria ADD COLUMN IF NOT EXISTS numero_oc VARCHAR(100);
+        """)
+        # Asegurar columna cliente en referencias si no existe
+        ejecutar_comando("""
+            ALTER TABLE referencias ADD COLUMN IF NOT EXISTS cliente VARCHAR(150);
         """)
     except Exception as e:
         print(f"Nota en inicialización: {e}")
@@ -409,9 +417,9 @@ if rol == "operario":
 # ====================================================
 elif rol in ["admin", "produccion"]:
     
-    # Definir pestañas según el rol
+    # Definir pestañas según el rol (Admin incluye Clientes)
     if rol == "admin":
-        tab_prog, tab_oc, tab_eq, tab_serv, tab_ref, tab_rep, tab_ent, tab_herramientas, tab_cargue, tab_inv_gen, tab_clases, tab_usu = st.tabs([
+        tab_prog, tab_oc, tab_eq, tab_serv, tab_ref, tab_rep, tab_ent, tab_herramientas, tab_cargue, tab_inv_gen, tab_clases, tab_clientes, tab_usu = st.tabs([
             "📅 Programar", 
             "📋 Órdenes Compra",
             "⚙️ Máquinas",
@@ -423,6 +431,7 @@ elif rol in ["admin", "produccion"]:
             "📥 Cargue Ítems", 
             "📦 Inventario",
             "🏷️ Clases", 
+            "👥 Clientes",
             "⚙️ Usuarios"
         ])
     else:
@@ -524,13 +533,16 @@ elif rol in ["admin", "produccion"]:
             serv_db = ejecutar_consulta("SELECT nombre FROM servicios_prestados")
             lista_servicios = serv_db['nombre'].tolist() if not serv_db.empty else []
             
+            clientes_db = ejecutar_consulta("SELECT nombre FROM clientes")
+            lista_clientes = clientes_db['nombre'].tolist() if not clientes_db.empty else []
+            
             if not lista_refs:
                 st.warning("⚠️ Primero debes crear referencias en la pestaña 'Referencias' antes de crear Órdenes de Compra.")
             else:
                 with st.expander("Crear", expanded=True):
                     with st.form("form_crear_oc", clear_on_submit=True):
                         num_oc = st.text_input("Número de Orden de Compra (Ej: OC-9021)")
-                        cliente = st.text_input("Nombre del Cliente (Ej: Metalmecánica S.A.S)")
+                        cliente_oc = st.selectbox("Cliente Asociado", lista_clientes if lista_clientes else ["SIN CLIENTE REGISTRADO"])
                         ref_oc = st.selectbox("Referencia Base", lista_refs)
                         servicio_oc = st.selectbox("Servicio Prestado", lista_servicios if lista_servicios else ["NINGUNO"])
                         
@@ -540,18 +552,18 @@ elif rol in ["admin", "produccion"]:
                         btn_guardar_oc = st.form_submit_button("Guardar Orden de Compra", type="primary", use_container_width=True)
                         
                         if btn_guardar_oc:
-                            if num_oc.strip() and cliente.strip():
+                            if num_oc.strip() and cliente_oc != "SIN CLIENTE REGISTRADO":
                                 meta_final = meta_oc if requiere_uni else 0
                                 ejecutar_comando(
                                     """INSERT INTO ordenes_compra 
                                     (numero_oc, cliente, referencia, servicio, requiere_unidades, meta_unidades, unidades_entregadas, estado) 
                                     VALUES (%s, %s, %s, %s, %s, %s, 0, 'PENDIENTE')""",
-                                    (num_oc.upper().strip(), cliente.strip(), ref_oc, servicio_oc, requiere_uni, meta_final)
+                                    (num_oc.upper().strip(), cliente_oc, ref_oc, servicio_oc, requiere_uni, meta_final)
                                 )
-                                st.success(f"Orden de Compra #{num_oc} para '{cliente}' registrada con éxito.")
+                                st.success(f"Orden de Compra #{num_oc} para '{cliente_oc}' registrada con éxito.")
                                 st.rerun()
                             else:
-                                st.error("Por favor completa el número de OC y el cliente.")
+                                st.error("Por favor completa el número de OC y asegúrate de elegir un cliente válido.")
 
             st.write("---")
             st.write("### 📊 Estado y Saldos Pendientes de Órdenes de Compra")
@@ -644,24 +656,33 @@ elif rol in ["admin", "produccion"]:
             except Exception as e:
                 st.error(f"Error en Servicios: {e}")
 
-    # --- TAB: REFERENCIAS ---
+    # --- TAB: REFERENCIAS (CON ASOCIACIÓN DE CLIENTE) ---
     with tab_ref:
         st.subheader("📄 Gestión de Referencias (Catálogo Base)")
         try:
             df_refs = ejecutar_consulta("SELECT * FROM referencias")
-            st.dataframe(df_refs, use_container_width=True)
+            
+            clientes_db = ejecutar_consulta("SELECT nombre FROM clientes")
+            lista_clientes = clientes_db['nombre'].tolist() if not clientes_db.empty else []
+            
+            if not df_refs.empty:
+                st.dataframe(df_refs, use_container_width=True)
+            else:
+                st.info("No hay referencias registradas.")
             
             with st.expander("Crear"):
                 with st.form("form_crear_ref", clear_on_submit=True):
                     r_cod = st.text_input("Código Referencia (Ej: REF-001)")
                     r_desc = st.text_input("Descripción del Producto")
+                    r_cliente = st.selectbox("Cliente Asociado", lista_clientes if lista_clientes else ["SIN CLIENTE REGISTRADO"])
+                    
                     if st.form_submit_button("Guardar Referencia", type="primary", use_container_width=True):
-                        if r_cod.strip():
-                            ejecutar_comando("INSERT INTO referencias (codigo, descripcion) VALUES (%s, %s)", (r_cod.upper().strip(), r_desc))
-                            st.success(f"Referencia '{r_cod.upper()}' guardada.")
+                        if r_cod.strip() and r_cliente != "SIN CLIENTE REGISTRADO":
+                            ejecutar_comando("INSERT INTO referencias (codigo, descripcion, cliente) VALUES (%s, %s, %s)", (r_cod.upper().strip(), r_desc, r_cliente))
+                            st.success(f"Referencia '{r_cod.upper()}' asociada al cliente '{r_cliente}' guardada con éxito.")
                             st.rerun()
                         else:
-                            st.error("Escribe un código de referencia.")
+                            st.error("Escribe un código de referencia y selecciona un cliente válido.")
 
             if not df_refs.empty and rol == "admin":
                 with st.expander("Eliminar"):
@@ -922,7 +943,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en inventario: {e}")
 
-    # --- TABS EXCLUSIVOS DE ADMIN (Clases, Usuarios) ---
+    # --- TABS EXCLUSIVOS DE ADMIN (Clases, Clientes, Usuarios) ---
     if rol == "admin":
         with tab_clases:
             st.subheader("🏷️ Administración de Clases de Inventario")
@@ -955,7 +976,39 @@ elif rol in ["admin", "produccion"]:
             except Exception as e:
                 st.error(f"Error en clases: {e}")
 
-        # --- TAB: USUARIOS (CREAR, EDITAR Y ELIMINAR SIN EMOJIS) ---
+        # --- TAB: CLIENTES (EXCLUSIVO ADMIN) ---
+        with tab_clientes:
+            st.subheader("👥 Administración de Clientes")
+            try:
+                clientes_df = ejecutar_consulta("SELECT * FROM clientes ORDER BY id DESC")
+                if not clientes_df.empty:
+                    st.dataframe(clientes_df, use_container_width=True)
+                else:
+                    st.info("No hay clientes registrados.")
+                
+                with st.expander("Crear"):
+                    with st.form("form_crear_cliente", clear_on_submit=True):
+                        nom_cliente = st.text_input("Nombre del Cliente o Empresa (Ej: Metalmecánica S.A.S)")
+                        if st.form_submit_button("Guardar Cliente", type="primary", use_container_width=True):
+                            if nom_cliente.strip():
+                                ejecutar_comando("INSERT INTO clientes (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (nom_cliente.strip(),))
+                                st.success(f"Cliente '{nom_cliente.strip()}' agregado con éxito.")
+                                st.rerun()
+                            else:
+                                st.error("Escribe un nombre válido.")
+
+                if not clientes_df.empty:
+                    with st.expander("Eliminar"):
+                        with st.form("form_del_cliente", clear_on_submit=True):
+                            cliente_del = st.selectbox("Selecciona el Cliente a Borrar", clientes_df["nombre"].tolist())
+                            if st.form_submit_button("Eliminar Cliente", type="primary", use_container_width=True):
+                                ejecutar_comando("DELETE FROM clientes WHERE nombre = %s", (cliente_del,))
+                                st.success(f"Cliente '{cliente_del}' eliminado definitivamente.")
+                                st.rerun()
+            except Exception as e:
+                st.error(f"Error en Clientes: {e}")
+
+        # --- TAB: USUARIOS ---
         with tab_usu:
             st.subheader("⚙️ Gestión y Seguridad de Usuarios del Sistema")
             try:
@@ -980,7 +1033,7 @@ elif rol in ["admin", "produccion"]:
                             else:
                                 st.error("Por favor completa todos los campos.")
 
-                # 2. EXPANSOR EDITAR USUARIO (CONTRASEÑA Y ROLES)
+                # 2. EXPANSOR EDITAR USUARIO
                 if not users_df.empty:
                     with st.expander("Editar"):
                         with st.form("form_editar_usuario"):
@@ -1004,14 +1057,14 @@ elif rol in ["admin", "produccion"]:
                                         "UPDATE usuarios SET nombre = %s, password = %s, rol = %s WHERE username = %s",
                                         (nuevo_nombre.strip(), nueva_pass, nuevo_rol, edit_user_sel)
                                     )
-                                    st.success(f"¡Usuario '{edit_user_sel}' actualizado con éxito (incluyendo contraseña y rol)! 🎉")
+                                    st.success(f"¡Usuario '{edit_user_sel}' actualizado con éxito! 🎉")
                                     st.rerun()
                                 else:
                                     ejecutar_comando(
                                         "UPDATE usuarios SET nombre = %s, rol = %s WHERE username = %s",
                                         (nuevo_nombre.strip(), nuevo_rol, edit_user_sel)
                                     )
-                                    st.success(f"¡Usuario '{edit_user_sel}' actualizado con éxito (rol y nombre)! 🎉")
+                                    st.success(f"¡Usuario '{edit_user_sel}' actualizado con éxito! 🎉")
                                     st.rerun()
 
                 # 3. EXPANSOR ELIMINAR USUARIO
