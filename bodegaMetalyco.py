@@ -264,7 +264,7 @@ if rol == "operario":
                     defectuosas = st.number_input("Unidades Defectuosas (Scrap)", min_value=0, step=1, value=0)
                     obs_usuario = st.text_area("Observaciones / Novedades")
                     
-                    submit = st.form_submit_button("Guardar Registro, Descontar de OC y Finalizar Tarea", type="primary", use_container_width=True)
+                    submit = st.form_submit_button("Guardar", type="primary", use_container_width=True)
                     
                     if submit:
                         id_tarea_str = tarea_elegida_str.split(" | ")[0].replace("ID #", "")
@@ -346,7 +346,7 @@ if rol == "operario":
                     def_imp = st.number_input("Unidades Defectuosas (Scrap)", min_value=0, value=0)
                     obs_imp = st.text_area("Observaciones del Imprevisto")
                     
-                    btn_imp = st.form_submit_button("Guardar Tarea Imprevista", type="primary", use_container_width=True)
+                    btn_imp = st.form_submit_button("Guardar", type="primary", use_container_width=True)
                     
                     if btn_imp:
                         obs_final_imp = f"⚡ TAREA IMPREVISTA: {act_imp} | Buenas: {uni_imp}, Defectuosas: {def_imp}. Nota: {obs_imp}"
@@ -745,7 +745,7 @@ elif rol in ["admin", "produccion"]:
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
             
             if ops and not herramientas_db.empty:
-                with st.expander("Prestar"):
+                with st.expander("Crear"):
                     with st.form("form_prestar_herramienta", clear_on_submit=True):
                         op_her = st.selectbox("Operario Responsable", ops)
                         her_sel = st.selectbox("Herramienta a Prestar", herramientas_db['nombre'].tolist())
