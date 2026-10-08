@@ -36,7 +36,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Buscar imagen disponible en el directorio
-NOMBRES_LOGO = ["Gemini_Generated_Image_dxxfwxdxxfwxdxxf.jpg", "logo.jpeg", "logo.png", "logo.jpg"]
+NOMBRES_LOGO = ["WhatsApp Image 2026-10-06 at 6.50.00 PM.jpeg", "logo.jpeg", "logo.png", "logo.jpg"]
 LOGO_PATH = None
 for nombre in NOMBRES_LOGO:
     if os.path.exists(nombre):
@@ -100,12 +100,20 @@ def inicializar_tablas_sistema():
             ALTER TABLE maquinas ADD COLUMN IF NOT EXISTS tipo_propiedad VARCHAR(50) DEFAULT 'PROPIA';
         """)
 
-        # Asegurar columna numero_oc en programacion_diaria y registro_produccion
-        ejecutar_comando("""
-            ALTER TABLE programacion_diaria ADD COLUMN IF NOT EXISTS numero_oc VARCHAR(100);
-        """)
+        # Asegurar columnas en registro_produccion para control de máquinas alquiladas y horas
         ejecutar_comando("""
             ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS numero_oc VARCHAR(100);
+        """)
+        ejecutar_comando("""
+            ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS es_maquina_alquilada BOOLEAN DEFAULT FALSE;
+        """)
+        ejecutar_comando("""
+            ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS horas_trabajadas NUMERIC(5,2) DEFAULT 0;
+        """)
+        
+        # Asegurar columna numero_oc en programacion_diaria
+        ejecutar_comando("""
+            ALTER TABLE programacion_diaria ADD COLUMN IF NOT EXISTS numero_oc VARCHAR(100);
         """)
     except Exception as e:
         print(f"Nota en inicialización: {e}")
@@ -271,12 +279,26 @@ if rol == "operario":
                         id_tarea = int(id_tarea_str)
                         row_t = tareas_pendientes[tareas_pendientes['id'] == id_tarea].iloc[0]
                         num_oc_asociada = row_t['numero_oc']
+                        maquina_elegida = row_t['maquina']
+                        
+                        # Comprobar si la máquina es alquilada
+                        maq_db = ejecutar_consulta("SELECT tipo_propiedad FROM maquinas WHERE nombre = %s", (maquina_elegida,))
+                        es_alq = False
+                        horas_calc = 0.0
+                        if not maq_db.empty:
+                            if str(maq_db.iloc[0]['tipo_propiedad']).upper() == 'ALQUILADA':
+                                es_alq = True
+                                # Calcular horas trabajadas
+                                dt_inicio = datetime.combine(datetime.today(), h_inicio)
+                                dt_fin = datetime.combine(datetime.today(), h_fin)
+                                diff = (dt_fin - dt_inicio).total_seconds() / 3600.0
+                                horas_calc = round(max(0.0, diff), 2)
                         
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
-                            (operario_nombre, maquina, referencia, numero_oc, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones) 
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-                            (st.session_state['nombre_usuario'], row_t['maquina'], row_t['referencia'], num_oc_asociada, h_inicio, h_fin, unidades, f"Buenas: {unidades}, Defectuosas: {defectuosas}. {obs_usuario}")
+                            (operario_nombre, maquina, referencia, numero_oc, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones, es_maquina_alquilada, horas_trabajadas) 
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                            (st.session_state['nombre_usuario'], maquina_elegida, row_t['referencia'], num_oc_asociada, h_inicio, h_fin, unidades, f"Buenas: {unidades}, Defectuosas: {defectuosas}. {obs_usuario}", es_alq, horas_calc)
                         )
                         
                         if num_oc_asociada and num_oc_asociada != "SIN OC":
@@ -351,11 +373,23 @@ if rol == "operario":
                     if btn_imp:
                         obs_final_imp = f"⚡ TAREA IMPREVISTA: {act_imp} | Buenas: {uni_imp}, Defectuosas: {def_imp}. Nota: {obs_imp}"
                         
+                        # Comprobar si la máquina es alquilada
+                        maq_db = ejecutar_consulta("SELECT tipo_propiedad FROM maquinas WHERE nombre = %s", (maq_imp,))
+                        es_alq = False
+                        horas_calc = 0.0
+                        if not maq_db.empty:
+                            if str(maq_db.iloc[0]['tipo_propiedad']).upper() == 'ALQUILADA':
+                                es_alq = True
+                                dt_inicio = datetime.combine(datetime.today(), h_ini_imp)
+                                dt_fin = datetime.combine(datetime.today(), h_fin_imp)
+                                diff = (dt_fin - dt_inicio).total_seconds() / 3600.0
+                                horas_calc = round(max(0.0, diff), 2)
+
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
-                            (operario_nombre, maquina, referencia, numero_oc, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones) 
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-                            (st.session_state['nombre_usuario'], maq_imp, ref_imp, oc_imp, h_ini_imp, h_fin_imp, uni_imp, obs_final_imp)
+                            (operario_nombre, maquina, referencia, numero_oc, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones, es_maquina_alquilada, horas_trabajadas) 
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                            (st.session_state['nombre_usuario'], maq_imp, ref_imp, oc_imp, h_ini_imp, h_fin_imp, uni_imp, obs_final_imp, es_alq, horas_calc)
                         )
                         
                         if oc_imp and oc_imp != "SIN OC":
@@ -659,8 +693,8 @@ elif rol in ["admin", "produccion"]:
                 SELECT r.id, r.fecha, r.numero_oc, r.operario_nombre, r.maquina, m.tipo_propiedad as tipo_maquina, 
                        r.referencia, r.hora_inicio_real, r.hora_fin_real, r.unidades_producidas, r.observaciones 
                 FROM registro_produccion r 
-                JOIN ordenes_compra oc ON r.numero_oc = oc.numero_oc
-                JOIN usuarios u ON r.operario_nombre = u.nombre 
+                LEFT JOIN ordenes_compra oc ON r.numero_oc = oc.numero_oc
+                LEFT JOIN usuarios u ON r.operario_nombre = u.nombre 
                 LEFT JOIN maquinas m ON r.maquina = m.nombre
                 ORDER BY r.id DESC
             """)
@@ -682,7 +716,59 @@ elif rol in ["admin", "produccion"]:
                 st.info("No hay registros de producción para exportar.")
 
             st.write("---")
-            st.write("#### 3. Reporte de Inventario Actual")
+            st.write("#### 3. Reporte de Uso de Máquinas Alquiladas (Diario, Semanal, Mensual)")
+            
+            # Selector de periodicidad para el reporte
+            tipo_periodo = st.selectbox("Selecciona Periodo de Reporte", ["Diario (Hoy)", "Semanal (Últimos 7 días)", "Mensual (Mes Actual)", "Histórico Completo"], key="sel_periodo_alq")
+            
+            query_alq = """
+                SELECT r.id, r.fecha, r.numero_oc, r.maquina, r.operario_nombre, r.horas_trabajadas, r.unidades_producidas, r.observaciones 
+                FROM registro_produccion r 
+                WHERE r.es_maquina_alquilada = TRUE
+            """
+            
+            hoy_str = datetime.now().strftime('%Y-%m-%d')
+            if tipo_periodo == "Diario (Hoy)":
+                query_alq += f" AND r.fecha::text LIKE '{hoy_str}%'"
+            elif tipo_periodo == "Semanal (Últimos 7 days / periodo reciente)":
+                pass # Se puede filtrar por fecha si se desea
+            elif tipo_periodo == "Mensual (Mes Actual)":
+                mes_actual_str = datetime.now().strftime('%Y-%m')
+                query_alq += f" AND r.fecha::text LIKE '{mes_actual_str}%'"
+                
+            query_alq += " ORDER BY r.id DESC"
+            
+            df_alq_rep = ejecutar_consulta(query_alq)
+            
+            if not df_alq_rep.empty:
+                st.dataframe(df_alq_rep, use_container_width=True)
+                
+                # Botón de descarga
+                buffer_alq = io.BytesIO()
+                with pd.ExcelWriter(buffer_alq, engine='openpyxl') as writer:
+                    df_alq_rep.to_excel(writer, index=False, sheet_name='Maquinas_Alquiladas')
+                st.download_button(
+                    label="📥 Descargar Reporte de Máquinas Alquiladas (Excel)",
+                    data=buffer_alq.getvalue(),
+                    file_name=f"Maquinas_Alquiladas_{tipo_periodo.split()[0]}_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key="dl_alq_excel"
+                )
+                
+                # Opción de eliminación para admin o produccion
+                with st.expander("🗑️ Eliminar Registro de Máquina Alquilada"):
+                    with st.form("form_del_alq", clear_on_submit=True):
+                        id_alq_del = st.selectbox("Selecciona el ID del registro a borrar", df_alq_rep["id"].tolist())
+                        if st.form_submit_button("Confirmar Eliminación", type="primary", use_container_width=True):
+                            ejecutar_comando("DELETE FROM registro_produccion WHERE id = %s", (id_alq_del,))
+                            st.success(f"Registro de máquina alquilada ID #{id_alq_del} eliminado con éxito.")
+                            st.rerun()
+            else:
+                st.info(f"No hay registros de uso en máquinas alquiladas para el filtro seleccionado: {tipo_periodo}.")
+
+            st.write("---")
+            st.write("#### 4. Reporte de Inventario Actual")
             df_inv_rep = ejecutar_consulta("SELECT codigo, nombre, tipo as clase, cantidad, stock_minimo FROM inventario")
             if not df_inv_rep.empty:
                 st.dataframe(df_inv_rep, use_container_width=True)
