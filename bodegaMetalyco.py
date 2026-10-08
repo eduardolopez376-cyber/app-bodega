@@ -69,7 +69,7 @@ st.markdown("""
             box-shadow: 0 6px 16px rgba(249, 115, 22, 0.5);
         }
 
-        /* Tarjetas / Expanders con bordes sutiles */
+        /* Tarjetas / Expanders con bordes sutiles y sin texto extraño */
         div.stExpander {
             background-color: #141414 !important;
             border: 1px solid #262626 !important;
@@ -198,7 +198,7 @@ if "form_key_counter" not in st.session_state:
 
 # PANTALLA DE LOGIN
 if not st.session_state["autenticado"]:
-    st.markdown("<h1 style='text-align: center; color: #f97316;'>⚙️ Industrias Metal&Co</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: #f97316;'>Industrias Metal&Co</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #a3a3a3;'>Inicia sesión en el sistema de planta</p>", unsafe_allow_html=True)
     
     col1, col_login_box, col3 = st.columns([1, 1.2, 1])
@@ -259,7 +259,7 @@ rol = st.session_state["rol"]
 if rol == "operario":
     st.markdown(f"### 👋 Hola, {st.session_state['nombre_usuario']}")
     
-    tab_prog, tab_prod, tab_nueva = st.tabs(["📋 Mi Programación", "⚙️ Registrar Producción", "➕ Tarea Imprevista"])
+    tab_prog, tab_prod, tab_nueva = st.tabs(["Programación", "Producción", "Imprevisto"])
     
     with tab_prog:
         st.markdown("#### Tareas Asignadas")
@@ -461,23 +461,23 @@ if rol == "operario":
 # ====================================================
 elif rol in ["admin", "produccion"]:
     tab_prog, tab_oc, tab_eq, tab_serv, tab_ref, tab_rep, tab_ent, tab_herramientas, tab_cargue, tab_inv_gen, tab_clases, tab_usu = st.tabs([
-        "📅 Programar", 
-        "📋 Órdenes Compra",
-        "⚙️ Máquinas",
-        "🛠️ Servicios",
-        "📄 Referencias",
-        "📊 Reportes", 
-        "🚀 Entregas", 
-        "🔨 Herramientas",
-        "📥 Cargue", 
-        "📦 Inventario",
-        "🏷️ Clases", 
-        "⚙️ Usuarios"
+        "Programar", 
+        "Órdenes Compra",
+        "Máquinas",
+        "Servicios",
+        "Referencias",
+        "Reportes", 
+        "Entregas", 
+        "Herramientas",
+        "Cargue", 
+        "Inventario",
+        "Clases", 
+        "Usuarios"
     ])
     
     # --- TAB 1: PROGRAMAR PLANTA ---
     with tab_prog:
-        st.markdown("### 📅 Programación de Planta")
+        st.markdown("### Programación de Planta")
         fecha_seleccionada = st.date_input("Selecciona el día a consultar/programar", value=datetime.now().date(), key="cal_admin_dia")
         
         try:
@@ -491,8 +491,7 @@ elif rol in ["admin", "produccion"]:
             if not ops or not maqs or not refs or not ocs_disp:
                 st.warning("⚠️ Asegúrate de tener operarios, máquinas, referencias y al menos una **Orden de Compra activa** creada.")
             else:
-                with st.container():
-                    st.markdown("#### ➕ Asignar Nueva Tarea")
+                with st.expander("➕ Asignar Nueva Tarea"):
                     k_sufijo = st.session_state["form_key_counter"]
                     oc_prog = st.selectbox("Orden de Compra a Ejecutar", ocs_disp, key=f"select_oc_dinamica_{k_sufijo}")
                     
@@ -539,8 +538,7 @@ elif rol in ["admin", "produccion"]:
             if not df_prog_actual.empty:
                 st.dataframe(df_prog_actual, use_container_width=True)
                 
-                with st.container():
-                    st.markdown("#### 🗑️ Eliminar Programación")
+                with st.expander("🗑️ Eliminar Programación"):
                     id_del = st.selectbox("ID a Eliminar", df_prog_actual["id"].tolist(), key="del_prog_id_c")
                     if st.button("Confirmar Eliminación", use_container_width=True):
                         ejecutar_comando("DELETE FROM programacion_diaria WHERE id = %s", (id_del,))
@@ -554,7 +552,7 @@ elif rol in ["admin", "produccion"]:
 
     # --- TAB 2: ÓRDENES DE COMPRA Y SALDOS ---
     with tab_oc:
-        st.markdown("### 📋 Gestión de Órdenes de Compra")
+        st.markdown("### Gestión de Órdenes de Compra")
         try:
             refs_db = ejecutar_consulta("SELECT codigo FROM referencias")
             lista_refs = refs_db['codigo'].tolist() if not refs_db.empty else []
@@ -565,8 +563,7 @@ elif rol in ["admin", "produccion"]:
             if not lista_refs:
                 st.warning("⚠️ Primero debes crear referencias en la pestaña 'Referencias'.")
             else:
-                with st.container():
-                    st.markdown("#### ➕ Registrar Nueva Orden de Compra")
+                with st.expander("➕ Registrar Nueva Orden de Compra"):
                     with st.form("form_crear_oc", clear_on_submit=True):
                         num_oc = st.text_input("Número de Orden de Compra (Ej: OC-9021)")
                         cliente = st.text_input("Nombre del Cliente")
@@ -603,8 +600,7 @@ elif rol in ["admin", "produccion"]:
                 )
                 st.dataframe(df_oc, use_container_width=True)
 
-                with st.container():
-                    st.markdown("#### 🗑️ Eliminar Orden de Compra")
+                with st.expander("🗑️ Eliminar Orden de Compra"):
                     with st.form("form_del_oc", clear_on_submit=True):
                         oc_del = st.selectbox("Selecciona la OC a Borrar", df_oc["numero_oc"].tolist())
                         if st.form_submit_button("Confirmar Eliminación", use_container_width=True):
@@ -621,13 +617,12 @@ elif rol in ["admin", "produccion"]:
 
     # --- TAB 3: MÁQUINAS ---
     with tab_eq:
-        st.markdown("### ⚙️ Gestión de Máquinas")
+        st.markdown("### Gestión de Máquinas")
         try:
             df_maqs = ejecutar_consulta("SELECT * FROM maquinas")
             st.dataframe(df_maqs, use_container_width=True)
             
-            with st.container():
-                st.markdown("#### ➕ Registrar Nueva Máquina")
+            with st.expander("➕ Registrar Nueva Máquina"):
                 with st.form("form_crear_maquina", clear_on_submit=True):
                     m_nom = st.text_input("Nombre de la Máquina")
                     m_tipo = st.text_input("Tipo (Ej: Corte, Dobladora)")
@@ -642,8 +637,7 @@ elif rol in ["admin", "produccion"]:
                             st.error("Escribe el nombre.")
 
             if not df_maqs.empty and rol == "admin":
-                with st.container():
-                    st.markdown("#### 🗑️ Eliminar Máquina")
+                with st.expander("🗑️ Eliminar Máquina"):
                     with st.form("form_del_maquina", clear_on_submit=True):
                         m_del = st.selectbox("Máquina a Borrar", df_maqs["nombre"].tolist())
                         if st.form_submit_button("Confirmar Eliminación", use_container_width=True):
@@ -655,7 +649,7 @@ elif rol in ["admin", "produccion"]:
 
     # --- TAB 4: SERVICIOS ---
     with tab_serv:
-        st.markdown("### 🛠️ Servicios Prestados")
+        st.markdown("### Servicios Prestados")
         try:
             df_serv = ejecutar_consulta("SELECT * FROM servicios_prestados ORDER BY id DESC")
             if not df_serv.empty:
@@ -663,8 +657,7 @@ elif rol in ["admin", "produccion"]:
             else:
                 st.info("No hay servicios creados.")
             
-            with st.container():
-                st.markdown("#### ➕ Crear Nuevo Servicio")
+            with st.expander("➕ Crear Nuevo Servicio"):
                 with st.form("form_crear_serv", clear_on_submit=True):
                     nom_serv = st.text_input("Nombre del Servicio")
                     if st.form_submit_button("Guardar", use_container_width=True):
@@ -676,8 +669,7 @@ elif rol in ["admin", "produccion"]:
                             st.error("Escribe un nombre.")
 
             if not df_serv.empty and rol == "admin":
-                with st.container():
-                    st.markdown("#### 🗑️ Eliminar Servicio")
+                with st.expander("🗑️ Eliminar Servicio"):
                     with st.form("form_del_serv", clear_on_submit=True):
                         serv_del = st.selectbox("Servicio a Borrar", df_serv["nombre"].tolist())
                         if st.form_submit_button("Confirmar Eliminación", use_container_width=True):
@@ -689,13 +681,12 @@ elif rol in ["admin", "produccion"]:
 
     # --- TAB 5: REFERENCIAS ---
     with tab_ref:
-        st.markdown("### 📄 Catálogo de Referencias")
+        st.markdown("### Catálogo de Referencias")
         try:
             df_refs = ejecutar_consulta("SELECT * FROM referencias")
             st.dataframe(df_refs, use_container_width=True)
             
-            with st.container():
-                st.markdown("#### ➕ Crear Nueva Referencia")
+            with st.expander("➕ Crear Nueva Referencia"):
                 with st.form("form_crear_ref", clear_on_submit=True):
                     r_cod = st.text_input("Código Referencia")
                     r_desc = st.text_input("Descripción del Producto")
@@ -705,8 +696,7 @@ elif rol in ["admin", "produccion"]:
                         st.rerun()
 
             if not df_refs.empty and rol == "admin":
-                with st.container():
-                    st.markdown("#### 🗑️ Eliminar Referencia")
+                with st.expander("🗑️ Eliminar Referencia"):
                     with st.form("form_del_ref", clear_on_submit=True):
                         r_del = st.selectbox("Referencia a Borrar", df_refs["codigo"].tolist())
                         if st.form_submit_button("Confirmar Eliminación", use_container_width=True):
@@ -718,7 +708,7 @@ elif rol in ["admin", "produccion"]:
 
     # --- TAB 6: REPORTES ---
     with tab_rep:
-        st.markdown("### 📊 Centro de Reportes y Excel")
+        st.markdown("### Centro de Reportes y Excel")
         try:
             st.markdown("#### 1. Reporte de Saldos de Órdenes de Compra")
             df_oc_rep = ejecutar_consulta("SELECT * FROM ordenes_compra ORDER BY id DESC")
@@ -788,7 +778,7 @@ elif rol in ["admin", "produccion"]:
 
     # --- TAB 7: ENTREGAS ---
     with tab_ent:
-        st.markdown("### 🚀 Registrar Salida de Insumo / Material")
+        st.markdown("### Registrar Salida de Insumo / Material")
         try:
             ops_df = ejecutar_consulta("SELECT nombre FROM usuarios WHERE rol = 'operario'")
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
@@ -818,7 +808,7 @@ elif rol in ["admin", "produccion"]:
 
     # --- TAB 8: HERRAMIENTAS ---
     with tab_herramientas:
-        st.markdown("### 🔨 Préstamos de Herramientas")
+        st.markdown("### Préstamos de Herramientas")
         try:
             herramientas_db = ejecutar_consulta("SELECT codigo, nombre, cantidad FROM inventario WHERE tipo ILIKE '%HERRAMIENTA%'")
             if not herramientas_db.empty:
@@ -830,8 +820,7 @@ elif rol in ["admin", "produccion"]:
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
             
             if ops and not herramientas_db.empty:
-                with st.container():
-                    st.markdown("#### 🤝 Prestar Herramienta")
+                with st.expander("🤝 Prestar Herramienta"):
                     with st.form("form_prestar_herramienta", clear_on_submit=True):
                         op_her = st.selectbox("Operario", ops)
                         her_sel = st.selectbox("Herramienta", herramientas_db['nombre'].tolist())
@@ -872,7 +861,7 @@ elif rol in ["admin", "produccion"]:
 
     # --- TAB 9: CARGUE ---
     with tab_cargue:
-        st.markdown("### 📥 Cargue Único de Ítems")
+        st.markdown("### Cargue Único de Ítems")
         try:
             clases_df = ejecutar_consulta("SELECT nombre FROM clases_inventario")
             lista_clases = clases_df['nombre'].tolist() if not clases_df.empty else []
@@ -902,14 +891,13 @@ elif rol in ["admin", "produccion"]:
 
     # --- TAB 10: INVENTARIO GENERAL ---
     with tab_inv_gen:
-        st.markdown("### 📦 Inventario General")
+        st.markdown("### Inventario General")
         try:
             inv_gen = ejecutar_consulta("SELECT codigo, nombre, tipo as clase, cantidad, stock_minimo FROM inventario")
             if not inv_gen.empty:
                 st.dataframe(inv_gen, use_container_width=True)
                 if rol == "admin":
-                    with st.container():
-                        st.markdown("#### 🗑️ Eliminar Ítem")
+                    with st.expander("🗑️ Eliminar Ítem"):
                         with st.form("form_del_inv", clear_on_submit=True):
                             del_cod_gen = st.selectbox("Código a Eliminar", inv_gen["codigo"].tolist())
                             if st.form_submit_button("Confirmar Eliminación", use_container_width=True):
@@ -923,14 +911,13 @@ elif rol in ["admin", "produccion"]:
 
     # --- TAB 11: CLASES ---
     with tab_clases:
-        st.markdown("### 🏷️ Clases de Inventario")
+        st.markdown("### Clases de Inventario")
         try:
             clases_actuales = ejecutar_consulta("SELECT * FROM clases_inventario")
             if not clases_actuales.empty:
                 st.dataframe(clases_actuales, use_container_width=True)
             
-            with st.container():
-                st.markdown("#### ➕ Crear Clase")
+            with st.expander("➕ Crear Clase"):
                 with st.form("form_crear_clase", clear_on_submit=True):
                     nueva_clase = st.text_input("Nombre de Clase")
                     if st.form_submit_button("Guardar", use_container_width=True):
@@ -943,13 +930,12 @@ elif rol in ["admin", "produccion"]:
 
     # --- TAB 12: USUARIOS ---
     with tab_usu:
-        st.markdown("### ⚙️ Gestión de Usuarios")
+        st.markdown("### Gestión de Usuarios")
         try:
             users_df = ejecutar_consulta("SELECT id, username, nombre, rol FROM usuarios")
             st.dataframe(users_df, use_container_width=True)
             
-            with st.container():
-                st.markdown("#### ➕ Crear Usuario")
+            with st.expander("➕ Crear Usuario"):
                 with st.form("form_crear_usuario", clear_on_submit=True):
                     u_user = st.text_input("Usuario")
                     u_pass = st.text_input("Clave", type="password")
@@ -960,4 +946,4 @@ elif rol in ["admin", "produccion"]:
                         st.success("✅ Creado.")
                         st.rerun()
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"Error: {e}"
