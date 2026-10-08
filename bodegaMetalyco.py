@@ -74,33 +74,45 @@ def ejecutar_comando(query, params=None):
     cur.close()
     conn.close()
 
-# Inicializar tablas para Órdenes de Compra y Referencias
-def inicializar_tablas_avanzadas():
+# Inicializar y actualizar tablas para soportar servicios, máquinas (propias/alquiladas) y relación con OC
+def inicializar_tablas_sistema():
     try:
+        # Tabla de Servicios Prestados
         ejecutar_comando("""
-            CREATE TABLE IF NOT EXISTS ordenes_compra (
+            CREATE TABLE IF NOT EXISTS servicios_prestados (
                 id SERIAL PRIMARY KEY,
-                numero_oc VARCHAR(100) NOT NULL,
-                cliente VARCHAR(150) NOT NULL,
-                referencia VARCHAR(100) NOT NULL,
-                servicio VARCHAR(100) NOT NULL,
-                requiere_unidades BOOLEAN DEFAULT TRUE,
-                meta_unidades INT DEFAULT 0,
-                unidades_entregadas INT DEFAULT 0,
-                estado VARCHAR(50) DEFAULT 'PENDIENTE',
-                fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                nombre VARCHAR(100) UNIQUE NOT NULL
             );
         """)
+        # Insertar servicios por defecto si está vacía
+        servicios_iniciales = ["TROQUELADO", "CONFORMADO", "CORTE LASER", "PINTURA", "FABRICACION DE ESTRUCTURAS METALICAS"]
+        for s in servicios_iniciales:
+            ejecutar_comando("INSERT INTO servicios_prestados (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (s,))
+
+        # Tabla de Clases de Inventario
         ejecutar_comando("""
             CREATE TABLE IF NOT EXISTS clases_inventario (
                 id SERIAL PRIMARY KEY,
                 nombre VARCHAR(100) UNIQUE NOT NULL
             );
         """)
-    except Exception:
-        pass
 
-inicializar_tablas_avanzadas()
+        # Asegurar columna tipo_propiedad en máquinas (Propia / Alquilada)
+        ejecutar_comando("""
+            ALTER TABLE maquinas ADD COLUMN IF NOT EXISTS tipo_propiedad VARCHAR(50) DEFAULT 'PROPIA';
+        """)
+
+        # Asegurar columna numero_oc en programacion_diaria y registro_produccion para enlazar directamente
+        ejecutar_comando("""
+            ALTER TABLE programacion_diaria ADD COLUMN IF NOT EXISTS numero_oc VARCHAR(100);
+        """)
+        ejecutar_comando("""
+            ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS numero_oc VARCHAR(100);
+        """)
+    except Exception as e:
+        print(f"Nota en inicialización: {e}")
+
+inicializar_tablas_sistema()
 
 # ----------------------------------------------------
 # INICIALIZACIÓN BLINDADA DEL ESTADO DE SESIÓN
@@ -186,7 +198,7 @@ if rol == "operario":
         
         try:
             tareas = ejecutar_consulta(
-                """SELECT id, hora_inicio, hora_fin, maquina, referencia, actividad, meta_unidades, estado 
+                """SELECT id, numero_oc, hora_inicio, hora_fin, maquina, referencia, actividad, meta_unidades, estado 
                    FROM programacion_diaria 
                    WHERE operario_nombre = %s AND fecha = %s AND estado NOT IN ('FINALIZADO', 'CANCELADO')
                    ORDER BY id DESC""",
@@ -214,10 +226,10 @@ if rol == "operario":
             st.error(f"Error al cargar consumos: {e}")
 
     with tab_prod:
-        st.write("### Registrar Producción y Completar Tarea")
+        st.write("### Registrar Producción, Descontar OC y Completar Tarea")
         try:
             tareas_pendientes = ejecutar_consulta(
-                """SELECT id, actividad, maquina, referencia, meta_unidades FROM programacion_diaria 
+                """SELECT id, numero_oc, actividad, maquina, referencia, meta_unidades FROM programacion_diaria 
                    WHERE operario_nombre = %s AND fecha = CURRENT_DATE AND estado NOT IN ('FINALIZADO', 'CANCELADO')""",
                 (st.session_state['nombre_usuario'],)
             )
@@ -226,7 +238,7 @@ if rol == "operario":
                 st.warning("No tienes tareas pendientes asignadas para hoy para reportar.")
             else:
                 lista_opciones = [
-                    f"ID #{row['id']} - {row['actividad']} (Meta: {row['meta_unidades']} u. | Máq: {row['maquina']})" 
+                    f"ID #{row['id']} | OC: {row['numero_oc']} - {row['actividad']} (Ref: {row['referencia']} | Meta: {row['meta_unidades']} u.)" 
                     for _, row in tareas_pendientes.iterrows()
                 ]
                 
@@ -240,39 +252,52 @@ if rol == "operario":
                     defectuosas = st.number_input("Unidades Defectuosas (Scrap)", min_value=0, step=1, value=0)
                     obs_usuario = st.text_area("Observaciones / Novedades")
                     
-                    submit = st.form_submit_button("Guardar Registro y Finalizar Tarea", type="primary", use_container_width=True)
+                    submit = st.form_submit_button("Guardar Registro, Descontar de OC y Finalizar Tarea", type="primary", use_container_width=True)
                     
                     if submit:
-                        id_tarea_str = tarea_elegida_str.split(" - ")[0].replace("ID #", "")
+                        id_tarea_str = tarea_elegida_str.split(" | ")[0].replace("ID #", "")
                         id_tarea = int(id_tarea_str)
                         row_t = tareas_pendientes[tareas_pendientes['id'] == id_tarea].iloc[0]
+                        num_oc_asociada = row_t['numero_oc']
                         meta_original = int(row_t['meta_unidades'])
                         
-                        if unidades < meta_original:
-                            faltantes = meta_original - unidades
-                            obs_final = f"⚠️ PRODUCCIÓN PARCIAL: Buenas {unidades} de {meta_original} meta (Defectuosas: {defectuosas}). Faltaron {faltantes} unidades. Nota: {obs_usuario}"
-                        else:
-                            obs_final = f"✅ Meta cumplida ({unidades}/{meta_original} buenas, Defectuosas: {defectuosas}). {obs_usuario}"
-                        
+                        # Guardar en registro de producción con su OC
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
-                            (operario_nombre, maquina, referencia, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones) 
-                            VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                            (st.session_state['nombre_usuario'], row_t['maquina'], row_t['referencia'], h_inicio, h_fin, unidades, obs_final)
+                            (operario_nombre, maquina, referencia, numero_oc, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones) 
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                            (st.session_state['nombre_usuario'], row_t['maquina'], row_t['referencia'], num_oc_asociada, h_inicio, h_fin, unidades, f"Buenas: {unidades}, Defectuosas: {defectuosas}. {obs_usuario}")
                         )
                         
+                        # Descontar / Abonar automáticamente a la Orden de Compra si tiene OC asignada
+                        if num_oc_asociada and num_oc_asociada != "SIN OC":
+                            oc_db = ejecutar_consulta("SELECT unidades_entregadas, meta_unidades, requiere_unidades FROM ordenes_compra WHERE numero_oc = %s", (num_oc_asociada,))
+                            if not oc_db.empty:
+                                ent_actuales = int(oc_db.iloc[0]['unidades_entregadas'])
+                                meta_oc = int(oc_db.iloc[0]['meta_unidades'])
+                                req_uni = oc_db.iloc[0]['requiere_unidades']
+                                
+                                nuevo_entregado = ent_actuales + unidades
+                                nuevo_estado = 'COMPLETADO' if req_uni and nuevo_entregado >= meta_oc else 'EN PROCESO'
+                                
+                                ejecutar_comando(
+                                    "UPDATE ordenes_compra SET unidades_entregadas = %s, estado = %s WHERE numero_oc = %s",
+                                    (nuevo_entregado, nuevo_estado, num_oc_asociada)
+                                )
+
+                        # Finalizar tarea en programación
                         ejecutar_comando(
                             "UPDATE programacion_diaria SET estado = 'FINALIZADO' WHERE id = %s",
                             (id_tarea,)
                         )
                         
-                        st.success("¡Producción registrada con éxito! La tarea ha sido completada.")
+                        st.success("¡Producción registrada con éxito, saldo descontado de la OC y tarea finalizada!")
                         st.rerun()
 
             st.write("---")
             st.write("### Mis Reportes de HOY")
             reportes_hoy = ejecutar_consulta(
-                """SELECT hora_inicio_real, hora_fin_real, maquina, referencia, unidades_producidas, observaciones 
+                """SELECT numero_oc, hora_inicio_real, hora_fin_real, maquina, referencia, unidades_producidas, observaciones 
                    FROM registro_produccion 
                    WHERE operario_nombre = %s AND fecha::date = CURRENT_DATE 
                    ORDER BY id DESC""",
@@ -291,11 +316,14 @@ if rol == "operario":
         try:
             maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
             refs = ejecutar_consulta("SELECT codigo FROM referencias")['codigo'].tolist()
+            ocs_disp = ejecutar_consulta("SELECT numero_oc FROM ordenes_compra WHERE estado != 'COMPLETADO'")['numero_oc'].tolist()
+            ocs_disp.insert(0, "SIN OC")
             
             if not maqs or not refs:
                 st.warning("Faltan máquinas o referencias registradas en el sistema.")
             else:
                 with st.form("form_tarea_imprevista", clear_on_submit=True):
+                    oc_imp = st.selectbox("Orden de Compra Asociada (Opcional)", ocs_disp)
                     maq_imp = st.selectbox("Máquina", maqs)
                     ref_imp = st.selectbox("Referencia", refs)
                     act_imp = st.text_input("Actividad / Motivo imprevisto (Ej: Reproceso, Reparación urgente)")
@@ -310,18 +338,32 @@ if rol == "operario":
                     def_imp = st.number_input("Unidades Defectuosas (Scrap)", min_value=0, value=0)
                     obs_imp = st.text_area("Observaciones del Imprevisto")
                     
-                    btn_imp = st.form_submit_button("Guardar e Iniciar Tarea Imprevista", type="primary", use_container_width=True)
+                    btn_imp = st.form_submit_button("Guardar Tarea Imprevista", type="primary", use_container_width=True)
                     
                     if btn_imp:
                         obs_final_imp = f"⚡ TAREA IMPREVISTA: {act_imp} | Buenas: {uni_imp}, Defectuosas: {def_imp}. Nota: {obs_imp}"
                         
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
-                            (operario_nombre, maquina, referencia, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones) 
-                            VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                            (st.session_state['nombre_usuario'], maq_imp, ref_imp, h_ini_imp, h_fin_imp, uni_imp, obs_final_imp)
+                            (operario_nombre, maquina, referencia, numero_oc, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones) 
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                            (st.session_state['nombre_usuario'], maq_imp, ref_imp, oc_imp, h_ini_imp, h_fin_imp, uni_imp, obs_final_imp)
                         )
-                        st.success("¡Tarea imprevista registrada y guardada con éxito en los reportes!")
+                        
+                        if oc_imp and oc_imp != "SIN OC":
+                            oc_db = ejecutar_consulta("SELECT unidades_entregadas, meta_unidades, requiere_unidades FROM ordenes_compra WHERE numero_oc = %s", (oc_imp,))
+                            if not oc_db.empty:
+                                ent_actuales = int(oc_db.iloc[0]['unidades_entregadas'])
+                                meta_oc = int(oc_db.iloc[0]['meta_unidades'])
+                                req_uni = oc_db.iloc[0]['requiere_unidades']
+                                nuevo_entregado = ent_actuales + uni_imp
+                                nuevo_estado = 'COMPLETADO' if req_uni and nuevo_entregado >= meta_oc else 'EN PROCESO'
+                                ejecutar_comando(
+                                    "UPDATE ordenes_compra SET unidades_entregadas = %s, estado = %s WHERE numero_oc = %s",
+                                    (nuevo_entregado, nuevo_estado, oc_imp)
+                                )
+
+                        st.success("¡Tarea imprevista registrada y saldo actualizado en la OC!")
                         st.rerun()
         except Exception as e:
             st.error(f"Error al cargar formulario de tarea imprevista: {e}")
@@ -330,23 +372,24 @@ if rol == "operario":
 # VISTA COMPLETA PARA ADMINISTRADOR Y PRODUCCIÓN
 # ====================================================
 elif rol in ["admin", "produccion"]:
-    tab_prog, tab_oc, tab_eq, tab_ref, tab_rep, tab_ent, tab_herramientas, tab_cargue, tab_inv_gen, tab_clases, tab_usu = st.tabs([
+    tab_prog, tab_oc, tab_eq, tab_serv, tab_ref, tab_rep, tab_ent, tab_herramientas, tab_cargue, tab_inv_gen, tab_clases, tab_usu = st.tabs([
         "📅 Programar", 
-        "📋 Órdenes de Compra",
-        "⚙️ Equipos",
+        "📋 Órdenes Compra",
+        "⚙️ Máquinas",
+        "🛠️ Servicios",
         "📄 Referencias",
         "📊 Reportes", 
         "🚀 Entregas", 
         "🔨 Herramientas",
         "📥 Cargue Ítems", 
-        "📦 Inventario General",
-        "🏷️ Clases / Categorías", 
+        "📦 Inventario",
+        "🏷️ Clases", 
         "⚙️ Usuarios"
     ])
     
     # --- TAB 1: PROGRAMAR PLANTA ---
     with tab_prog:
-        st.subheader("📅 Programación de Planta por Fecha")
+        st.subheader("📅 Programación de Planta por Fecha y Orden de Compra")
         
         fecha_seleccionada = st.date_input("Selecciona el día a consultar/programar", value=datetime.now().date(), key="cal_admin_dia")
         
@@ -356,16 +399,26 @@ elif rol in ["admin", "produccion"]:
             
             maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
             refs = ejecutar_consulta("SELECT codigo FROM referencias")['codigo'].tolist()
+            ocs_disp = ejecutar_consulta("SELECT numero_oc FROM ordenes_compra WHERE estado != 'COMPLETADO'")['numero_oc'].tolist()
             
-            if not ops or not maqs or not refs:
-                st.warning("⚠️ Asegúrate de tener al menos un usuario registrado con rol 'operario', una máquina y una referencia creadas.")
+            if not ops or not maqs or not refs or not ocs_disp:
+                st.warning("⚠️ Asegúrate de tener operarios, máquinas, referencias y al menos una **Orden de Compra activa** creada.")
             else:
-                with st.expander(f"➕ Asignar Tarea para el día {fecha_seleccionada}", expanded=False):
+                with st.expander(f"➕ Asignar Tarea vinculada a una Orden de Compra para el {fecha_seleccionada}", expanded=False):
                     with st.form(f"form_programacion_{fecha_seleccionada}", clear_on_submit=True):
+                        oc_prog = st.selectbox("Orden de Compra a Ejecutar", ocs_disp)
                         op_p = st.selectbox("Operario", ops)
                         maq_p = st.selectbox("Máquina", maqs)
-                        ref_p = st.selectbox("Referencia", refs)
-                        act_p = st.text_input("Actividad (Ej: Corte, Plegado)")
+                        
+                        # Autocompletar referencia y servicio basados en la OC seleccionada
+                        oc_info = ejecutar_consulta("SELECT referencia, servicio, meta_unidades, unidades_entregadas FROM ordenes_compra WHERE numero_oc = %s", (oc_prog,))
+                        ref_sugerida = oc_info.iloc[0]['referencia'] if not oc_info.empty else (refs[0] if refs else "")
+                        serv_sugerido = oc_info.iloc[0]['servicio'] if not oc_info.empty else ""
+                        meta_restante = max(1, int(oc_info.iloc[0]['meta_unidades']) - int(oc_info.iloc[0]['unidades_entregadas'])) if not oc_info.empty else 100
+                        
+                        st.write(f"📌 **Referencia de la OC:** `{ref_sugerida}` | **Servicio:** `{serv_sugerido}` | **Saldo Pendiente:** `{meta_restante} u.`")
+                        
+                        act_p = st.text_input("Actividad Específica (Ej: Corte láser de planchas)", value=serv_sugerido)
                         
                         col_h1, col_h2 = st.columns(2)
                         with col_h1:
@@ -373,17 +426,17 @@ elif rol in ["admin", "produccion"]:
                         with col_h2:
                             h_fin_p = st.time_input("Fin Turno", time(17, 0))
                         
-                        meta_p = st.number_input("Meta de Unidades", min_value=1, value=100)
-                        btn_prog = st.form_submit_button("Guardar Programación", type="primary", use_container_width=True)
+                        meta_p = st.number_input("Meta de Unidades para esta Tarea", min_value=1, value=meta_restante)
+                        btn_prog = st.form_submit_button("Guardar Programación de Tarea", type="primary", use_container_width=True)
                         
                         if btn_prog:
                             ejecutar_comando(
                                 """INSERT INTO programacion_diaria 
-                                (fecha, operario_nombre, maquina, referencia, actividad, hora_inicio, hora_fin, meta_unidades, estado) 
-                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE')""",
-                                (fecha_seleccionada, op_p, maq_p, ref_p, act_p, h_ini_p, h_fin_p, meta_p)
+                                (fecha, numero_oc, operario_nombre, maquina, referencia, actividad, hora_inicio, hora_fin, meta_unidades, estado) 
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE')""",
+                                (fecha_seleccionada, oc_prog, op_p, maq_p, ref_sugerida, act_p, h_ini_p, h_fin_p, meta_p)
                             )
-                            st.success(f"Asignado a {op_p} para el día {fecha_seleccionada}.")
+                            st.success(f"Tarea asignada a {op_p} para la OC #{oc_prog} el día {fecha_seleccionada}.")
                             st.rerun()
             
             st.write("---")
@@ -397,34 +450,6 @@ elif rol in ["admin", "produccion"]:
             if not df_prog_actual.empty:
                 st.dataframe(df_prog_actual, use_container_width=True)
                 
-                with st.expander("✏️ Editar Programación de este día"):
-                    id_edit = st.selectbox("ID a Modificar", df_prog_actual["id"].tolist(), key="edit_prog_id_cal")
-                    row_sel = df_prog_actual[df_prog_actual["id"] == id_edit].iloc[0]
-                    
-                    idx_op = ops.index(row_sel["operario_nombre"]) if row_sel["operario_nombre"] in ops else 0
-                    idx_maq = maqs.index(row_sel["maquina"]) if row_sel["maquina"] in maqs else 0
-                    idx_ref = refs.index(row_sel["referencia"]) if row_sel["referencia"] in refs else 0
-                    
-                    edit_op = st.selectbox("Operario", ops, index=idx_op, key="e_op_c")
-                    edit_maq = st.selectbox("Máquina", maqs, index=idx_maq, key="e_maq_c")
-                    edit_ref = st.selectbox("Referencia", refs, index=idx_ref, key="e_ref_c")
-                    edit_act = st.text_input("Actividad", value=row_sel["actividad"], key="e_act_c")
-                    edit_meta = st.number_input("Meta Unidades", min_value=1, value=int(row_sel["meta_unidades"]), key="e_meta_c")
-                    
-                    estados_posibles = ["PENDIENTE", "EN PROCESO", "FINALIZADO", "CANCELADO"]
-                    idx_est = estados_posibles.index(row_sel["estado"]) if row_sel["estado"] in estados_posibles else 0
-                    edit_estado = st.selectbox("Estado", estados_posibles, index=idx_est, key="e_est_c")
-                    
-                    if st.button("Guardar Cambios", use_container_width=True):
-                        ejecutar_comando(
-                            """UPDATE programacion_diaria 
-                            SET operario_nombre = %s, maquina = %s, referencia = %s, actividad = %s, meta_unidades = %s, estado = %s 
-                            WHERE id = %s""",
-                            (edit_op, edit_maq, edit_ref, edit_act, edit_meta, edit_estado, id_edit)
-                        )
-                        st.success("Modificado con éxito.")
-                        st.rerun()
-
                 with st.expander("🗑️ Eliminar Programación"):
                     id_del = st.selectbox("ID a Eliminar", df_prog_actual["id"].tolist(), key="del_prog_id_c")
                     if st.button("Confirmar Eliminación", type="primary", use_container_width=True):
@@ -437,34 +462,28 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Programación: {e}")
 
-    # --- TAB 2: ÓRDENES DE COMPRA Y SERVICIOS ---
+    # --- TAB 2: ÓRDENES DE COMPRA Y SALDOS ---
     with tab_oc:
         st.subheader("📋 Gestión de Órdenes de Compra (OC), Clientes y Saldos")
         try:
             refs_db = ejecutar_consulta("SELECT codigo FROM referencias")
             lista_refs = refs_db['codigo'].tolist() if not refs_db.empty else []
             
+            serv_db = ejecutar_consulta("SELECT nombre FROM servicios_prestados")
+            lista_servicios = serv_db['nombre'].tolist() if not serv_db.empty else ["TROQUELADO", "CORTE LASER"]
+            
             if not lista_refs:
-                st.warning("⚠️ Primero debes crear referencias en la pestaña 'Referencias' para poder asociarlas a las Órdenes de Compra.")
+                st.warning("⚠️ Primero debes crear referencias en la pestaña 'Referencias' antes de crear Órdenes de Compra.")
             else:
-                # Formulario para registrar OC ligada a una referencia y cliente
-                with st.expander("➕ Registrar Nueva Orden de Compra (Asociar Referencia a Cliente)", expanded=True):
+                with st.expander("➕ Registrar Nueva Orden de Compra", expanded=True):
                     with st.form("form_crear_oc", clear_on_submit=True):
                         num_oc = st.text_input("Número de Orden de Compra (Ej: OC-9021)")
                         cliente = st.text_input("Nombre del Cliente (Ej: Metalmecánica S.A.S)")
-                        ref_oc = st.selectbox("Selecciona la Referencia Base", lista_refs)
-                        
-                        servicio = st.selectbox("Servicio Ofrecido", [
-                            "TROQUELADO", 
-                            "CONFORMADO", 
-                            "CORTE LASER", 
-                            "PINTURA", 
-                            "FABRICACION DE ESTRUCTURAS METALICAS", 
-                            "OTRO"
-                        ])
+                        ref_oc = st.selectbox("Referencia Base", lista_refs)
+                        servicio_oc = st.selectbox("Servicio Prestado", lista_servicios)
                         
                         requiere_uni = st.checkbox("¿Este servicio requiere control por unidades?", value=True)
-                        meta_oc = st.number_input("Cantidad Pedida para esta OC (Meta de Unidades)", min_value=0, value=1000)
+                        meta_oc = st.number_input("Cantidad Total Pedida (Meta)", min_value=0, value=1000)
                         
                         btn_guardar_oc = st.form_submit_button("Guardar Orden de Compra", type="primary", use_container_width=True)
                         
@@ -475,49 +494,23 @@ elif rol in ["admin", "produccion"]:
                                     """INSERT INTO ordenes_compra 
                                     (numero_oc, cliente, referencia, servicio, requiere_unidades, meta_unidades, unidades_entregadas, estado) 
                                     VALUES (%s, %s, %s, %s, %s, %s, 0, 'PENDIENTE')""",
-                                    (num_oc.upper().strip(), cliente.strip(), ref_oc, servicio, requiere_uni, meta_final)
+                                    (num_oc.upper().strip(), cliente.strip(), ref_oc, servicio_oc, requiere_uni, meta_final)
                                 )
-                                st.success(f"Orden de Compra #{num_oc} para el cliente '{cliente}' asociada a la referencia '{ref_oc}' registrada con éxito.")
+                                st.success(f"Orden de Compra #{num_oc} para '{cliente}' registrada con éxito.")
                                 st.rerun()
                             else:
                                 st.error("Por favor completa el número de OC y el cliente.")
 
             st.write("---")
-            st.write("### 📊 Seguimiento de Órdenes de Compra y Saldos Pendientes")
+            st.write("### 📊 Estado y Saldos Pendientes de Órdenes de Compra")
             df_oc = ejecutar_consulta("SELECT * FROM ordenes_compra ORDER BY id DESC")
             
             if not df_oc.empty:
-                # Calcular saldo pendiente en vivo sin perder la meta original
                 df_oc['saldo_pendiente'] = df_oc.apply(
                     lambda row: row['meta_unidades'] - row['unidades_entregadas'] if row['requiere_unidades'] else 'N/A (Servicio Libre)', 
                     axis=1
                 )
                 st.dataframe(df_oc, use_container_width=True)
-
-                # Abonar producción a una OC específica
-                with st.expander("⚙️ Abonar Producción a una Orden de Compra (Descontar Saldo)"):
-                    with st.form("form_abonar_oc", clear_on_submit=True):
-                        ocs_pendientes = df_oc[df_oc['estado'] != 'COMPLETADO']['numero_oc'].tolist()
-                        if ocs_pendientes:
-                            oc_elegida = st.selectbox("Selecciona el Número de OC", ocs_pendientes)
-                            unidades_hechas = st.number_input("Unidades Producidas / Entregadas", min_value=1, value=500)
-                            btn_abonar = st.form_submit_button("Abonar y Actualizar Saldo Pendiente", type="primary", use_container_width=True)
-                            
-                            if btn_abonar:
-                                row_oc = df_oc[df_oc['numero_oc'] == oc_elegida].iloc[0]
-                                nuevo_entregado = int(row_oc['unidades_entregadas']) + unidades_hechas
-                                meta_meta = int(row_oc['meta_unidades'])
-                                
-                                nuevo_estado = 'COMPLETADO' if row_oc['requiere_unidades'] and nuevo_entregado >= meta_meta else 'EN PROCESO'
-                                
-                                ejecutar_comando(
-                                    "UPDATE ordenes_compra SET unidades_entregadas = %s, estado = %s WHERE numero_oc = %s",
-                                    (nuevo_entregado, nuevo_estado, oc_elegida)
-                                )
-                                st.success(f"¡Abonadas {unidades_hechas} unidades a la OC #{oc_elegida}! El saldo pendiente se ha actualizado.")
-                                st.rerun()
-                        else:
-                            st.info("No hay órdenes de compra pendientes por procesar.")
 
                 with st.expander("🗑️ Eliminar Orden de Compra"):
                     with st.form("form_del_oc", clear_on_submit=True):
@@ -532,21 +525,26 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Órdenes de Compra: {e}")
 
-    # --- TAB 3: EQUIPOS Y MÁQUINAS ---
+    # --- TAB 3: MÁQUINAS (Propias y Alquiladas) ---
     with tab_eq:
-        st.subheader("⚙️ Gestión de Máquinas y Equipos")
+        st.subheader("⚙️ Gestión de Máquinas (Propias y Alquiladas)")
         try:
             df_maqs = ejecutar_consulta("SELECT * FROM maquinas")
             st.dataframe(df_maqs, use_container_width=True)
             
-            with st.expander("➕ Crear Nueva Máquina"):
+            with st.expander("➕ Registrar Nueva Máquina"):
                 with st.form("form_crear_maquina", clear_on_submit=True):
-                    m_nom = st.text_input("Nombre de Máquina")
+                    m_nom = st.text_input("Nombre de la Máquina (Ej: Láser CNC 01)")
                     m_tipo = st.text_input("Tipo (Ej: Corte, Dobladora)")
+                    m_prop = st.selectbox("Tipo de Propiedad", ["PROPIA", "ALQUILADA"])
+                    
                     if st.form_submit_button("Guardar Máquina", type="primary", use_container_width=True):
-                        ejecutar_comando("INSERT INTO maquinas (nombre, tipo) VALUES (%s, %s)", (m_nom, m_tipo))
-                        st.success("Máquina agregada.")
-                        st.rerun()
+                        if m_nom.strip():
+                            ejecutar_comando("INSERT INTO maquinas (nombre, tipo, tipo_propiedad) VALUES (%s, %s, %s)", (m_nom, m_tipo, m_prop))
+                            st.success(f"Máquina '{m_nom}' ({m_prop}) agregada con éxito.")
+                            st.rerun()
+                        else:
+                            st.error("Escribe el nombre de la máquina.")
 
             if not df_maqs.empty and rol == "admin":
                 with st.expander("🗑️ Eliminar Máquina"):
@@ -559,21 +557,53 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Máquinas: {e}")
 
-    # --- TAB 4: REFERENCIAS (Catálogo Base) ---
+    # --- TAB 4: SERVICIOS PRESTADOS (Crear y Eliminar) ---
+    with tab_serv:
+        st.subheader("🛠️ Administración de Servicios Prestados")
+        st.write("Crea, edita o elimina los servicios que ofrece la empresa (Ej: Troquelado, Corte Láser, Pintura, etc.).")
+        try:
+            df_serv = ejecutar_consulta("SELECT * FROM servicios_prestados ORDER BY id DESC")
+            if not df_serv.empty:
+                st.dataframe(df_serv, use_container_width=True)
+            else:
+                st.info("No hay servicios creados.")
+            
+            with st.expander("➕ Crear Nuevo Servicio"):
+                with st.form("form_crear_serv", clear_on_submit=True):
+                    nom_serv = st.text_input("Nombre del Servicio (Ej: SOLDADURA TIG)")
+                    if st.form_submit_button("Guardar Servicio", type="primary", use_container_width=True):
+                        if nom_serv.strip():
+                            ejecutar_comando("INSERT INTO servicios_prestados (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (nom_serv.upper().strip(),))
+                            st.success(f"Servicio '{nom_serv.upper()}' agregado.")
+                            st.rerun()
+                        else:
+                            st.error("Escribe un nombre válido.")
+
+            if not df_serv.empty and rol == "admin":
+                with st.expander("🗑️ Eliminar Servicio"):
+                    with st.form("form_del_serv", clear_on_submit=True):
+                        serv_del = st.selectbox("Servicio a Borrar", df_serv["nombre"].tolist())
+                        if st.form_submit_button("Eliminar Servicio", type="primary", use_container_width=True):
+                            ejecutar_comando("DELETE FROM servicios_prestados WHERE nombre = %s", (serv_del,))
+                            st.success(f"Servicio '{serv_del}' eliminado.")
+                            st.rerun()
+        except Exception as e:
+            st.error(f"Error en Servicios: {e}")
+
+    # --- TAB 5: REFERENCIAS ---
     with tab_ref:
-        st.subheader("📄 Gestión de Referencias de Productos (Catálogo General)")
-        st.write("Aquí creas las referencias base. Después, en la pestaña **'Órdenes de Compra'**, podrás asignar esas mismas referencias a los diferentes clientes cada vez que te envíen pedidos nuevos.")
+        st.subheader("📄 Gestión de Referencias (Catálogo Base)")
         try:
             df_refs = ejecutar_consulta("SELECT * FROM referencias")
             st.dataframe(df_refs, use_container_width=True)
             
-            with st.expander("➕ Crear Nueva Referencia Base"):
+            with st.expander("➕ Crear Nueva Referencia"):
                 with st.form("form_crear_ref", clear_on_submit=True):
                     r_cod = st.text_input("Código Referencia (Ej: REF-001)")
                     r_desc = st.text_input("Descripción del Producto")
                     if st.form_submit_button("Guardar Referencia", type="primary", use_container_width=True):
                         ejecutar_comando("INSERT INTO referencias (codigo, descripcion) VALUES (%s, %s)", (r_cod, r_desc))
-                        st.success("Referencia agregada al catálogo.")
+                        st.success("Referencia agregada.")
                         st.rerun()
 
             if not df_refs.empty and rol == "admin":
@@ -587,45 +617,50 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Referencias: {e}")
 
-    # --- TAB 5: REPORTES EXCEL INDEPENDIENTES ---
+    # --- TAB 6: REPORTES EXCEL MAESTROS ---
     with tab_rep:
-        st.subheader("📊 Centro de Reportes y Descargas Independientes")
+        st.subheader("📊 Centro de Reportes y Descargas (Excel Maestro)")
+        st.write("Descarga los reportes detallados con toda la trazabilidad de órdenes de compra, operarios, máquinas (propias/alquiladas), tiempos y saldos pendientes:")
         try:
             st.write("---")
-            st.write("### 📋 1. Reporte de Órdenes de Compra y Saldos")
+            st.write("### 📋 1. Reporte Maestro de Órdenes de Compra y Saldos")
             df_oc_rep = ejecutar_consulta("SELECT * FROM ordenes_compra ORDER BY id DESC")
             if not df_oc_rep.empty:
+                df_oc_rep['saldo_pendiente'] = df_oc_rep.apply(lambda r: r['meta_unidades'] - r['unidades_entregadas'] if r['requiere_unidades'] else 'N/A', axis=1)
                 st.dataframe(df_oc_rep, use_container_width=True)
+                
                 buffer_oc = io.BytesIO()
                 with pd.ExcelWriter(buffer_oc, engine='openpyxl') as writer:
-                    df_oc_rep.to_excel(writer, index=False, sheet_name='Ordenes_Compra')
+                    df_oc_rep.to_excel(writer, index=False, sheet_name='Saldos_OC')
                 st.download_button(
-                    label="📥 Descargar Reporte de Órdenes de Compra en Excel",
+                    label="📥 Descargar Reporte de Saldos OC en Excel",
                     data=buffer_oc.getvalue(),
-                    file_name=f"Reporte_OC_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    file_name=f"Reporte_Saldos_OC_{datetime.now().strftime('%Y%m%d')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
                     key="dl_oc_excel"
                 )
-            else:
-                st.info("No hay órdenes de compra registradas.")
 
             st.write("---")
-            st.write("### 🏭 2. Reporte de Producción de Operarios")
+            st.write("### 🏭 2. Reporte de Producción Detallado (Quién hizo qué, Máquina, Tiempo, OC)")
             df_prod_rep = ejecutar_consulta("""
-                SELECT r.* FROM registro_produccion r 
+                SELECT r.id, r.fecha, r.numero_oc, r.operario_nombre, r.maquina, m.tipo_propiedad as tipo_maquina, 
+                       r.referencia, r.hora_inicio_real, r.hora_fin_real, r.unidades_producidas, r.observaciones 
+                FROM registro_produccion r 
                 JOIN usuarios u ON r.operario_nombre = u.nombre 
-                ORDER BY r.fecha DESC
+                LEFT JOIN maquinas m ON r.maquina = m.nombre
+                ORDER BY r.id DESC
             """)
             if not df_prod_rep.empty:
-                st.dataframe(df_prod_rep.head(10), use_container_width=True)
+                st.dataframe(df_prod_rep.head(15), use_container_width=True)
+                
                 buffer_prod = io.BytesIO()
                 with pd.ExcelWriter(buffer_prod, engine='openpyxl') as writer:
-                    df_prod_rep.to_excel(writer, index=False, sheet_name='Produccion')
+                    df_prod_rep.to_excel(writer, index=False, sheet_name='Produccion_Detallada')
                 st.download_button(
-                    label="📥 Descargar Reporte de Producción en Excel",
+                    label="📥 Descargar Reporte de Producción Detallado en Excel",
                     data=buffer_prod.getvalue(),
-                    file_name=f"Reporte_Produccion_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    file_name=f"Reporte_Produccion_Detallado_{datetime.now().strftime('%Y%m%d')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
                     key="dl_prod_excel"
@@ -640,7 +675,7 @@ elif rol in ["admin", "produccion"]:
                 st.dataframe(df_inv_rep, use_container_width=True)
                 buffer_inv = io.BytesIO()
                 with pd.ExcelWriter(buffer_inv, engine='openpyxl') as writer:
-                    df_inv_rep.to_excel(writer, index=False, sheet_name='Inventario_General')
+                    df_inv_rep.to_excel(writer, index=False, sheet_name='Inventario')
                 st.download_button(
                     label="📥 Descargar Reporte de Inventario en Excel",
                     data=buffer_inv.getvalue(),
@@ -649,38 +684,11 @@ elif rol in ["admin", "produccion"]:
                     use_container_width=True,
                     key="dl_inv_excel"
                 )
-            else:
-                st.info("El inventario está vacío.")
-
-            st.write("---")
-            st.write("### 🔨 4. Reporte de Herramientas y Préstamos")
-            df_her_rep = ejecutar_consulta("""
-                SELECT c.id, c.fecha, c.operario, c.codigo_material, i.nombre as herramienta, c.cantidad, c.estado 
-                FROM consumos c 
-                JOIN usuarios u ON c.operario = u.nombre
-                LEFT JOIN inventario i ON c.codigo_material = i.codigo 
-                WHERE c.tipo ILIKE '%HERRAMIENTA%'
-            """)
-            if not df_her_rep.empty:
-                st.dataframe(df_her_rep, use_container_width=True)
-                buffer_her = io.BytesIO()
-                with pd.ExcelWriter(buffer_her, engine='openpyxl') as writer:
-                    df_her_rep.to_excel(writer, index=False, sheet_name='Herramientas_Prestamos')
-                st.download_button(
-                    label="📥 Descargar Reporte de Herramientas en Excel",
-                    data=buffer_her.getvalue(),
-                    file_name=f"Reporte_Herramientas_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    key="dl_her_excel"
-                )
-            else:
-                st.info("No hay registros de herramientas.")
 
         except Exception as e:
             st.error(f"Error al generar reportes: {e}")
 
-    # --- TAB 6: ENTREGAS Y SALIDAS ---
+    # --- TAB 7: ENTREGAS Y SALIDAS ---
     with tab_ent:
         st.subheader("Registrar Salida de Insumo / Material")
         try:
@@ -710,7 +718,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Entregas: {e}")
 
-    # --- TAB 7: HERRAMIENTAS ---
+    # --- TAB 8: HERRAMIENTAS ---
     with tab_herramientas:
         st.subheader("🔨 Control de Herramientas y Préstamos a Operarios")
         try:
@@ -745,7 +753,7 @@ elif rol in ["admin", "produccion"]:
                             st.rerun()
 
             st.write("---")
-            st.write("### Herramientas Actualmente Prestadas (Con Detalle de Operario)")
+            st.write("### Herramientas Actualmente Prestadas")
             prestados = ejecutar_consulta("""
                 SELECT c.id, c.fecha, c.operario, c.codigo_material, i.nombre as herramienta, c.cantidad, c.estado 
                 FROM consumos c 
@@ -758,112 +766,85 @@ elif rol in ["admin", "produccion"]:
                 id_dev = st.selectbox("ID de Préstamo a Devolver", prestados['id'].tolist(), key="dev_id_her")
                 if st.button("Marcar Herramienta como Devuelta", use_container_width=True):
                     ejecutar_comando("UPDATE consumos SET estado = 'DEVUELTO' WHERE id = %s", (id_dev,))
-                    st.success("¡Herramienta marcada como devuelta y restaurada!")
+                    st.success("¡Herramienta marcada como devuelta!")
                     st.rerun()
             else:
                 st.success("No hay herramientas pendientes de devolución.")
         except Exception as e:
             st.error(f"Error en Herramientas: {e}")
 
-    # --- TAB 8: CARGUE DE ÍTEMS ---
+    # --- TAB 9: CARGUE DE ÍTEMS ---
     with tab_cargue:
-        st.subheader("📥 Cargue Único de Ítems (Herramientas, Insumos, EPP, Repuestos)")
+        st.subheader("📥 Cargue Único de Ítems")
         try:
             clases_df = ejecutar_consulta("SELECT nombre FROM clases_inventario")
             lista_clases = clases_df['nombre'].tolist() if not clases_df.empty else []
             
             if not lista_clases:
-                st.warning("⚠️ No hay clases creadas. Por favor ve a la pestaña 'Clases / Categorías' y crea al menos una clase antes de cargar ítems.")
+                st.warning("⚠️ No hay clases creadas. Ve a la pestaña 'Clases' y crea al menos una.")
             else:
                 with st.form("form_cargue_item", clear_on_submit=True):
                     c_cod = st.text_input("Código del Ítem")
                     c_nom = st.text_input("Nombre del Ítem")
                     c_clase = st.selectbox("Clase / Categoría", lista_clases)
                     c_cant = st.number_input("Cantidad Inicial", min_value=0, value=10)
-                    c_min = st.number_input("Stock Mínimo de Alerta (0 si no aplica)", min_value=0, value=5)
+                    c_min = st.number_input("Stock Mínimo de Alerta", min_value=0, value=5)
                     
-                    btn_guardar_item = st.form_submit_button("Guardar Ítem en Inventario", type="primary", use_container_width=True)
-                    
-                    if btn_guardar_item:
+                    if st.form_submit_button("Guardar Ítem", type="primary", use_container_width=True):
                         if c_cod.strip() and c_nom.strip():
                             ejecutar_comando(
                                 "INSERT INTO inventario (codigo, nombre, tipo, cantidad, stock_minimo) VALUES (%s, %s, %s, %s, %s)",
                                 (c_cod, c_nom, c_clase, c_cant, c_min)
                             )
-                            st.success(f"Ítem '{c_nom}' guardado con éxito bajo la clase {c_clase}.")
+                            st.success(f"Ítem '{c_nom}' guardado con éxito.")
                             st.rerun()
                         else:
-                            st.error("Por favor completa el código y el nombre del ítem.")
+                            st.error("Completa código y nombre.")
         except Exception as e:
-            st.error(f"Error en Cargue de Ítems: {e}")
+            st.error(f"Error en Cargue: {e}")
 
-    # --- TAB 9: INVENTARIO GENERAL ---
+    # --- TAB 10: INVENTARIO GENERAL ---
     with tab_inv_gen:
-        st.subheader("📦 Inventario General de la Empresa")
+        st.subheader("📦 Inventario General")
         try:
             inv_gen = ejecutar_consulta("SELECT codigo, nombre, tipo as clase, cantidad, stock_minimo FROM inventario")
-            
             if not inv_gen.empty:
-                criticos = inv_gen[(inv_gen['stock_minimo'] > 0) & (inv_gen['cantidad'] <= inv_gen['stock_minimo'])]
-                if not criticos.empty:
-                    st.warning("⚠️ **¡Alerta de Stock Bajo en los siguientes ítems!**")
-                    st.dataframe(criticos, use_container_width=True)
-                
-                st.write("### Listado Consolidado")
                 st.dataframe(inv_gen, use_container_width=True)
-
                 if rol == "admin":
-                    with st.expander("🗑️ Eliminar Ítem del Inventario General"):
+                    with st.expander("🗑️ Eliminar Ítem"):
                         with st.form("form_del_inv", clear_on_submit=True):
                             del_cod_gen = st.selectbox("Código a Eliminar", inv_gen["codigo"].tolist())
-                            if st.form_submit_button("Confirmar Eliminación de Ítem", type="primary", use_container_width=True):
+                            if st.form_submit_button("Confirmar", type="primary", use_container_width=True):
                                 ejecutar_comando("DELETE FROM inventario WHERE codigo = %s", (del_cod_gen,))
-                                st.success("Ítem eliminado del inventario.")
+                                st.success("Eliminado.")
                                 st.rerun()
             else:
-                st.info("El inventario general se encuentra vacío.")
+                st.info("Inventario vacío.")
         except Exception as e:
-            st.error(f"Error en Inventario General: {e}")
+            st.error(f"Error: {e}")
 
-    # --- TAB 10: CLASES / CATEGORÍAS ---
+    # --- TAB 11: CLASES ---
     with tab_clases:
-        st.subheader("🏷️ Administración de Clases y Categorías")
+        st.subheader("🏷️ Clases / Categorías de Inventario")
         try:
             clases_actuales = ejecutar_consulta("SELECT * FROM clases_inventario")
             if not clases_actuales.empty:
                 st.dataframe(clases_actuales, use_container_width=True)
-            else:
-                st.info("No hay clases creadas actualmente en el sistema.")
             
-            with st.expander("➕ Crear Nueva Clase"):
+            with st.expander("➕ Crear Clase"):
                 with st.form("form_crear_clase", clear_on_submit=True):
-                    nueva_clase = st.text_input("Nombre de la Nueva Clase (Ej: NEUMATICA)")
-                    btn_crear_clase = st.form_submit_button("Guardar Clase", type="primary", use_container_width=True)
-                    
-                    if btn_crear_clase:
+                    nueva_clase = st.text_input("Nombre de Clase")
+                    if st.form_submit_button("Guardar", type="primary", use_container_width=True):
                         if nueva_clase.strip():
                             ejecutar_comando("INSERT INTO clases_inventario (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (nueva_clase.upper().strip(),))
-                            st.success(f"Clase '{nueva_clase.upper()}' creada con éxito.")
-                            st.rerun()
-                        else:
-                            st.error("Escribe un nombre válido para la clase.")
-
-            if not clases_actuales.empty and rol == "admin":
-                with st.expander("🗑️ Eliminar Clase"):
-                    with st.form("form_eliminar_clase", clear_on_submit=True):
-                        clase_a_borrar = st.selectbox("Selecciona la Clase a Borrar", clases_actuales["nombre"].tolist())
-                        btn_eliminar_clase = st.form_submit_button("Confirmar Eliminación de Clase", type="primary", use_container_width=True)
-                        
-                        if btn_eliminar_clase:
-                            ejecutar_comando("DELETE FROM clases_inventario WHERE nombre = %s", (clase_a_borrar,))
-                            st.success(f"Clase '{clase_a_borrar}' eliminada con éxito.")
+                            st.success("Creada.")
                             st.rerun()
         except Exception as e:
-            st.error(f"Error en Clases: {e}")
+            st.error(f"Error: {e}")
 
-    # --- TAB 11: USUARIOS Y PERMISOS ---
+    # --- TAB 12: USUARIOS ---
     with tab_usu:
-        st.subheader("⚙️ Administrar Usuarios")
+        st.subheader("⚙️ Gestión de Usuarios")
         try:
             users_df = ejecutar_consulta("SELECT id, username, nombre, rol FROM usuarios")
             st.dataframe(users_df, use_container_width=True)
@@ -876,31 +857,7 @@ elif rol in ["admin", "produccion"]:
                     u_rol = st.selectbox("Rol", ["operario", "produccion", "admin"])
                     if st.form_submit_button("Guardar Usuario", type="primary", use_container_width=True):
                         ejecutar_comando("INSERT INTO usuarios (username, password, nombre, rol) VALUES (%s, %s, %s, %s)", (u_user, u_pass, u_nom, u_rol))
-                        st.success("Usuario creado.")
+                        st.success("Creado.")
                         st.rerun()
-
-            with st.expander("✏️ Editar Permisos/Clave"):
-                with st.form("form_editar_usuario", clear_on_submit=True):
-                    usr_sel = st.selectbox("Usuario a Editar", users_df["username"].tolist())
-                    n_pass = st.text_input("Nueva Clave (opcional)", type="password")
-                    n_rol = st.selectbox("Nuevo Rol", ["operario", "produccion", "admin"])
-                    if st.form_submit_button("Actualizar Usuario", type="primary", use_container_width=True):
-                        if n_pass.strip():
-                            ejecutar_comando("UPDATE usuarios SET password = %s, rol = %s WHERE username = %s", (n_pass, n_rol, usr_sel))
-                        else:
-                            ejecutar_comando("UPDATE usuarios SET rol = %s WHERE username = %s", (n_rol, usr_sel))
-                        st.success("Actualizado con éxito.")
-                        st.rerun()
-
-            with st.expander("🗑️ Eliminar Usuario"):
-                with st.form("form_del_usuario", clear_on_submit=True):
-                    u_del = st.selectbox("Usuario a Eliminar", users_df["username"].tolist())
-                    if st.form_submit_button("Confirmar Borrado", type="primary", use_container_width=True):
-                        if u_del != st.session_state["username"]:
-                            ejecutar_comando("DELETE FROM usuarios WHERE username = %s", (u_del,))
-                            st.success("Eliminado con éxito.")
-                            st.rerun()
-                        else:
-                            st.error("No puedes borrar tu propio usuario.")
         except Exception as e:
-            st.error(f"Error en Usuarios: {e}")
+            st.error(f"Error: {e}")
