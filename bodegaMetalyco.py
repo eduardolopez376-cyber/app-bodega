@@ -76,11 +76,13 @@ def ejecutar_comando(query, params=None):
 # Inicializar y actualizar tablas del sistema
 def inicializar_tablas_sistema():
     try:
-        # Tabla de Clientes
+        # Tabla de Clientes con campos estándar y opcionales útiles
         ejecutar_comando("""
             CREATE TABLE IF NOT EXISTS clientes (
                 id SERIAL PRIMARY KEY,
-                nombre VARCHAR(150) UNIQUE NOT NULL
+                nombre VARCHAR(150) UNIQUE NOT NULL,
+                nit VARCHAR(50),
+                telefono VARCHAR(50)
             );
         """)
 
@@ -116,9 +118,15 @@ def inicializar_tablas_sistema():
         ejecutar_comando("""
             ALTER TABLE programacion_diaria ADD COLUMN IF NOT EXISTS numero_oc VARCHAR(100);
         """)
-        # Asegurar columna cliente en referencias si no existe
         ejecutar_comando("""
             ALTER TABLE referencias ADD COLUMN IF NOT EXISTS cliente VARCHAR(150);
+        """)
+        # Asegurar columnas extra en clientes por si ya existía la tabla previa
+        ejecutar_comando("""
+            ALTER TABLE clientes ADD COLUMN IF NOT EXISTS nit VARCHAR(50);
+        """)
+        ejecutar_comando("""
+            ALTER TABLE clientes ADD COLUMN IF NOT EXISTS telefono VARCHAR(50);
         """)
     except Exception as e:
         print(f"Nota en inicialización: {e}")
@@ -349,14 +357,27 @@ if rol == "operario":
         try:
             maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
             refs = ejecutar_consulta("SELECT codigo FROM referencias")['codigo'].tolist()
-            ocs_disp = ejecutar_consulta("SELECT numero_oc FROM ordenes_compra WHERE estado != 'COMPLETADO'")['numero_oc'].tolist()
-            ocs_disp.insert(0, "SIN OC")
+            ocs_db = ejecutar_consulta("SELECT numero_oc, cliente FROM ordenes_compra WHERE estado != 'COMPLETADO'")
+            
+            ocs_disp = ["SIN OC"]
+            mapa_oc_cliente = {}
+            if not ocs_db.empty:
+                for _, row in ocs_db.iterrows():
+                    oc_num = row['numero_oc']
+                    cli_nom = row['cliente']
+                    ocs_disp.append(oc_num)
+                    mapa_oc_cliente[oc_num] = cli_nom
             
             if not maqs or not refs:
                 st.warning("Faltan máquinas o referencias registradas en el sistema.")
             else:
                 with st.form("form_tarea_imprevista", clear_on_submit=True):
-                    oc_imp = st.selectbox("Orden de Compra Asociada (Opcional)", ocs_disp)
+                    oc_imp = st.selectbox("Orden de Compra Asociada", ocs_disp)
+                    
+                    # Mostrar de forma transparente a qué cliente pertenece la OC seleccionada
+                    cliente_asociado_oc = mapa_oc_cliente.get(oc_imp, "N/A (Sin OC)")
+                    st.info(f"🏢 **Cliente asociado automáticamente:** `{cliente_asociado_oc}`")
+                    
                     maq_imp = st.selectbox("Máquina", maqs)
                     ref_imp = st.selectbox("Referencia", refs)
                     act_imp = st.text_input("Actividad / Motivo imprevisto (Ej: Reproceso, Reparación urgente)")
@@ -374,7 +395,7 @@ if rol == "operario":
                     btn_imp = st.form_submit_button("Guardar", type="primary", use_container_width=True)
                     
                     if btn_imp:
-                        obs_final_imp = f"⚡ TAREA IMPREVISTA: {act_imp} | Buenas: {uni_imp}, Defectuosas: {def_imp}. Nota: {obs_imp}"
+                        obs_final_imp = f"⚡ TAREA IMPREVISTA (Cliente: {cliente_asociado_oc}): {act_imp} | Buenas: {uni_imp}, Defectuosas: {def_imp}. Nota: {obs_imp}"
                         
                         maq_db = ejecutar_consulta("SELECT tipo_propiedad FROM maquinas WHERE nombre = %s", (maq_imp,))
                         es_alq = False
@@ -417,7 +438,7 @@ if rol == "operario":
 # ====================================================
 elif rol in ["admin", "produccion"]:
     
-    # Definir pestañas según el rol (Admin incluye Clientes)
+    # Definir pestañas según el rol
     if rol == "admin":
         tab_prog, tab_oc, tab_eq, tab_serv, tab_ref, tab_rep, tab_ent, tab_herramientas, tab_cargue, tab_inv_gen, tab_clases, tab_clientes, tab_usu = st.tabs([
             "📅 Programar", 
@@ -656,7 +677,7 @@ elif rol in ["admin", "produccion"]:
             except Exception as e:
                 st.error(f"Error en Servicios: {e}")
 
-    # --- TAB: REFERENCIAS (CON ASOCIACIÓN DE CLIENTE) ---
+    # --- TAB: REFERENCIAS ---
     with tab_ref:
         st.subheader("📄 Gestión de Referencias (Catálogo Base)")
         try:
@@ -976,7 +997,7 @@ elif rol in ["admin", "produccion"]:
             except Exception as e:
                 st.error(f"Error en clases: {e}")
 
-        # --- TAB: CLIENTES (EXCLUSIVO ADMIN) ---
+        # --- TAB: CLIENTES (CREAR, EDITAR Y ELIMINAR) ---
         with tab_clientes:
             st.subheader("👥 Administración de Clientes")
             try:
@@ -986,21 +1007,54 @@ elif rol in ["admin", "produccion"]:
                 else:
                     st.info("No hay clientes registrados.")
                 
+                # 1. CREAR CLIENTE
                 with st.expander("Crear"):
                     with st.form("form_crear_cliente", clear_on_submit=True):
-                        nom_cliente = st.text_input("Nombre del Cliente o Empresa (Ej: Metalmecánica S.A.S)")
+                        nom_cliente = st.text_input("Razón Social / Nombre de la Empresa (Ej: Metalmecánica S.A.S)")
+                        nit_cliente = st.text_input("NIT (Opcional)")
+                        tel_cliente = st.text_input("Teléfono de Contacto (Opcional)")
+                        
                         if st.form_submit_button("Guardar Cliente", type="primary", use_container_width=True):
                             if nom_cliente.strip():
-                                ejecutar_comando("INSERT INTO clientes (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (nom_cliente.strip(),))
+                                ejecutar_comando(
+                                    "INSERT INTO clientes (nombre, nit, telefono) VALUES (%s, %s, %s) ON CONFLICT (nombre) DO NOTHING",
+                                    (nom_cliente.strip(), nit_cliente.strip(), tel_cliente.strip())
+                                )
                                 st.success(f"Cliente '{nom_cliente.strip()}' agregado con éxito.")
                                 st.rerun()
                             else:
-                                st.error("Escribe un nombre válido.")
+                                st.error("Escribe una razón social válida.")
 
+                # 2. EDITAR CLIENTE
+                if not clientes_df.empty:
+                    with st.expander("Editar"):
+                        with st.form("form_editar_cliente"):
+                            cliente_edit_sel = st.selectbox("Selecciona el Cliente a Editar", clientes_df["nombre"].tolist())
+                            
+                            datos_cli = ejecutar_consulta("SELECT nit, telefono FROM clientes WHERE nombre = %s", (cliente_edit_sel,))
+                            nit_actual = datos_cli.iloc[0]['nit'] if not datos_cli.empty and datos_cli.iloc[0]['nit'] else ""
+                            tel_actual = datos_cli.iloc[0]['telefono'] if not datos_cli.empty and datos_cli.iloc[0]['telefono'] else ""
+                            
+                            nuevo_nom_cli = st.text_input("Nueva Razón Social", value=cliente_edit_sel)
+                            nuevo_nit_cli = st.text_input("Nuevo NIT", value=nit_actual)
+                            nuevo_tel_cli = st.text_input("Nuevo Teléfono", value=tel_actual)
+                            
+                            if st.form_submit_button("Actualizar Cliente", type="primary", use_container_width=True):
+                                if nuevo_nom_cli.strip():
+                                    ejecutar_comando(
+                                        "UPDATE clientes SET nombre = %s, nit = %s, telefono = %s WHERE nombre = %s",
+                                        (nuevo_nom_cli.strip(), nuevo_nit_cli.strip(), nuevo_tel_cli.strip(), cliente_edit_sel)
+                                    )
+                                    st.success(f"¡Cliente '{nuevo_nom_cli.strip()}' actualizado con éxito!")
+                                    st.rerun()
+                                else:
+                                    st.error("La razón social no puede estar vacía.")
+
+                # 3. ELIMINAR CLIENTE
                 if not clientes_df.empty:
                     with st.expander("Eliminar"):
                         with st.form("form_del_cliente", clear_on_submit=True):
-                            cliente_del = st.selectbox("Selecciona el Cliente a Borrar", clientes_df["nombre"].tolist())
+                            cliente_del = st.selectbox("Selecciona el Cliente a Borrar", clientes_df["nombre"].tolist(), key="del_cli_key")
                             if st.form_submit_button("Eliminar Cliente", type="primary", use_container_width=True):
                                 ejecutar_comando("DELETE FROM clientes WHERE nombre = %s", (cliente_del,))
                                 st.success(f"Cliente '{cliente_del}' eliminado definitivamente.")
