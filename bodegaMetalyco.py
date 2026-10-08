@@ -74,8 +74,8 @@ def ejecutar_comando(query, params=None):
     cur.close()
     conn.close()
 
-# Asegurar tablas auxiliares para clases si no existen
-def inicializar_tablas_adicionales():
+# Asegurar tabla base para clases (sin autorellenar si se borran)
+def inicializar_tabla_clases():
     try:
         ejecutar_comando("""
             CREATE TABLE IF NOT EXISTS clases_inventario (
@@ -83,14 +83,10 @@ def inicializar_tablas_adicionales():
                 nombre VARCHAR(100) UNIQUE NOT NULL
             );
         """)
-        res = ejecutar_consulta("SELECT COUNT(*) as total FROM clases_inventario")
-        if res.iloc[0]['total'] == 0:
-            for c in ["HERRAMIENTA", "INSUMO", "EPP", "REPUESTO"]:
-                ejecutar_comando("INSERT INTO clases_inventario (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (c,))
     except Exception:
         pass
 
-inicializar_tablas_adicionales()
+inicializar_tabla_clases()
 
 # ----------------------------------------------------
 # INICIALIZACIÓN BLINDADA DEL ESTADO DE SESIÓN
@@ -676,27 +672,30 @@ elif rol in ["admin", "produccion"]:
         st.subheader("📥 Cargue Único de Ítems (Herramientas, Insumos, EPP, Repuestos)")
         try:
             clases_df = ejecutar_consulta("SELECT nombre FROM clases_inventario")
-            lista_clases = clases_df['nombre'].tolist() if not clases_df.empty else ["HERRAMIENTA", "INSUMO", "EPP", "REPUESTO"]
+            lista_clases = clases_df['nombre'].tolist() if not clases_df.empty else []
             
-            with st.form("form_cargue_item"):
-                c_cod = st.text_input("Código del Ítem")
-                c_nom = st.text_input("Nombre del Ítem")
-                c_clase = st.selectbox("Clase / Categoría", lista_clases)
-                c_cant = st.number_input("Cantidad Inicial", min_value=0, value=10)
-                c_min = st.number_input("Stock Mínimo de Alerta (0 si no aplica)", min_value=0, value=5)
-                
-                btn_guardar_item = st.form_submit_button("Guardar Ítem en Inventario", type="primary", use_container_width=True)
-                
-                if btn_guardar_item:
-                    if c_cod.strip() and c_nom.strip():
-                        ejecutar_comando(
-                            "INSERT INTO inventario (codigo, nombre, tipo, cantidad, stock_minimo) VALUES (%s, %s, %s, %s, %s)",
-                            (c_cod, c_nom, c_clase, c_cant, c_min)
-                        )
-                        st.success(f"Ítem '{c_nom}' guardado con éxito bajo la clase {c_clase}.")
-                        st.rerun()
-                    else:
-                        st.error("Por favor completa el código y el nombre del ítem.")
+            if not lista_clases:
+                st.warning("⚠️ No hay clases creadas. Por favor ve a la pestaña 'Clases / Categorías' y crea al menos una clase antes de cargar ítems.")
+            else:
+                with st.form("form_cargue_item"):
+                    c_cod = st.text_input("Código del Ítem")
+                    c_nom = st.text_input("Nombre del Ítem")
+                    c_clase = st.selectbox("Clase / Categoría", lista_clases)
+                    c_cant = st.number_input("Cantidad Inicial", min_value=0, value=10)
+                    c_min = st.number_input("Stock Mínimo de Alerta (0 si no aplica)", min_value=0, value=5)
+                    
+                    btn_guardar_item = st.form_submit_button("Guardar Ítem en Inventario", type="primary", use_container_width=True)
+                    
+                    if btn_guardar_item:
+                        if c_cod.strip() and c_nom.strip():
+                            ejecutar_comando(
+                                "INSERT INTO inventario (codigo, nombre, tipo, cantidad, stock_minimo) VALUES (%s, %s, %s, %s, %s)",
+                                (c_cod, c_nom, c_clase, c_cant, c_min)
+                            )
+                            st.success(f"Ítem '{c_nom}' guardado con éxito bajo la clase {c_clase}.")
+                            st.rerun()
+                        else:
+                            st.error("Por favor completa el código y el nombre del ítem.")
         except Exception as e:
             st.error(f"Error en Cargue de Ítems: {e}")
 
@@ -727,12 +726,15 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Inventario General: {e}")
 
-    # --- TAB 9: CLASES / CATEGORÍAS (Crear y Eliminar) ---
+    # --- TAB 9: CLASES / CATEGORÍAS (Crear y Eliminar definitivamente) ---
     with tab_clases:
         st.subheader("🏷️ Administración de Clases y Categorías")
         try:
             clases_actuales = ejecutar_consulta("SELECT * FROM clases_inventario")
-            st.dataframe(clases_actuales, use_container_width=True)
+            if not clases_actuales.empty:
+                st.dataframe(clases_actuales, use_container_width=True)
+            else:
+                st.info("No hay clases creadas actualmente en el sistema.")
             
             with st.expander("➕ Crear Nueva Clase"):
                 with st.form("form_crear_clase"):
@@ -755,7 +757,7 @@ elif rol in ["admin", "produccion"]:
                         
                         if btn_eliminar_clase:
                             ejecutar_comando("DELETE FROM clases_inventario WHERE nombre = %s", (clase_a_borrar,))
-                            st.success(f"Clase '{clase_a_borrar}' eliminada con éxito.")
+                            st.success(f"Clase '{clase_a_borrar}' eliminada con éxito y no volverá a aparecer.")
                             st.rerun()
         except Exception as e:
             st.error(f"Error en Clases: {e}")
