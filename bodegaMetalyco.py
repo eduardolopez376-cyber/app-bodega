@@ -131,7 +131,6 @@ st.sidebar.markdown(f"👤 **Usuario:** {st.session_state['nombre_usuario']}")
 st.sidebar.markdown(f"🔰 **Rol:** `{str(st.session_state['rol']).upper()}`")
 
 st.sidebar.markdown("---")
-# BOTÓN DE ACTUALIZACIÓN RÁPIDA (SIN PERDER SESIÓN)
 if st.sidebar.button("🔄 Actualizar Datos", use_container_width=True):
     st.rerun()
 
@@ -151,7 +150,7 @@ rol = st.session_state["rol"]
 if rol == "operario":
     st.subheader(f"📌 Hola, {st.session_state['nombre_usuario']}")
     
-    tab_prog, tab_prod = st.tabs(["📋 Mi Programación por Día", "⚙️ Registrar Producción"])
+    tab_prog, tab_prod, tab_nueva = st.tabs(["📋 Mi Programación", "⚙️ Registrar Producción", "➕ Agregar Tarea Imprevista"])
     
     with tab_prog:
         st.write("### Consulta tus Tareas Asignadas")
@@ -173,7 +172,7 @@ if rol == "operario":
             st.error(f"Error al cargar programación: {e}")
             
         st.write("---")
-        st.write("### Mis Materiales A Cargo")
+        st.write("### Mis Herramientas y Materiales A Cargo")
         try:
             herramientas = ejecutar_consulta(
                 "SELECT fecha, codigo_material, cantidad, tipo FROM consumos WHERE operario = %s AND estado = 'PRESTADO'",
@@ -182,7 +181,7 @@ if rol == "operario":
             if not herramientas.empty:
                 st.dataframe(herramientas, use_container_width=True)
             else:
-                st.success("Sin materiales o herramientas pendientes de devolución.")
+                st.success("Sin herramientas o materiales pendientes de devolución.")
         except Exception as e:
             st.error(f"Error al cargar consumos: {e}")
 
@@ -209,7 +208,8 @@ if rol == "operario":
                     h_inicio = st.time_input("Hora de Inicio Real", time(7, 0))
                     h_fin = st.time_input("Hora de Finalización Real", time(17, 0))
                         
-                    unidades = st.number_input("Unidades Producidas Realmente", min_value=1, step=1)
+                    unidades = st.number_input("Unidades Producidas Buenas", min_value=0, step=1)
+                    defectuosas = st.number_input("Unidades Defectuosas (Scrap)", min_value=0, step=1, value=0)
                     obs_usuario = st.text_area("Observaciones / Novedades")
                     
                     submit = st.form_submit_button("Guardar Registro y Finalizar Tarea", type="primary", use_container_width=True)
@@ -222,9 +222,9 @@ if rol == "operario":
                         
                         if unidades < meta_original:
                             faltantes = meta_original - unidades
-                            obs_final = f"⚠️ PRODUCCIÓN PARCIAL: Hizo {unidades} de {meta_original} meta. Faltaron {faltantes} unidades por reagendar. Nota: {obs_usuario}"
+                            obs_final = f"⚠️ PRODUCCIÓN PARCIAL: Buenas {unidades} de {meta_original} meta (Defectuosas: {defectuosas}). Faltaron {faltantes} unidades. Nota: {obs_usuario}"
                         else:
-                            obs_final = f"✅ Meta cumplida ({unidades}/{meta_original}). {obs_usuario}"
+                            obs_final = f"✅ Meta cumplida ({unidades}/{meta_original} buenas, Defectuosas: {defectuosas}). {obs_usuario}"
                         
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
@@ -258,17 +258,60 @@ if rol == "operario":
         except Exception as e:
             st.error(f"Error al cargar formulario de reporte: {e}")
 
+    with tab_nueva:
+        st.subheader("➕ Registrar e Iniciar Tarea Imprevista No Programada")
+        st.write("Si surgieron imprevistos y tuviste que realizar una tarea no programada hoy, repórtala aquí directamente:")
+        try:
+            maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
+            refs = ejecutar_consulta("SELECT codigo FROM referencias")['codigo'].tolist()
+            
+            if not maqs or not refs:
+                st.warning("Faltan máquinas o referencias registradas en el sistema.")
+            else:
+                with st.form("form_tarea_imprevista"):
+                    maq_imp = st.selectbox("Máquina", maqs)
+                    ref_imp = st.selectbox("Referencia", refs)
+                    act_imp = st.text_input("Actividad / Motivo imprevisto (Ej: Reproceso, Reparación urgente)")
+                    
+                    c_h1, c_h2 = st.columns(2)
+                    with c_h1:
+                        h_ini_imp = st.time_input("Hora de Inicio", time(8, 0))
+                    with c_h2:
+                        h_fin_imp = st.time_input("Hora de Finalización", time(17, 0))
+                        
+                    uni_imp = st.number_input("Unidades Producidas Buenas", min_value=0, value=1)
+                    def_imp = st.number_input("Unidades Defectuosas (Scrap)", min_value=0, value=0)
+                    obs_imp = st.text_area("Observaciones del Imprevisto")
+                    
+                    btn_imp = st.form_submit_button("Guardar e Iniciar Tarea Imprevista", type="primary", use_container_width=True)
+                    
+                    if btn_imp:
+                        obs_final_imp = f"⚡ TAREA IMPREVISTA: {act_imp} | Buenas: {uni_imp}, Defectuosas: {def_imp}. Nota: {obs_imp}"
+                        
+                        # Guardar como registro de producción directamente
+                        ejecutar_comando(
+                            """INSERT INTO registro_produccion 
+                            (operario_nombre, maquina, referencia, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones) 
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                            (st.session_state['nombre_usuario'], maq_imp, ref_imp, h_ini_imp, h_fin_imp, uni_imp, obs_final_imp)
+                        )
+                        st.success("¡Tarea imprevista registrada y guardada con éxito en los reportes!")
+                        st.rerun()
+        except Exception as e:
+            st.error(f"Error al cargar formulario de tarea imprevista: {e}")
+
 # ====================================================
 # VISTA COMPLETA PARA ADMINISTRADOR Y PRODUCCIÓN
 # ====================================================
 elif rol in ["admin", "produccion"]:
-    tab1, tab_eq, tab_ref, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    tab1, tab_eq, tab_ref, tab3, tab4, tab5, tab6, tab_inv, tab7 = st.tabs([
         "📅 Programar", 
         "⚙️ Equipos",
         "📄 Referencias",
         "📊 Reportes", 
         "🚀 Entregas", 
-        "🔨 Herramientas", 
+        "🔨 Herramientas",
+        "📥 Cargue Herramientas", 
         "📦 Inventario", 
         "⚙️ Usuarios"
     ])
@@ -418,7 +461,7 @@ elif rol in ["admin", "produccion"]:
 
     # --- TAB 4: REPORTES EXCEL ---
     with tab3:
-        st.subheader("📊 Historial General de Producción y Reportes Parciales")
+        st.subheader("📊 Historial General de Producción")
         try:
             df_prod = ejecutar_consulta("SELECT * FROM registro_produccion ORDER BY fecha DESC")
             
@@ -448,89 +491,173 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en reportes: {e}")
 
-    # --- TAB 5: ENTREGAS Y SALIDAS ---
+    # --- TAB 5: ENTREGAS Y SALIDAS DE CONSUMIBLES ---
     with tab4:
-        st.subheader("Registrar Salida de Material")
+        st.subheader("Registrar Salida de Insumo / Consumible")
         try:
             ops_df = ejecutar_consulta("SELECT nombre FROM usuarios WHERE rol = 'operario'")
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
-            mats = ejecutar_consulta("SELECT codigo, nombre, tipo FROM inventario")
+            mats = ejecutar_consulta("SELECT codigo, nombre, cantidad FROM inventario WHERE tipo = 'CONSUMIBLE'")
             
             if ops and not mats.empty:
                 op_sel = st.selectbox("Operario", ops, key="ent_op")
-                mat_sel = st.selectbox("Material/Herramienta", mats['nombre'].tolist(), key="ent_mat")
+                mat_sel = st.selectbox("Insumo", mats['nombre'].tolist(), key="ent_mat")
                 cant = st.number_input("Cantidad", min_value=1, value=1, key="ent_cant")
                 
-                if st.button("Registrar Salida", type="primary", use_container_width=True):
+                if st.button("Registrar Salida de Insumo", type="primary", use_container_width=True):
                     row = mats[mats['nombre'] == mat_sel].iloc[0]
-                    cod, tipo = row['codigo'], row['tipo']
-                    estado = "PRESTADO" if tipo == "HERRAMIENTA" else "ENTREGADO"
+                    cod = row['codigo']
                     
                     ejecutar_comando(
-                        "INSERT INTO consumos (fecha, operario, codigo_material, cantidad, tipo, estado) VALUES (%s, %s, %s, %s, %s, %s)",
-                        (datetime.now().strftime("%Y-%m-%d %H:%M"), op_sel, cod, cant, tipo, estado)
+                        "INSERT INTO consumos (fecha, operario, codigo_material, cantidad, tipo, estado) VALUES (%s, %s, %s, %s, 'CONSUMIBLE', 'ENTREGADO')",
+                        (datetime.now().strftime("%Y-%m-%d %H:%M"), op_sel, cod, cant)
                     )
-                    if tipo == "CONSUMIBLE":
-                        ejecutar_comando("UPDATE inventario SET cantidad = cantidad - %s WHERE codigo = %s", (cant, cod))
-                    st.success("Salida registrada.")
+                    ejecutar_comando("UPDATE inventario SET cantidad = cantidad - %s WHERE codigo = %s", (cant, cod))
+                    st.success("Salida de insumo registrada y descontada del inventario.")
+                    st.rerun()
+            else:
+                st.info("No hay operarios o insumos consumibles disponibles.")
         except Exception as e:
             st.error(f"Error en Entregas: {e}")
 
-    # --- TAB 6: HERRAMIENTAS ---
+    # --- TAB 6: HERRAMIENTAS (Gestión, Préstamos y Devoluciones) ---
     with tab5:
-        st.subheader("Herramientas Prestadas")
+        st.subheader("🔨 Gestión y Préstamo de Herramientas")
         try:
+            herramientas_db = ejecutar_consulta("SELECT codigo, nombre, cantidad FROM inventario WHERE tipo = 'HERRAMIENTA'")
+            
+            st.write("### Catálogo de Herramientas Disponibles")
+            st.dataframe(herramientas_db, use_container_width=True)
+            
+            ops_df = ejecutar_consulta("SELECT nombre FROM usuarios WHERE rol = 'operario'")
+            ops = ops_df['nombre'].tolist() if not ops_df.empty else []
+            
+            if ops and not herramientas_db.empty:
+                with st.expander("🤝 Prestar Herramienta a Operario"):
+                    with st.form("form_prestar_herramienta"):
+                        op_her = st.selectbox("Operario", ops)
+                        her_sel = st.selectbox("Herramienta", herramientas_db['nombre'].tolist())
+                        cant_her = st.number_input("Cantidad", min_value=1, value=1)
+                        btn_prestar = st.form_submit_button("Registrar Préstamo", type="primary", use_container_width=True)
+                        
+                        if btn_prestar:
+                            row_h = herramientas_db[herramientas_db['nombre'] == her_sel].iloc[0]
+                            cod_h = row_h['codigo']
+                            
+                            ejecutar_comando(
+                                "INSERT INTO consumos (fecha, operario, codigo_material, cantidad, tipo, estado) VALUES (%s, %s, %s, %s, 'HERRAMIENTA', 'PRESTADO')",
+                                (datetime.now().strftime("%Y-%m-%d %H:%M"), op_her, cod_h, cant_her)
+                            )
+                            st.success(f"Préstamo de {her_sel} registrado a {op_her}.")
+                            st.rerun()
+
+            st.write("---")
+            st.write("### Herramientas Actualmente Prestadas (Pendientes de Devolución)")
             prestados = ejecutar_consulta("SELECT id, fecha, operario, codigo_material, cantidad FROM consumos WHERE tipo = 'HERRAMIENTA' AND estado = 'PRESTADO'")
-            st.dataframe(prestados, use_container_width=True)
             if not prestados.empty:
-                id_dev = st.selectbox("ID a Devolver", prestados['id'].tolist(), key="dev_id")
-                if st.button("Marcar Devuelto", use_container_width=True):
+                st.dataframe(prestados, use_container_width=True)
+                id_dev = st.selectbox("ID de Préstamo a Devolver", prestados['id'].tolist(), key="dev_id_her")
+                if st.button("Marcar Herramienta como Devuelta", use_container_width=True):
                     ejecutar_comando("UPDATE consumos SET estado = 'DEVUELTO' WHERE id = %s", (id_dev,))
-                    st.success("Herramienta devuelta.")
+                    st.success("¡Herramienta marcada como devuelta con éxito!")
                     st.rerun()
 
                 if rol == "admin":
-                    with st.expander("🗑️ Eliminar Préstamo"):
+                    with st.expander("🗑️ Eliminar Registro de Préstamo"):
                         del_pres = st.selectbox("ID Préstamo a Eliminar", prestados['id'].tolist(), key="del_pres_id")
                         if st.button("Eliminar Préstamo", type="primary", use_container_width=True):
                             ejecutar_comando("DELETE FROM consumos WHERE id = %s", (del_pres,))
                             st.success(f"Registro #{del_pres} eliminado.")
                             st.rerun()
+            else:
+                st.success("No hay herramientas pendientes de devolución.")
         except Exception as e:
             st.error(f"Error en Herramientas: {e}")
 
-    # --- TAB 7: INVENTARIO ---
-    with tab6:
-        st.subheader("Gestión de Inventario")
+    # --- TAB 7: CARGUE DE HERRAMIENTAS (Aparte) ---
+    with tab_inv:
+        st.subheader("📥 Cargue de Nuevas Herramientas al Sistema")
+        st.write("Registra aquí nuevas herramientas físicas que ingresen al taller (Sin stock mínimo requerido).")
         try:
-            inv = ejecutar_consulta("SELECT * FROM inventario")
-            st.dataframe(inv, use_container_width=True)
+            with st.form("form_cargar_herramienta"):
+                h_cod = st.text_input("Código de Herramienta")
+                h_nom = st.text_input("Nombre de la Herramienta")
+                h_cant = st.number_input("Cantidad Inicial", min_value=1, value=1)
+                
+                btn_carga_her = st.form_submit_button("Guardar Nueva Herramienta", type="primary", use_container_width=True)
+                
+                if btn_carga_her:
+                    if h_cod.strip() and h_nom.strip():
+                        # Guardamos con tipo HERRAMIENTA y stock_minimo en 0 o NULL
+                        ejecutar_comando(
+                            "INSERT INTO inventario (codigo, nombre, tipo, cantidad, stock_minimo) VALUES (%s, %s, 'HERRAMIENTA', %s, 0)",
+                            (h_cod, h_nom, h_cant)
+                        )
+                        st.success(f"Herramienta '{h_nom}' cargada exitosamente.")
+                        st.rerun()
+                    else:
+                        st.error("Por favor completa el código y el nombre de la herramienta.")
+
+            st.write("---")
+            st.write("### Listado de Herramientas Registradas")
+            df_herramientas_reg = ejecutar_consulta("SELECT codigo, nombre, cantidad FROM inventario WHERE tipo = 'HERRAMIENTA'")
+            if not df_herramientas_reg.empty:
+                st.dataframe(df_herramientas_reg, use_container_width=True)
+                if rol == "admin":
+                    with st.expander("🗑️ Eliminar Herramienta del Catálogo"):
+                        del_h_cod = st.selectbox("Código a Borrar", df_herramientas_reg["codigo"].tolist(), key="del_h_sel")
+                        if st.button("Confirmar Eliminación de Herramienta", type="primary", use_container_width=True):
+                            ejecutar_comando("DELETE FROM inventario WHERE codigo = %s", (del_h_cod,))
+                            st.success("Herramienta eliminada del catálogo.")
+                            st.rerun()
+            else:
+                st.info("No hay herramientas registradas todavía.")
+        except Exception as e:
+            st.error(f"Error en Cargue de Herramientas: {e}")
+
+    # --- TAB 8: INVENTARIO DE CONSUMIBLES (Con Alerta de Stock Mínimo) ---
+    with tab6:
+        st.subheader("📦 Gestión de Inventario de Consumibles e Insumos")
+        try:
+            inv = ejecutar_consulta("SELECT codigo, nombre, tipo, cantidad, stock_minimo FROM inventario WHERE tipo = 'CONSUMIBLE'")
             
-            with st.expander("➕ Agregar Insumo / Herramienta"):
+            if not inv.empty:
+                # Alerta visual de stock mínimo
+                criticos = inv[inv['cantidad'] <= inv['stock_minimo']]
+                if not criticos.empty:
+                    st.warning("⚠️ **¡Alerta! Los siguientes consumibles están por debajo o igual al stock mínimo:**")
+                    st.dataframe(criticos, use_container_width=True)
+                
+                st.write("### Inventario Completo de Consumibles")
+                st.dataframe(inv, use_container_width=True)
+            else:
+                st.info("No hay insumos consumibles registrados.")
+            
+            with st.expander("➕ Agregar Nuevo Consumible al Inventario"):
                 c_cod = st.text_input("Código Insumo", key="inv_add_cod")
                 c_nom = st.text_input("Nombre", key="inv_add_nom")
-                c_tipo = st.selectbox("Tipo", ["CONSUMIBLE", "HERRAMIENTA"], key="inv_add_tipo")
-                c_cant = st.number_input("Cantidad Inicial", min_value=0, value=1, key="inv_add_cant")
-                c_min = st.number_input("Stock Mínimo", min_value=0, value=5, key="inv_add_min")
-                if st.button("Guardar Insumo", use_container_width=True):
+                c_cant = st.number_input("Cantidad Inicial", min_value=0, value=10, key="inv_add_cant")
+                c_min = st.number_input("Stock Mínimo de Alerta", min_value=0, value=5, key="inv_add_min")
+                
+                if st.button("Guardar Consumible", use_container_width=True):
                     ejecutar_comando(
-                        "INSERT INTO inventario (codigo, nombre, tipo, cantidad, stock_minimo) VALUES (%s, %s, %s, %s, %s)",
-                        (c_cod, c_nom, c_tipo, c_cant, c_min)
+                        "INSERT INTO inventario (codigo, nombre, tipo, cantidad, stock_minimo) VALUES (%s, %s, 'CONSUMIBLE', %s, %s)",
+                        (c_cod, c_nom, c_cant, c_min)
                     )
-                    st.success("Insumo Guardado.")
+                    st.success("Consumible guardado con éxito.")
                     st.rerun()
 
             if not inv.empty and rol == "admin":
-                with st.expander("🗑️ Eliminar del Inventario"):
+                with st.expander("🗑️ Eliminar Consumible del Inventario"):
                     inv_del_cod = st.selectbox("Código a Borrar", inv["codigo"].tolist(), key="inv_del_sel")
-                    if st.button("Eliminar Insumo", type="primary", use_container_width=True):
+                    if st.button("Eliminar Consumible", type="primary", use_container_width=True):
                         ejecutar_comando("DELETE FROM inventario WHERE codigo = %s", (inv_del_cod,))
                         st.success(f"Insumo '{inv_del_cod}' eliminado.")
                         st.rerun()
         except Exception as e:
             st.error(f"Error en Inventario: {e}")
 
-    # --- TAB 8: USUARIOS Y PERMISOS ---
+    # --- TAB 9: USUARIOS Y PERMISOS ---
     with tab7:
         st.subheader("⚙️ Administrar Usuarios")
         try:
