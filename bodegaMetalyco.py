@@ -74,7 +74,6 @@ def ejecutar_comando(query, params=None):
     cur.close()
     conn.close()
 
-# Asegurar tabla base para clases (sin autorellenar si se borran)
 def inicializar_tabla_clases():
     try:
         ejecutar_comando("""
@@ -282,7 +281,7 @@ if rol == "operario":
             if not maqs or not refs:
                 st.warning("Faltan máquinas o referencias registradas en el sistema.")
             else:
-                with st.form("form_tarea_imprevista"):
+                with st.form("form_tarea_imprevista", clear_on_submit=True):
                     maq_imp = st.selectbox("Máquina", maqs)
                     ref_imp = st.selectbox("Referencia", refs)
                     act_imp = st.text_input("Actividad / Motivo imprevisto (Ej: Reproceso, Reparación urgente)")
@@ -347,7 +346,7 @@ elif rol in ["admin", "produccion"]:
                 st.warning("⚠️ Asegúrate de tener al menos un usuario registrado con rol 'operario', una máquina y una referencia creadas.")
             else:
                 with st.expander(f"➕ Asignar Tarea para el día {fecha_seleccionada}", expanded=False):
-                    with st.form(f"form_programacion_{fecha_seleccionada}"):
+                    with st.form(f"form_programacion_{fecha_seleccionada}", clear_on_submit=True):
                         op_p = st.selectbox("Operario", ops)
                         maq_p = st.selectbox("Máquina", maqs)
                         ref_p = st.selectbox("Referencia", refs)
@@ -431,20 +430,22 @@ elif rol in ["admin", "produccion"]:
             st.dataframe(df_maqs, use_container_width=True)
             
             with st.expander("➕ Crear Nueva Máquina"):
-                m_nom = st.text_input("Nombre de Máquina", key="add_m_nom")
-                m_tipo = st.text_input("Tipo (Ej: Corte, Dobladora)", key="add_m_tipo")
-                if st.button("Guardar Máquina", use_container_width=True):
-                    ejecutar_comando("INSERT INTO maquinas (nombre, tipo) VALUES (%s, %s)", (m_nom, m_tipo))
-                    st.success("Máquina agregada.")
-                    st.rerun()
+                with st.form("form_crear_maquina", clear_on_submit=True):
+                    m_nom = st.text_input("Nombre de Máquina")
+                    m_tipo = st.text_input("Tipo (Ej: Corte, Dobladora)")
+                    if st.form_submit_button("Guardar Máquina", type="primary", use_container_width=True):
+                        ejecutar_comando("INSERT INTO maquinas (nombre, tipo) VALUES (%s, %s)", (m_nom, m_tipo))
+                        st.success("Máquina agregada.")
+                        st.rerun()
 
             if not df_maqs.empty and rol == "admin":
                 with st.expander("🗑️ Eliminar Máquina"):
-                    m_del = st.selectbox("Máquina a Borrar", df_maqs["nombre"].tolist(), key="del_m_sel")
-                    if st.button("Eliminar Máquina", type="primary", use_container_width=True):
-                        ejecutar_comando("DELETE FROM maquinas WHERE nombre = %s", (m_del,))
-                        st.success(f"Máquina '{m_del}' eliminada.")
-                        st.rerun()
+                    with st.form("form_del_maquina", clear_on_submit=True):
+                        m_del = st.selectbox("Máquina a Borrar", df_maqs["nombre"].tolist())
+                        if st.form_submit_button("Eliminar Máquina", type="primary", use_container_width=True):
+                            ejecutar_comando("DELETE FROM maquinas WHERE nombre = %s", (m_del,))
+                            st.success(f"Máquina '{m_del}' eliminada.")
+                            st.rerun()
         except Exception as e:
             st.error(f"Error en Máquinas: {e}")
 
@@ -456,30 +457,31 @@ elif rol in ["admin", "produccion"]:
             st.dataframe(df_refs, use_container_width=True)
             
             with st.expander("➕ Crear Nueva Referencia"):
-                r_cod = st.text_input("Código Referencia", key="add_r_cod")
-                r_desc = st.text_input("Descripción", key="add_r_desc")
-                if st.button("Guardar Referencia", use_container_width=True):
-                    ejecutar_comando("INSERT INTO referencias (codigo, descripcion) VALUES (%s, %s)", (r_cod, r_desc))
-                    st.success("Referencia agregada.")
-                    st.rerun()
+                with st.form("form_crear_ref", clear_on_submit=True):
+                    r_cod = st.text_input("Código Referencia")
+                    r_desc = st.text_input("Descripción")
+                    if st.form_submit_button("Guardar Referencia", type="primary", use_container_width=True):
+                        ejecutar_comando("INSERT INTO referencias (codigo, descripcion) VALUES (%s, %s)", (r_cod, r_desc))
+                        st.success("Referencia agregada.")
+                        st.rerun()
 
             if not df_refs.empty and rol == "admin":
                 with st.expander("🗑️ Eliminar Referencia"):
-                    r_del = st.selectbox("Referencia a Borrar", df_refs["codigo"].tolist(), key="del_r_sel")
-                    if st.button("Eliminar Referencia", type="primary", use_container_width=True):
-                        ejecutar_comando("DELETE FROM referencias WHERE codigo = %s", (r_del,))
-                        st.success(f"Referencia '{r_del}' eliminada.")
-                        st.rerun()
+                    with st.form("form_del_ref", clear_on_submit=True):
+                        r_del = st.selectbox("Referencia a Borrar", df_refs["codigo"].tolist())
+                        if st.form_submit_button("Eliminar Referencia", type="primary", use_container_width=True):
+                            ejecutar_comando("DELETE FROM referencias WHERE codigo = %s", (r_del,))
+                            st.success(f"Referencia '{r_del}' eliminada.")
+                            st.rerun()
         except Exception as e:
             st.error(f"Error en Referencias: {e}")
 
-    # --- TAB 4: REPORTES EXCEL INDEPENDIENTES (Filtrados por operarios activos) ---
+    # --- TAB 4: REPORTES EXCEL INDEPENDIENTES ---
     with tab_rep:
         st.subheader("📊 Centro de Reportes y Descargas Independientes")
         st.write("Selecciona y descarga en Excel exactamente el reporte que necesitas (solo incluye operarios activos en el sistema):")
         
         try:
-            # 1. Reporte de Producción (Solo operarios que existen en usuarios)
             st.write("---")
             st.write("### 🏭 1. Reporte de Producción de Operarios")
             df_prod_rep = ejecutar_consulta("""
@@ -510,7 +512,6 @@ elif rol in ["admin", "produccion"]:
             else:
                 st.info("No hay registros de producción de operarios activos.")
 
-            # 2. Reporte de Inventario General
             st.write("---")
             st.write("### 📦 2. Reporte de Inventario General")
             df_inv_rep = ejecutar_consulta("SELECT codigo, nombre, tipo as clase, cantidad, stock_minimo FROM inventario")
@@ -530,7 +531,6 @@ elif rol in ["admin", "produccion"]:
             else:
                 st.info("El inventario está vacío.")
 
-            # 3. Reporte de Herramientas y Préstamos (Solo operarios activos)
             st.write("---")
             st.write("### 🔨 3. Reporte de Herramientas y Préstamos")
             df_her_rep = ejecutar_consulta("""
@@ -556,7 +556,6 @@ elif rol in ["admin", "produccion"]:
             else:
                 st.info("No hay registros de herramientas o préstamos de operarios activos.")
 
-            # 4. Reporte de Entregas / Consumos de Insumos (Solo operarios activos)
             st.write("---")
             st.write("### 🚀 4. Reporte de Entregas y Salidas")
             df_ent_rep = ejecutar_consulta("""
@@ -592,21 +591,22 @@ elif rol in ["admin", "produccion"]:
             mats = ejecutar_consulta("SELECT codigo, nombre, cantidad, tipo FROM inventario")
             
             if ops and not mats.empty:
-                op_sel = st.selectbox("Operario", ops, key="ent_op")
-                mat_sel = st.selectbox("Ítems en Inventario", mats['nombre'].tolist(), key="ent_mat")
-                cant = st.number_input("Cantidad", min_value=1, value=1, key="ent_cant")
-                
-                if st.button("Registrar Salida", type="primary", use_container_width=True):
-                    row = mats[mats['nombre'] == mat_sel].iloc[0]
-                    cod, tipo = row['codigo'], row['tipo']
+                with st.form("form_entregas", clear_on_submit=True):
+                    op_sel = st.selectbox("Operario", ops)
+                    mat_sel = st.selectbox("Ítems en Inventario", mats['nombre'].tolist())
+                    cant = st.number_input("Cantidad", min_value=1, value=1)
                     
-                    ejecutar_comando(
-                        "INSERT INTO consumos (fecha, operario, codigo_material, cantidad, tipo, estado) VALUES (%s, %s, %s, %s, %s, 'ENTREGADO')",
-                        (datetime.now().strftime("%Y-%m-%d %H:%M"), op_sel, cod, cant, tipo)
-                    )
-                    ejecutar_comando("UPDATE inventario SET cantidad = cantidad - %s WHERE codigo = %s", (cant, cod))
-                    st.success("Salida registrada y descontada del inventario.")
-                    st.rerun()
+                    if st.form_submit_button("Registrar Salida", type="primary", use_container_width=True):
+                        row = mats[mats['nombre'] == mat_sel].iloc[0]
+                        cod, tipo = row['codigo'], row['tipo']
+                        
+                        ejecutar_comando(
+                            "INSERT INTO consumos (fecha, operario, codigo_material, cantidad, tipo, estado) VALUES (%s, %s, %s, %s, %s, 'ENTREGADO')",
+                            (datetime.now().strftime("%Y-%m-%d %H:%M"), op_sel, cod, cant, tipo)
+                        )
+                        ejecutar_comando("UPDATE inventario SET cantidad = cantidad - %s WHERE codigo = %s", (cant, cod))
+                        st.success("Salida registrada y descontada del inventario.")
+                        st.rerun()
             else:
                 st.info("No hay operarios o ítems disponibles en inventario.")
         except Exception as e:
@@ -629,7 +629,7 @@ elif rol in ["admin", "produccion"]:
             
             if ops and not herramientas_db.empty:
                 with st.expander("🤝 Prestar Herramienta a Operario"):
-                    with st.form("form_prestar_herramienta"):
+                    with st.form("form_prestar_herramienta", clear_on_submit=True):
                         op_her = st.selectbox("Operario", ops)
                         her_sel = st.selectbox("Herramienta", herramientas_db['nombre'].tolist())
                         cant_her = st.number_input("Cantidad", min_value=1, value=1)
@@ -677,7 +677,7 @@ elif rol in ["admin", "produccion"]:
             if not lista_clases:
                 st.warning("⚠️ No hay clases creadas. Por favor ve a la pestaña 'Clases / Categorías' y crea al menos una clase antes de cargar ítems.")
             else:
-                with st.form("form_cargue_item"):
+                with st.form("form_cargue_item", clear_on_submit=True):
                     c_cod = st.text_input("Código del Ítem")
                     c_nom = st.text_input("Nombre del Ítem")
                     c_clase = st.selectbox("Clase / Categoría", lista_clases)
@@ -716,17 +716,18 @@ elif rol in ["admin", "produccion"]:
 
                 if rol == "admin":
                     with st.expander("🗑️ Eliminar Ítem del Inventario General"):
-                        del_cod_gen = st.selectbox("Código a Eliminar", inv_gen["codigo"].tolist(), key="del_gen_sel")
-                        if st.button("Confirmar Eliminación de Ítem", type="primary", use_container_width=True):
-                            ejecutar_comando("DELETE FROM inventario WHERE codigo = %s", (del_cod_gen,))
-                            st.success("Ítem eliminado del inventario.")
-                            st.rerun()
+                        with st.form("form_del_inv", clear_on_submit=True):
+                            del_cod_gen = st.selectbox("Código a Eliminar", inv_gen["codigo"].tolist())
+                            if st.form_submit_button("Confirmar Eliminación de Ítem", type="primary", use_container_width=True):
+                                ejecutar_comando("DELETE FROM inventario WHERE codigo = %s", (del_cod_gen,))
+                                st.success("Ítem eliminado del inventario.")
+                                st.rerun()
             else:
                 st.info("El inventario general se encuentra vacío.")
         except Exception as e:
             st.error(f"Error en Inventario General: {e}")
 
-    # --- TAB 9: CLASES / CATEGORÍAS (Crear y Eliminar definitivamente) ---
+    # --- TAB 9: CLASES / CATEGORÍAS ---
     with tab_clases:
         st.subheader("🏷️ Administración de Clases y Categorías")
         try:
@@ -737,7 +738,7 @@ elif rol in ["admin", "produccion"]:
                 st.info("No hay clases creadas actualmente en el sistema.")
             
             with st.expander("➕ Crear Nueva Clase"):
-                with st.form("form_crear_clase"):
+                with st.form("form_crear_clase", clear_on_submit=True):
                     nueva_clase = st.text_input("Nombre de la Nueva Clase (Ej: NEUMATICA)")
                     btn_crear_clase = st.form_submit_button("Guardar Clase", type="primary", use_container_width=True)
                     
@@ -751,13 +752,13 @@ elif rol in ["admin", "produccion"]:
 
             if not clases_actuales.empty and rol == "admin":
                 with st.expander("🗑️ Eliminar Clase"):
-                    with st.form("form_eliminar_clase"):
+                    with st.form("form_eliminar_clase", clear_on_submit=True):
                         clase_a_borrar = st.selectbox("Selecciona la Clase a Borrar", clases_actuales["nombre"].tolist())
                         btn_eliminar_clase = st.form_submit_button("Confirmar Eliminación de Clase", type="primary", use_container_width=True)
                         
                         if btn_eliminar_clase:
                             ejecutar_comando("DELETE FROM clases_inventario WHERE nombre = %s", (clase_a_borrar,))
-                            st.success(f"Clase '{clase_a_borrar}' eliminada con éxito y no volverá a aparecer.")
+                            st.success(f"Clase '{clase_a_borrar}' eliminada con éxito.")
                             st.rerun()
         except Exception as e:
             st.error(f"Error en Clases: {e}")
@@ -770,35 +771,38 @@ elif rol in ["admin", "produccion"]:
             st.dataframe(users_df, use_container_width=True)
             
             with st.expander("➕ Crear Usuario"):
-                u_user = st.text_input("Usuario", key="u1")
-                u_pass = st.text_input("Clave", type="password", key="u2")
-                u_nom = st.text_input("Nombre Completo", key="u3")
-                u_rol = st.selectbox("Rol", ["operario", "produccion", "admin"], key="u4")
-                if st.button("Guardar Usuario", use_container_width=True):
-                    ejecutar_comando("INSERT INTO usuarios (username, password, nombre, rol) VALUES (%s, %s, %s, %s)", (u_user, u_pass, u_nom, u_rol))
-                    st.success("Usuario creado.")
-                    st.rerun()
+                with st.form("form_crear_usuario", clear_on_submit=True):
+                    u_user = st.text_input("Usuario")
+                    u_pass = st.text_input("Clave", type="password")
+                    u_nom = st.text_input("Nombre Completo")
+                    u_rol = st.selectbox("Rol", ["operario", "produccion", "admin"])
+                    if st.form_submit_button("Guardar Usuario", type="primary", use_container_width=True):
+                        ejecutar_comando("INSERT INTO usuarios (username, password, nombre, rol) VALUES (%s, %s, %s, %s)", (u_user, u_pass, u_nom, u_rol))
+                        st.success("Usuario creado.")
+                        st.rerun()
 
             with st.expander("✏️ Editar Permisos/Clave"):
-                usr_sel = st.selectbox("Usuario", users_df["username"].tolist(), key="e1")
-                n_pass = st.text_input("Nueva Clave", type="password", key="e2")
-                n_rol = st.selectbox("Nuevo Rol", ["operario", "produccion", "admin"], key="e3")
-                if st.button("Actualizar Usuario", use_container_width=True):
-                    if n_pass.strip():
-                        ejecutar_comando("UPDATE usuarios SET password = %s, rol = %s WHERE username = %s", (n_pass, n_rol, usr_sel))
-                    else:
-                        ejecutar_comando("UPDATE usuarios SET rol = %s WHERE username = %s", (n_rol, usr_sel))
-                    st.success("Actualizado.")
-                    st.rerun()
+                with st.form("form_editar_usuario", clear_on_submit=True):
+                    usr_sel = st.selectbox("Usuario a Editar", users_df["username"].tolist())
+                    n_pass = st.text_input("Nueva Clave (opcional)", type="password")
+                    n_rol = st.selectbox("Nuevo Rol", ["operario", "produccion", "admin"])
+                    if st.form_submit_button("Actualizar Usuario", type="primary", use_container_width=True):
+                        if n_pass.strip():
+                            ejecutar_comando("UPDATE usuarios SET password = %s, rol = %s WHERE username = %s", (n_pass, n_rol, usr_sel))
+                        else:
+                            ejecutar_comando("UPDATE usuarios SET rol = %s WHERE username = %s", (n_rol, usr_sel))
+                        st.success("Actualizado con éxito.")
+                        st.rerun()
 
             with st.expander("🗑️ Eliminar Usuario"):
-                u_del = st.selectbox("Usuario a Eliminar", users_df["username"].tolist(), key="d1")
-                if st.button("Confirmar Borrado", type="primary", use_container_width=True):
-                    if u_del != st.session_state["username"]:
-                        ejecutar_comando("DELETE FROM usuarios WHERE username = %s", (u_del,))
-                        st.success("Eliminado.")
-                        st.rerun()
-                    else:
-                        st.error("No puedes borrar tu propio usuario.")
+                with st.form("form_del_usuario", clear_on_submit=True):
+                    u_del = st.selectbox("Usuario a Eliminar", users_df["username"].tolist())
+                    if st.form_submit_button("Confirmar Borrado", type="primary", use_container_width=True):
+                        if u_del != st.session_state["username"]:
+                            ejecutar_comando("DELETE FROM usuarios WHERE username = %s", (u_del,))
+                            st.success("Eliminado con éxito.")
+                            st.rerun()
+                        else:
+                            st.error("No puedes borrar tu propio usuario.")
         except Exception as e:
             st.error(f"Error en Usuarios: {e}")
