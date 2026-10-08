@@ -288,7 +288,6 @@ if rol == "operario":
                         if not maq_db.empty:
                             if str(maq_db.iloc[0]['tipo_propiedad']).upper() == 'ALQUILADA':
                                 es_alq = True
-                                # Calcular horas trabajadas
                                 dt_inicio = datetime.combine(datetime.today(), h_inicio)
                                 dt_fin = datetime.combine(datetime.today(), h_fin)
                                 diff = (dt_fin - dt_inicio).total_seconds() / 3600.0
@@ -373,7 +372,6 @@ if rol == "operario":
                     if btn_imp:
                         obs_final_imp = f"⚡ TAREA IMPREVISTA: {act_imp} | Buenas: {uni_imp}, Defectuosas: {def_imp}. Nota: {obs_imp}"
                         
-                        # Comprobar si la máquina es alquilada
                         maq_db = ejecutar_consulta("SELECT tipo_propiedad FROM maquinas WHERE nombre = %s", (maq_imp,))
                         es_alq = False
                         horas_calc = 0.0
@@ -560,10 +558,12 @@ elif rol in ["admin", "produccion"]:
                     with st.form("form_del_oc", clear_on_submit=True):
                         oc_del = st.selectbox("Selecciona la OC a Borrar", df_oc["numero_oc"].tolist())
                         if st.form_submit_button("Confirmar Eliminación de OC", type="primary", use_container_width=True):
-                            ejecutar_comando("DELETE FROM ordenes_compra WHERE numero_oc = %s", (oc_del,))
-                            ejecutar_comando("DELETE FROM programacion_diaria WHERE numero_oc = %s", (oc_del,))
+                            # BORRADO EN CASCADA TOTAL: Elimina la OC, su programación y sus reportes de producción vinculados para pruebas limpias
                             ejecutar_comando("DELETE FROM registro_produccion WHERE numero_oc = %s", (oc_del,))
-                            st.success(f"Orden de Compra #{oc_del} y sus registros asociados fueron eliminados por completo.")
+                            ejecutar_comando("DELETE FROM programacion_diaria WHERE numero_oc = %s", (oc_del,))
+                            ejecutar_comando("DELETE FROM ordenes_compra WHERE numero_oc = %s", (oc_del,))
+                            
+                            st.success(f"Orden de Compra #{oc_del} y todo su historial asociado fueron eliminados por completo.")
                             st.rerun()
             else:
                 st.info("No hay órdenes de compra registradas.")
@@ -689,11 +689,12 @@ elif rol in ["admin", "produccion"]:
 
             st.write("---")
             st.write("#### 2. Reporte de Producción Detallado")
+            # IMPORTANTE: Se usa INNER JOIN (JOIN) para que si la orden de compra fue eliminada, el reporte de producción la oculte de inmediato
             df_prod_rep = ejecutar_consulta("""
                 SELECT r.id, r.fecha, r.numero_oc, r.operario_nombre, r.maquina, m.tipo_propiedad as tipo_maquina, 
                        r.referencia, r.hora_inicio_real, r.hora_fin_real, r.unidades_producidas, r.observaciones 
                 FROM registro_produccion r 
-                LEFT JOIN ordenes_compra oc ON r.numero_oc = oc.numero_oc
+                JOIN ordenes_compra oc ON r.numero_oc = oc.numero_oc
                 LEFT JOIN usuarios u ON r.operario_nombre = u.nombre 
                 LEFT JOIN maquinas m ON r.maquina = m.nombre
                 ORDER BY r.id DESC
@@ -713,25 +714,24 @@ elif rol in ["admin", "produccion"]:
                     key="dl_prod_excel"
                 )
             else:
-                st.info("No hay registros de producción para exportar.")
+                st.info("No hay registros de producción válidos (o las órdenes asociadas fueron eliminadas).")
 
             st.write("---")
             st.write("#### 3. Reporte de Uso de Máquinas Alquiladas (Diario, Semanal, Mensual)")
             
-            # Selector de periodicidad para el reporte
             tipo_periodo = st.selectbox("Selecciona Periodo de Reporte", ["Diario (Hoy)", "Semanal (Últimos 7 días)", "Mensual (Mes Actual)", "Histórico Completo"], key="sel_periodo_alq")
             
+            # También protegemos este reporte con un JOIN estricto a las órdenes de compra para pruebas
             query_alq = """
                 SELECT r.id, r.fecha, r.numero_oc, r.maquina, r.operario_nombre, r.horas_trabajadas, r.unidades_producidas, r.observaciones 
                 FROM registro_produccion r 
+                JOIN ordenes_compra oc ON r.numero_oc = oc.numero_oc
                 WHERE r.es_maquina_alquilada = TRUE
             """
             
             hoy_str = datetime.now().strftime('%Y-%m-%d')
             if tipo_periodo == "Diario (Hoy)":
                 query_alq += f" AND r.fecha::text LIKE '{hoy_str}%'"
-            elif tipo_periodo == "Semanal (Últimos 7 days / periodo reciente)":
-                pass # Se puede filtrar por fecha si se desea
             elif tipo_periodo == "Mensual (Mes Actual)":
                 mes_actual_str = datetime.now().strftime('%Y-%m')
                 query_alq += f" AND r.fecha::text LIKE '{mes_actual_str}%'"
@@ -743,7 +743,6 @@ elif rol in ["admin", "produccion"]:
             if not df_alq_rep.empty:
                 st.dataframe(df_alq_rep, use_container_width=True)
                 
-                # Botón de descarga
                 buffer_alq = io.BytesIO()
                 with pd.ExcelWriter(buffer_alq, engine='openpyxl') as writer:
                     df_alq_rep.to_excel(writer, index=False, sheet_name='Maquinas_Alquiladas')
@@ -756,7 +755,6 @@ elif rol in ["admin", "produccion"]:
                     key="dl_alq_excel"
                 )
                 
-                # Opción de eliminación para admin o produccion
                 with st.expander("🗑️ Eliminar Registro de Máquina Alquilada"):
                     with st.form("form_del_alq", clear_on_submit=True):
                         id_alq_del = st.selectbox("Selecciona el ID del registro a borrar", df_alq_rep["id"].tolist())
