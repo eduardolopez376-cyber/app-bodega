@@ -73,7 +73,7 @@ def ejecutar_comando(query, params=None):
     cur.close()
     conn.close()
 
-# Inicializar y actualizar tablas del sistema (Sin autorecreación forzosa para permitir borrados libres en pruebas)
+# Inicializar y actualizar tablas del sistema
 def inicializar_tablas_sistema():
     try:
         # Tabla de Servicios Prestados
@@ -278,7 +278,6 @@ if rol == "operario":
                         num_oc_asociada = row_t['numero_oc']
                         maquina_elegida = row_t['maquina']
                         
-                        # Comprobar si la máquina es alquilada
                         maq_db = ejecutar_consulta("SELECT tipo_propiedad FROM maquinas WHERE nombre = %s", (maquina_elegida,))
                         es_alq = False
                         horas_calc = 0.0
@@ -555,7 +554,6 @@ elif rol in ["admin", "produccion"]:
                     with st.form("form_del_oc", clear_on_submit=True):
                         oc_del = st.selectbox("Selecciona la OC a Borrar", df_oc["numero_oc"].tolist())
                         if st.form_submit_button("Confirmar Eliminación de OC", type="primary", use_container_width=True):
-                            # BORRADO EN CASCADA TOTAL: Elimina la OC, su programación y sus reportes de producción vinculados para pruebas limpias
                             ejecutar_comando("DELETE FROM registro_produccion WHERE numero_oc = %s", (oc_del,))
                             ejecutar_comando("DELETE FROM programacion_diaria WHERE numero_oc = %s", (oc_del,))
                             ejecutar_comando("DELETE FROM ordenes_compra WHERE numero_oc = %s", (oc_del,))
@@ -686,7 +684,6 @@ elif rol in ["admin", "produccion"]:
 
             st.write("---")
             st.write("#### 2. Reporte de Producción Detallado")
-            # INNER JOIN estricto para ocultar reportes de OCs eliminadas
             df_prod_rep = ejecutar_consulta("""
                 SELECT r.id, r.fecha, r.numero_oc, r.operario_nombre, r.maquina, m.tipo_propiedad as tipo_maquina, 
                        r.referencia, r.hora_inicio_real, r.hora_fin_real, r.unidades_producidas, r.observaciones 
@@ -711,11 +708,10 @@ elif rol in ["admin", "produccion"]:
                     key="dl_prod_excel"
                 )
             else:
-                st.info("No hay registros de producción válidos (o las órdenes asociadas fueron eliminadas).")
+                st.info("No hay registros de producción válidos.")
 
             st.write("---")
-            st.write("#### 3. Reporte de Uso de Máquinas Alquiladas (Diario, Semanal, Mensual)")
-            
+            st.write("#### 3. Reporte de Uso de Máquinas Alquiladas")
             tipo_periodo = st.selectbox("Selecciona Periodo de Reporte", ["Diario (Hoy)", "Semanal (Últimos 7 días)", "Mensual (Mes Actual)", "Histórico Completo"], key="sel_periodo_alq")
             
             query_alq = """
@@ -724,7 +720,6 @@ elif rol in ["admin", "produccion"]:
                 JOIN ordenes_compra oc ON r.numero_oc = oc.numero_oc
                 WHERE r.es_maquina_alquilada = TRUE
             """
-            
             hoy_str = datetime.now().strftime('%Y-%m-%d')
             if tipo_periodo == "Diario (Hoy)":
                 query_alq += f" AND r.fecha::text LIKE '{hoy_str}%'"
@@ -733,7 +728,6 @@ elif rol in ["admin", "produccion"]:
                 query_alq += f" AND r.fecha::text LIKE '{mes_actual_str}%'"
                 
             query_alq += " ORDER BY r.id DESC"
-            
             df_alq_rep = ejecutar_consulta(query_alq)
             
             if not df_alq_rep.empty:
@@ -759,7 +753,7 @@ elif rol in ["admin", "produccion"]:
                             st.success(f"Registro de máquina alquilada ID #{id_alq_del} eliminado con éxito.")
                             st.rerun()
             else:
-                st.info(f"No hay registros de uso en máquinas alquiladas para el filtro seleccionado: {tipo_periodo}.")
+                st.info(f"No hay registros para el filtro seleccionado: {tipo_periodo}.")
 
             st.write("---")
             st.write("#### 4. Reporte de Inventario Actual")
@@ -777,7 +771,6 @@ elif rol in ["admin", "produccion"]:
                     use_container_width=True,
                     key="dl_inv_excel"
                 )
-
         except Exception as e:
             st.error(f"Error al generar reportes: {e}")
 
@@ -914,13 +907,15 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en inventario: {e}")
 
-    # --- TAB 11: CLASES ---
+    # --- TAB 11: CLASES (CORREGIDO CON ELIMINACIÓN) ---
     with tab_clases:
         st.subheader("🏷️ Administración de Clases de Inventario")
         try:
-            clases_actuales = ejecutar_consulta("SELECT * FROM clases_inventario")
+            clases_actuales = ejecutar_consulta("SELECT * FROM clases_inventario ORDER BY id DESC")
             if not clases_actuales.empty:
                 st.dataframe(clases_actuales, use_container_width=True)
+            else:
+                st.info("No hay clases de inventario registradas.")
             
             with st.expander("Crear"):
                 with st.form("form_crear_clase", clear_on_submit=True):
@@ -929,6 +924,17 @@ elif rol in ["admin", "produccion"]:
                         if nueva_clase.strip():
                             ejecutar_comando("INSERT INTO clases_inventario (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (nueva_clase.upper().strip(),))
                             st.success(f"Clase '{nueva_clase.upper()}' creada con éxito.")
+                            st.rerun()
+                        else:
+                            st.error("Escribe un nombre válido.")
+
+            if not clases_actuales.empty:
+                with st.expander("Eliminar"):
+                    with st.form("form_del_clase", clear_on_submit=True):
+                        clase_del = st.selectbox("Selecciona la Clase a Borrar", clases_actuales["nombre"].tolist())
+                        if st.form_submit_button("Eliminar Clase", type="primary", use_container_width=True):
+                            ejecutar_comando("DELETE FROM clases_inventario WHERE nombre = %s", (clase_del,))
+                            st.success(f"Clase '{clase_del}' eliminada definitivamente.")
                             st.rerun()
         except Exception as e:
             st.error(f"Error en clases: {e}")
