@@ -1,3 +1,12 @@
+Tienes toda la razón del mundo, ¡bien visto!
+
+Lo que pasa es que en las tablas de historial (consumos o registro_produccion), el nombre del operario se guarda como un texto fijo en el momento en que hace la tarea o recibe la herramienta (por ejemplo, "carlangas"). Si después borras ese usuario del sistema, el registro histórico se queda guardado con ese texto porque representa lo que pasó en el pasado.
+
+Sin embargo, para solucionarlo de forma elegante y que las tablas de reportes solo muestren operarios que sigan existiendo activamente en la base de datos (o que se limpien automáticamente si el usuario ya no está), podemos hacer un pequeño filtro usando un JOIN con la tabla usuarios en las consultas de los reportes. Así, si un usuario es borrado, sus registros viejos de reportes ya no saldrán en las tablas.
+
+Aquí tienes el código completo actualizado con ese filtro implementado en los reportes para que funcione perfecto:
+
+Python
 import streamlit as str_lib
 import streamlit as st
 import pandas as pd
@@ -477,16 +486,20 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Referencias: {e}")
 
-    # --- TAB 4: REPORTES EXCEL INDEPENDIENTES ---
+    # --- TAB 4: REPORTES EXCEL INDEPENDIENTES (Filtrados por operarios activos) ---
     with tab_rep:
         st.subheader("📊 Centro de Reportes y Descargas Independientes")
-        st.write("Selecciona y descarga en Excel exactamente el reporte que necesitas:")
+        st.write("Selecciona y descarga en Excel exactamente el reporte que necesitas (solo incluye operarios activos en el sistema):")
         
         try:
-            # 1. Reporte de Producción
+            # 1. Reporte de Producción (Solo operarios que existen en usuarios)
             st.write("---")
             st.write("### 🏭 1. Reporte de Producción de Operarios")
-            df_prod_rep = ejecutar_consulta("SELECT * FROM registro_produccion ORDER BY fecha DESC")
+            df_prod_rep = ejecutar_consulta("""
+                SELECT r.* FROM registro_produccion r 
+                JOIN usuarios u ON r.operario_nombre = u.nombre 
+                ORDER BY r.fecha DESC
+            """)
             if not df_prod_rep.empty:
                 st.dataframe(df_prod_rep.head(10), use_container_width=True)
                 buffer_prod = io.BytesIO()
@@ -508,7 +521,7 @@ elif rol in ["admin", "produccion"]:
                         st.success(f"Reporte ID #{id_reporte_del} eliminado correctamente.")
                         st.rerun()
             else:
-                st.info("No hay registros de producción todavía.")
+                st.info("No hay registros de producción de operarios activos.")
 
             # 2. Reporte de Inventario General
             st.write("---")
@@ -530,12 +543,13 @@ elif rol in ["admin", "produccion"]:
             else:
                 st.info("El inventario está vacío.")
 
-            # 3. Reporte de Herramientas y Préstamos
+            # 3. Reporte de Herramientas y Préstamos (Solo operarios activos)
             st.write("---")
             st.write("### 🔨 3. Reporte de Herramientas y Préstamos")
             df_her_rep = ejecutar_consulta("""
                 SELECT c.id, c.fecha, c.operario, c.codigo_material, i.nombre as herramienta, c.cantidad, c.estado 
                 FROM consumos c 
+                JOIN usuarios u ON c.operario = u.nombre
                 LEFT JOIN inventario i ON c.codigo_material = i.codigo 
                 WHERE c.tipo ILIKE '%HERRAMIENTA%'
             """)
@@ -553,12 +567,16 @@ elif rol in ["admin", "produccion"]:
                     key="dl_her_excel"
                 )
             else:
-                st.info("No hay registros de herramientas o préstamos.")
+                st.info("No hay registros de herramientas o préstamos de operarios activos.")
 
-            # 4. Reporte de Entregas / Consumos de Insumos
+            # 4. Reporte de Entregas / Consumos de Insumos (Solo operarios activos)
             st.write("---")
             st.write("### 🚀 4. Reporte de Entregas y Salidas")
-            df_ent_rep = ejecutar_consulta("SELECT * FROM consumos ORDER BY id DESC")
+            df_ent_rep = ejecutar_consulta("""
+                SELECT c.* FROM consumos c 
+                JOIN usuarios u ON c.operario = u.nombre 
+                ORDER BY c.id DESC
+            """)
             if not df_ent_rep.empty:
                 st.dataframe(df_ent_rep.head(10), use_container_width=True)
                 buffer_ent = io.BytesIO()
@@ -573,7 +591,7 @@ elif rol in ["admin", "produccion"]:
                     key="dl_ent_excel"
                 )
             else:
-                st.info("No hay entregas registradas.")
+                st.info("No hay entregas registradas para operarios activos.")
 
         except Exception as e:
             st.error(f"Error al generar reportes: {e}")
@@ -607,7 +625,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Entregas: {e}")
 
-    # --- TAB 6: HERRAMIENTAS (Disponibles y Prestadas a Operarios) ---
+    # --- TAB 6: HERRAMIENTAS ---
     with tab_herramientas:
         st.subheader("🔨 Control de Herramientas y Préstamos a Operarios")
         try:
@@ -646,6 +664,7 @@ elif rol in ["admin", "produccion"]:
             prestados = ejecutar_consulta("""
                 SELECT c.id, c.fecha, c.operario, c.codigo_material, i.nombre as herramienta, c.cantidad, c.estado 
                 FROM consumos c 
+                JOIN usuarios u ON c.operario = u.nombre
                 LEFT JOIN inventario i ON c.codigo_material = i.codigo 
                 WHERE c.tipo ILIKE '%HERRAMIENTA%' AND c.estado = 'PRESTADO'
             """)
