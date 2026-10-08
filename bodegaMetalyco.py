@@ -1,3 +1,4 @@
+
 import streamlit as str_lib
 import streamlit as st
 import pandas as pd
@@ -194,20 +195,31 @@ if rol == "operario":
     
     with tab_prog:
         st.write("### Consulta tus Tareas Asignadas")
-        fecha_operario = st.date_input("Selecciona el día a consultar", value=datetime.now().date(), key="cal_op_dia")
+        filtro_fecha = st.radio("Ver tareas de:", ["Todas mis tareas pendientes", "Filtrar por fecha específica"], horizontal=True)
         
         try:
-            tareas = ejecutar_consulta(
-                """SELECT id, numero_oc, hora_inicio, hora_fin, maquina, referencia, actividad, meta_unidades, estado 
-                   FROM programacion_diaria 
-                   WHERE operario_nombre = %s AND fecha = %s AND estado NOT IN ('FINALIZADO', 'CANCELADO')
-                   ORDER BY id DESC""",
-                (st.session_state['nombre_usuario'], fecha_operario)
-            )
+            if filtro_fecha == "Filtrar por fecha específica":
+                fecha_operario = st.date_input("Selecciona el día a consultar", value=datetime.now().date(), key="cal_op_dia")
+                tareas = ejecutar_consulta(
+                    """SELECT id, fecha, numero_oc, hora_inicio, hora_fin, maquina, referencia, actividad, meta_unidades, estado 
+                       FROM programacion_diaria 
+                       WHERE operario_nombre = %s AND fecha = %s AND estado NOT IN ('FINALIZADO', 'CANCELADO')
+                       ORDER BY fecha ASC, id DESC""",
+                    (st.session_state['nombre_usuario'], fecha_operario)
+                )
+            else:
+                tareas = ejecutar_consulta(
+                    """SELECT id, fecha, numero_oc, hora_inicio, hora_fin, maquina, referencia, actividad, meta_unidades, estado 
+                       FROM programacion_diaria 
+                       WHERE operario_nombre = %s AND estado NOT IN ('FINALIZADO', 'CANCELADO')
+                       ORDER BY fecha ASC, id DESC""",
+                    (st.session_state['nombre_usuario'],)
+                )
+
             if not tareas.empty:
                 st.dataframe(tareas, use_container_width=True)
             else:
-                st.info(f"No tienes tareas pendientes para el día {fecha_operario}.")
+                st.info("No tienes tareas pendientes registradas.")
         except Exception as e:
             st.error(f"Error al cargar programación: {e}")
             
@@ -228,22 +240,24 @@ if rol == "operario":
     with tab_prod:
         st.write("### Registrar Producción, Descontar OC y Completar Tarea")
         try:
+            # Mostramos todas las tareas pendientes (hoy y días futuros para permitir adelantar)
             tareas_pendientes = ejecutar_consulta(
-                """SELECT id, numero_oc, actividad, maquina, referencia, meta_unidades FROM programacion_diaria 
-                   WHERE operario_nombre = %s AND fecha = CURRENT_DATE AND estado NOT IN ('FINALIZADO', 'CANCELADO')""",
+                """SELECT id, fecha, numero_oc, actividad, maquina, referencia, meta_unidades FROM programacion_diaria 
+                   WHERE operario_nombre = %s AND estado NOT IN ('FINALIZADO', 'CANCELADO')
+                   ORDER BY fecha ASC, id DESC""",
                 (st.session_state['nombre_usuario'],)
             )
             
             if tareas_pendientes.empty:
-                st.warning("No tienes tareas pendientes asignadas para hoy para reportar.")
+                st.warning("No tienes tareas pendientes asignadas para reportar.")
             else:
                 lista_opciones = [
-                    f"ID #{row['id']} | OC: {row['numero_oc']} - {row['actividad']} (Ref: {row['referencia']} | Meta: {row['meta_unidades']} u.)" 
+                    f"ID #{row['id']} | Fecha: {row['fecha']} | OC: {row['numero_oc']} - {row['actividad']} (Ref: {row['referencia']} | Meta: {row['meta_unidades']} u.)" 
                     for _, row in tareas_pendientes.iterrows()
                 ]
                 
                 with st.form("form_reporte_operario"):
-                    tarea_elegida_str = st.selectbox("Selecciona la Tarea a Registrar", lista_opciones)
+                    tarea_elegida_str = st.selectbox("Selecciona la Tarea a Registrar (Puedes adelantar tareas futuras)", lista_opciones)
                     
                     h_inicio = st.time_input("Hora de Inicio Real", time(7, 0))
                     h_fin = st.time_input("Hora de Finalización Real", time(17, 0))
@@ -259,7 +273,6 @@ if rol == "operario":
                         id_tarea = int(id_tarea_str)
                         row_t = tareas_pendientes[tareas_pendientes['id'] == id_tarea].iloc[0]
                         num_oc_asociada = row_t['numero_oc']
-                        meta_original = int(row_t['meta_unidades'])
                         
                         # Guardar en registro de producción con su OC
                         ejecutar_comando(
@@ -295,18 +308,18 @@ if rol == "operario":
                         st.rerun()
 
             st.write("---")
-            st.write("### Mis Reportes de HOY")
-            reportes_hoy = ejecutar_consulta(
+            st.write("### Mis Reportes Recientes")
+            reportes_recientes = ejecutar_consulta(
                 """SELECT numero_oc, hora_inicio_real, hora_fin_real, maquina, referencia, unidades_producidas, observaciones 
                    FROM registro_produccion 
-                   WHERE operario_nombre = %s AND fecha::date = CURRENT_DATE 
-                   ORDER BY id DESC""",
+                   WHERE operario_nombre = %s 
+                   ORDER BY id DESC LIMIT 10""",
                 (st.session_state['nombre_usuario'],)
             )
-            if not reportes_hoy.empty:
-                st.dataframe(reportes_hoy, use_container_width=True)
+            if not reportes_recientes.empty:
+                st.dataframe(reportes_recientes, use_container_width=True)
             else:
-                st.caption("Aún no has registrado producciones hoy.")
+                st.caption("Aún no tienes registros de producción.")
 
         except Exception as e:
             st.error(f"Error al cargar formulario de reporte: {e}")
