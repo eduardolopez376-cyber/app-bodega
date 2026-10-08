@@ -1,8 +1,3 @@
-¡Tienes toda la razón! Te pido mil disculpas por haberlos retirado de las pestañas principales. Vamos a colocarlos de nuevo de forma muy sutil, elegante y minimalista en las pestañas superiores, manteniendo los botones desplegables limpios y asegurándonos de que el texto molestado de double_arrow_right no vuelva a aparecer en ninguna parte.
-
-Aquí tienes el código completo y ajustado con el estilo Negro Industrial y Naranja (#f97316):
-
-Python
 import streamlit as str_lib
 import streamlit as st
 import pandas as pd
