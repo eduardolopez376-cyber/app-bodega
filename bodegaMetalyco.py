@@ -83,7 +83,6 @@ def inicializar_tablas_adicionales():
                 nombre VARCHAR(100) UNIQUE NOT NULL
             );
         """)
-        # Insertar clases por defecto si está vacía
         res = ejecutar_consulta("SELECT COUNT(*) as total FROM clases_inventario")
         if res.iloc[0]['total'] == 0:
             for c in ["HERRAMIENTA", "INSUMO", "EPP", "REPUESTO"]:
@@ -322,7 +321,7 @@ if rol == "operario":
 # VISTA COMPLETA PARA ADMINISTRADOR Y PRODUCCIÓN
 # ====================================================
 elif rol in ["admin", "produccion"]:
-    tab1, tab_eq, tab_ref, tab3, tab4, tab_herramientas, tab_cargue, tab_inv_gen, tab_clases, tab7 = st.tabs([
+    tab_prog, tab_eq, tab_ref, tab_rep, tab_ent, tab_herramientas, tab_cargue, tab_inv_gen, tab_clases, tab_usu = st.tabs([
         "📅 Programar", 
         "⚙️ Equipos",
         "📄 Referencias",
@@ -336,7 +335,7 @@ elif rol in ["admin", "produccion"]:
     ])
     
     # --- TAB 1: PROGRAMAR PLANTA ---
-    with tab1:
+    with tab_prog:
         st.subheader("📅 Programación de Planta por Fecha")
         
         fecha_seleccionada = st.date_input("Selecciona el día a consultar/programar", value=datetime.now().date(), key="cal_admin_dia")
@@ -478,40 +477,109 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Referencias: {e}")
 
-    # --- TAB 4: REPORTES EXCEL ---
-    with tab3:
-        st.subheader("📊 Historial General de Producción")
+    # --- TAB 4: REPORTES EXCEL INDEPENDIENTES ---
+    with tab_rep:
+        st.subheader("📊 Centro de Reportes y Descargas Independientes")
+        st.write("Selecciona y descarga en Excel exactamente el reporte que necesitas:")
+        
         try:
-            df_prod = ejecutar_consulta("SELECT * FROM registro_produccion ORDER BY fecha DESC")
-            
-            if not df_prod.empty:
-                st.dataframe(df_prod, use_container_width=True)
-                
-                buffer = io.BytesIO()
-                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                    df_prod.to_excel(writer, index=False, sheet_name='Produccion_Operarios')
-                
+            # 1. Reporte de Producción
+            st.write("---")
+            st.write("### 🏭 1. Reporte de Producción de Operarios")
+            df_prod_rep = ejecutar_consulta("SELECT * FROM registro_produccion ORDER BY fecha DESC")
+            if not df_prod_rep.empty:
+                st.dataframe(df_prod_rep.head(10), use_container_width=True)
+                buffer_prod = io.BytesIO()
+                with pd.ExcelWriter(buffer_prod, engine='openpyxl') as writer:
+                    df_prod_rep.to_excel(writer, index=False, sheet_name='Produccion')
                 st.download_button(
-                    label="📥 Descargar Reporte Histórico Completo en Excel",
-                    data=buffer.getvalue(),
+                    label="📥 Descargar Reporte de Producción en Excel",
+                    data=buffer_prod.getvalue(),
                     file_name=f"Reporte_Produccion_{datetime.now().strftime('%Y%m%d')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
+                    use_container_width=True,
+                    key="dl_prod_excel"
                 )
-
-                with st.expander("🗑️ Eliminar Reportes Viejos o No Deseados"):
-                    id_reporte_del = st.selectbox("Selecciona el ID del Reporte a Borrar", df_prod["id"].tolist(), key="del_reporte_id")
+                
+                with st.expander("🗑️ Eliminar Reportes de Producción Viejos"):
+                    id_reporte_del = st.selectbox("Selecciona el ID del Reporte a Borrar", df_prod_rep["id"].tolist(), key="del_reporte_id")
                     if st.button("Confirmar Eliminación de Reporte", type="primary", use_container_width=True):
                         ejecutar_comando("DELETE FROM registro_produccion WHERE id = %s", (id_reporte_del,))
                         st.success(f"Reporte ID #{id_reporte_del} eliminado correctamente.")
                         st.rerun()
             else:
-                st.info("Aún no hay reportes registrados.")
+                st.info("No hay registros de producción todavía.")
+
+            # 2. Reporte de Inventario General
+            st.write("---")
+            st.write("### 📦 2. Reporte de Inventario General")
+            df_inv_rep = ejecutar_consulta("SELECT codigo, nombre, tipo as clase, cantidad, stock_minimo FROM inventario")
+            if not df_inv_rep.empty:
+                st.dataframe(df_inv_rep, use_container_width=True)
+                buffer_inv = io.BytesIO()
+                with pd.ExcelWriter(buffer_inv, engine='openpyxl') as writer:
+                    df_inv_rep.to_excel(writer, index=False, sheet_name='Inventario_General')
+                st.download_button(
+                    label="📥 Descargar Reporte de Inventario en Excel",
+                    data=buffer_inv.getvalue(),
+                    file_name=f"Reporte_Inventario_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key="dl_inv_excel"
+                )
+            else:
+                st.info("El inventario está vacío.")
+
+            # 3. Reporte de Herramientas y Préstamos
+            st.write("---")
+            st.write("### 🔨 3. Reporte de Herramientas y Préstamos")
+            df_her_rep = ejecutar_consulta("""
+                SELECT c.id, c.fecha, c.operario, c.codigo_material, i.nombre as herramienta, c.cantidad, c.estado 
+                FROM consumos c 
+                LEFT JOIN inventario i ON c.codigo_material = i.codigo 
+                WHERE c.tipo ILIKE '%HERRAMIENTA%'
+            """)
+            if not df_her_rep.empty:
+                st.dataframe(df_her_rep, use_container_width=True)
+                buffer_her = io.BytesIO()
+                with pd.ExcelWriter(buffer_her, engine='openpyxl') as writer:
+                    df_her_rep.to_excel(writer, index=False, sheet_name='Herramientas_Prestamos')
+                st.download_button(
+                    label="📥 Descargar Reporte de Herramientas en Excel",
+                    data=buffer_her.getvalue(),
+                    file_name=f"Reporte_Herramientas_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key="dl_her_excel"
+                )
+            else:
+                st.info("No hay registros de herramientas o préstamos.")
+
+            # 4. Reporte de Entregas / Consumos de Insumos
+            st.write("---")
+            st.write("### 🚀 4. Reporte de Entregas y Salidas")
+            df_ent_rep = ejecutar_consulta("SELECT * FROM consumos ORDER BY id DESC")
+            if not df_ent_rep.empty:
+                st.dataframe(df_ent_rep.head(10), use_container_width=True)
+                buffer_ent = io.BytesIO()
+                with pd.ExcelWriter(buffer_ent, engine='openpyxl') as writer:
+                    df_ent_rep.to_excel(writer, index=False, sheet_name='Entregas_Salidas')
+                st.download_button(
+                    label="📥 Descargar Reporte de Entregas en Excel",
+                    data=buffer_ent.getvalue(),
+                    file_name=f"Reporte_Entregas_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key="dl_ent_excel"
+                )
+            else:
+                st.info("No hay entregas registradas.")
+
         except Exception as e:
-            st.error(f"Error en reportes: {e}")
+            st.error(f"Error al generar reportes: {e}")
 
     # --- TAB 5: ENTREGAS Y SALIDAS ---
-    with tab4:
+    with tab_ent:
         st.subheader("Registrar Salida de Insumo / Material")
         try:
             ops_df = ejecutar_consulta("SELECT nombre FROM usuarios WHERE rol = 'operario'")
@@ -540,7 +608,7 @@ elif rol in ["admin", "produccion"]:
             st.error(f"Error en Entregas: {e}")
 
     # --- TAB 6: HERRAMIENTAS (Disponibles y Prestadas a Operarios) ---
-    with tab5:
+    with tab_herramientas:
         st.subheader("🔨 Control de Herramientas y Préstamos a Operarios")
         try:
             herramientas_db = ejecutar_consulta("SELECT codigo, nombre, cantidad FROM inventario WHERE tipo ILIKE '%HERRAMIENTA%'")
@@ -593,7 +661,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Herramientas: {e}")
 
-    # --- TAB 7: CARGUE DE ÍTEMS (Unificado para Herramientas, Insumos, EPP, Repuestos) ---
+    # --- TAB 7: CARGUE DE ÍTEMS ---
     with tab_cargue:
         st.subheader("📥 Cargue Único de Ítems (Herramientas, Insumos, EPP, Repuestos)")
         try:
@@ -629,7 +697,6 @@ elif rol in ["admin", "produccion"]:
             inv_gen = ejecutar_consulta("SELECT codigo, nombre, tipo as clase, cantidad, stock_minimo FROM inventario")
             
             if not inv_gen.empty:
-                # Alertas para los que apliquen stock mínimo > 0
                 criticos = inv_gen[(inv_gen['stock_minimo'] > 0) & (inv_gen['cantidad'] <= inv_gen['stock_minimo'])]
                 if not criticos.empty:
                     st.warning("⚠️ **¡Alerta de Stock Bajo en los siguientes ítems!**")
@@ -650,7 +717,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Inventario General: {e}")
 
-    # --- TAB 9: GESTIÓN DE CLASES / CATEGORÍAS ---
+    # --- TAB 9: CLASES / CATEGORÍAS ---
     with tab_clases:
         st.subheader("🏷️ Administración de Clases y Categorías")
         st.write("Crea nuevas clases (como Neumática, Eléctricos, etc.) si tu operación lo requiere.")
@@ -673,7 +740,7 @@ elif rol in ["admin", "produccion"]:
             st.error(f"Error en Clases: {e}")
 
     # --- TAB 10: USUARIOS Y PERMISOS ---
-    with tab7:
+    with tab_usu:
         st.subheader("⚙️ Administrar Usuarios")
         try:
             users_df = ejecutar_consulta("SELECT id, username, nombre, rol FROM usuarios")
