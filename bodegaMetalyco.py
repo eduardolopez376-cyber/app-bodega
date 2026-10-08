@@ -405,23 +405,37 @@ if rol == "operario":
             st.error(f"Error al cargar formulario de tarea imprevista: {e}")
 
 # ====================================================
-# VISTA COMPLETA PARA ADMINISTRADOR Y PRODUCCIÓN
+# VISTA PARA ADMINISTRADOR Y PRODUCCIÓN (CONTROLADA POR ROL)
 # ====================================================
 elif rol in ["admin", "produccion"]:
-    tab_prog, tab_oc, tab_eq, tab_serv, tab_ref, tab_rep, tab_ent, tab_herramientas, tab_cargue, tab_inv_gen, tab_clases, tab_usu = st.tabs([
-        "📅 Programar", 
-        "📋 Órdenes Compra",
-        "⚙️ Máquinas",
-        "🛠️ Servicios",
-        "📄 Referencias",
-        "📊 Reportes", 
-        "🚀 Entregas", 
-        "🔨 Herramientas",
-        "📥 Cargue Ítems", 
-        "📦 Inventario",
-        "🏷️ Clases", 
-        "⚙️ Usuarios"
-    ])
+    
+    # Definir pestañas según el rol de manera limpia
+    if rol == "admin":
+        tab_prog, tab_oc, tab_eq, tab_serv, tab_ref, tab_rep, tab_ent, tab_herramientas, tab_cargue, tab_inv_gen, tab_clases, tab_usu = st.tabs([
+            "📅 Programar", 
+            "📋 Órdenes Compra",
+            "⚙️ Máquinas",
+            "🛠️ Servicios",
+            "📄 Referencias",
+            "📊 Reportes", 
+            "🚀 Entregas", 
+            "🔨 Herramientas",
+            "📥 Cargue Ítems", 
+            "📦 Inventario",
+            "🏷️ Clases", 
+            "⚙️ Usuarios"
+        ])
+    else: # Rol produccion (Sin máquinas, servicios, clases ni usuarios)
+        tab_prog, tab_oc, tab_ref, tab_rep, tab_ent, tab_herramientas, tab_cargue, tab_inv_gen = st.tabs([
+            "📅 Programar", 
+            "📋 Órdenes Compra",
+            "📄 Referencias",
+            "📊 Reportes", 
+            "🚀 Entregas", 
+            "🔨 Herramientas",
+            "📥 Cargue Ítems", 
+            "📦 Inventario"
+        ])
     
     # --- TAB 1: PROGRAMAR PLANTA ---
     with tab_prog:
@@ -566,71 +580,73 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Órdenes de Compra: {e}")
 
-    # --- TAB 3: MÁQUINAS ---
-    with tab_eq:
-        st.subheader("⚙️ Gestión de Máquinas (Propias y Alquiladas)")
-        try:
-            df_maqs = ejecutar_consulta("SELECT * FROM maquinas")
-            st.dataframe(df_maqs, use_container_width=True)
-            
-            with st.expander("Crear"):
-                with st.form("form_crear_maquina", clear_on_submit=True):
-                    m_nom = st.text_input("Nombre de la Máquina (Ej: Láser CNC 01)")
-                    m_tipo = st.text_input("Tipo (Ej: Corte, Dobladora)")
-                    m_prop = st.selectbox("Tipo de Propiedad", ["PROPIA", "ALQUILADA"])
-                    
-                    if st.form_submit_button("Guardar Máquina", type="primary", use_container_width=True):
-                        if m_nom.strip():
-                            ejecutar_comando("INSERT INTO maquinas (nombre, tipo, tipo_propiedad) VALUES (%s, %s, %s)", (m_nom, m_tipo, m_prop))
-                            st.success(f"Máquina '{m_nom}' ({m_prop}) agregada con éxito.")
-                            st.rerun()
-                        else:
-                            st.error("Escribe el nombre de la máquina.")
+    # --- TABS EXCLUSIVOS DE ADMIN (Máquinas, Servicios, Clases, Usuarios) ---
+    if rol == "admin":
+        # --- TAB: MÁQUINAS ---
+        with tab_eq:
+            st.subheader("⚙️ Gestión de Máquinas (Propias y Alquiladas)")
+            try:
+                df_maqs = ejecutar_consulta("SELECT * FROM maquinas")
+                st.dataframe(df_maqs, use_container_width=True)
+                
+                with st.expander("Crear"):
+                    with st.form("form_crear_maquina", clear_on_submit=True):
+                        m_nom = st.text_input("Nombre de la Máquina (Ej: Láser CNC 01)")
+                        m_tipo = st.text_input("Tipo (Ej: Corte, Dobladora)")
+                        m_prop = st.selectbox("Tipo de Propiedad", ["PROPIA", "ALQUILADA"])
+                        
+                        if st.form_submit_button("Guardar Máquina", type="primary", use_container_width=True):
+                            if m_nom.strip():
+                                ejecutar_comando("INSERT INTO maquinas (nombre, tipo, tipo_propiedad) VALUES (%s, %s, %s)", (m_nom, m_tipo, m_prop))
+                                st.success(f"Máquina '{m_nom}' ({m_prop}) agregada con éxito.")
+                                st.rerun()
+                            else:
+                                st.error("Escribe el nombre de la máquina.")
 
-            if not df_maqs.empty and rol == "admin":
-                with st.expander("Eliminar"):
-                    with st.form("form_del_maquina", clear_on_submit=True):
-                        m_del = st.selectbox("Máquina a Borrar", df_maqs["nombre"].tolist())
-                        if st.form_submit_button("Eliminar Máquina", type="primary", use_container_width=True):
-                            ejecutar_comando("DELETE FROM maquinas WHERE nombre = %s", (m_del,))
-                            st.success(f"Máquina '{m_del}' eliminada.")
-                            st.rerun()
-        except Exception as e:
-            st.error(f"Error en Máquinas: {e}")
+                if not df_maqs.empty:
+                    with st.expander("Eliminar"):
+                        with st.form("form_del_maquina", clear_on_submit=True):
+                            m_del = st.selectbox("Máquina a Borrar", df_maqs["nombre"].tolist())
+                            if st.form_submit_button("Eliminar Máquina", type="primary", use_container_width=True):
+                                ejecutar_comando("DELETE FROM maquinas WHERE nombre = %s", (m_del,))
+                                st.success(f"Máquina '{m_del}' eliminada.")
+                                st.rerun()
+            except Exception as e:
+                st.error(f"Error en Máquinas: {e}")
 
-    # --- TAB 4: SERVICIOS PRESTADOS ---
-    with tab_serv:
-        st.subheader("🛠️ Administración de Servicios Prestados")
-        try:
-            df_serv = ejecutar_consulta("SELECT * FROM servicios_prestados ORDER BY id DESC")
-            if not df_serv.empty:
-                st.dataframe(df_serv, use_container_width=True)
-            else:
-                st.info("No hay servicios creados.")
-            
-            with st.expander("Crear"):
-                with st.form("form_crear_serv", clear_on_submit=True):
-                    nom_serv = st.text_input("Nombre del Servicio (Ej: SOLDADURA TIG)")
-                    if st.form_submit_button("Guardar Servicio", type="primary", use_container_width=True):
-                        if nom_serv.strip():
-                            ejecutar_comando("INSERT INTO servicios_prestados (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (nom_serv.upper().strip(),))
-                            st.success(f"Servicio '{nom_serv.upper()}' agregado.")
-                            st.rerun()
-                        else:
-                            st.error("Escribe un nombre válido.")
+        # --- TAB: SERVICIOS PRESTADOS ---
+        with tab_serv:
+            st.subheader("🛠️ Administración de Servicios Prestados")
+            try:
+                df_serv = ejecutar_consulta("SELECT * FROM servicios_prestados ORDER BY id DESC")
+                if not df_serv.empty:
+                    st.dataframe(df_serv, use_container_width=True)
+                else:
+                    st.info("No hay servicios creados.")
+                
+                with st.expander("Crear"):
+                    with st.form("form_crear_serv", clear_on_submit=True):
+                        nom_serv = st.text_input("Nombre del Servicio (Ej: SOLDADURA TIG)")
+                        if st.form_submit_button("Guardar Servicio", type="primary", use_container_width=True):
+                            if nom_serv.strip():
+                                ejecutar_comando("INSERT INTO servicios_prestados (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (nom_serv.upper().strip(),))
+                                st.success(f"Servicio '{nom_serv.upper()}' agregado.")
+                                st.rerun()
+                            else:
+                                st.error("Escribe un nombre válido.")
 
-            if not df_serv.empty:
-                with st.expander("Eliminar"):
-                    with st.form("form_del_serv", clear_on_submit=True):
-                        serv_del = st.selectbox("Servicio a Borrar", df_serv["nombre"].tolist())
-                        if st.form_submit_button("Eliminar Servicio", type="primary", use_container_width=True):
-                            ejecutar_comando("DELETE FROM servicios_prestados WHERE nombre = %s", (serv_del,))
-                            st.success(f"Servicio '{serv_del}' eliminado definitivamente.")
-                            st.rerun()
-        except Exception as e:
-            st.error(f"Error en Servicios: {e}")
+                if not df_serv.empty:
+                    with st.expander("Eliminar"):
+                        with st.form("form_del_serv", clear_on_submit=True):
+                            serv_del = st.selectbox("Servicio a Borrar", df_serv["nombre"].tolist())
+                            if st.form_submit_button("Eliminar Servicio", type="primary", use_container_width=True):
+                                ejecutar_comando("DELETE FROM servicios_prestados WHERE nombre = %s", (serv_del,))
+                                st.success(f"Servicio '{serv_del}' eliminado definitivamente.")
+                                st.rerun()
+            except Exception as e:
+                st.error(f"Error en Servicios: {e}")
 
-    # --- TAB 5: REFERENCIAS ---
+    # --- TAB: REFERENCIAS (Disponible para Admin y Producción) ---
     with tab_ref:
         st.subheader("📄 Gestión de Referencias (Catálogo Base)")
         try:
@@ -660,7 +676,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Referencias: {e}")
 
-    # --- TAB 6: REPORTES ---
+    # --- TAB: REPORTES ---
     with tab_rep:
         st.subheader("📊 Centro de Reportes y Exportación a Excel")
         try:
@@ -745,13 +761,14 @@ elif rol in ["admin", "produccion"]:
                     key="dl_alq_excel"
                 )
                 
-                with st.expander("🗑️ Eliminar Registro de Máquina Alquilada"):
-                    with st.form("form_del_alq", clear_on_submit=True):
-                        id_alq_del = st.selectbox("Selecciona el ID del registro a borrar", df_alq_rep["id"].tolist())
-                        if st.form_submit_button("Confirmar Eliminación", type="primary", use_container_width=True):
-                            ejecutar_comando("DELETE FROM registro_produccion WHERE id = %s", (id_alq_del,))
-                            st.success(f"Registro de máquina alquilada ID #{id_alq_del} eliminado con éxito.")
-                            st.rerun()
+                if rol == "admin":
+                    with st.expander("🗑️ Eliminar Registro de Máquina Alquilada"):
+                        with st.form("form_del_alq", clear_on_submit=True):
+                            id_alq_del = st.selectbox("Selecciona el ID del registro a borrar", df_alq_rep["id"].tolist())
+                            if st.form_submit_button("Confirmar Eliminación", type="primary", use_container_width=True):
+                                ejecutar_comando("DELETE FROM registro_produccion WHERE id = %s", (id_alq_del,))
+                                st.success(f"Registro de máquina alquilada ID #{id_alq_del} eliminado con éxito.")
+                                st.rerun()
             else:
                 st.info(f"No hay registros para el filtro seleccionado: {tipo_periodo}.")
 
@@ -774,7 +791,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error al generar reportes: {e}")
 
-    # --- TAB 7: ENTREGAS ---
+    # --- TAB: ENTREGAS ---
     with tab_ent:
         st.subheader("🚀 Registrar Salida de Insumo / Material a Operario")
         try:
@@ -804,7 +821,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en entregas: {e}")
 
-    # --- TAB 8: HERRAMIENTAS ---
+    # --- TAB: HERRAMIENTAS ---
     with tab_herramientas:
         st.subheader("🔨 Control de Préstamos de Herramientas")
         try:
@@ -857,7 +874,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en herramientas: {e}")
 
-    # --- TAB 9: CARGUE ÍTEMS ---
+    # --- TAB: CARGUE ÍTEMS ---
     with tab_cargue:
         st.subheader("📥 Cargue Único de Ítems al Inventario")
         try:
@@ -887,7 +904,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en cargue: {e}")
 
-    # --- TAB 10: INVENTARIO GENERAL ---
+    # --- TAB: INVENTARIO GENERAL ---
     with tab_inv_gen:
         st.subheader("📦 Inventario General de la Planta")
         try:
@@ -907,54 +924,56 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en inventario: {e}")
 
-    # --- TAB 11: CLASES (CORREGIDO CON ELIMINACIÓN) ---
-    with tab_clases:
-        st.subheader("🏷️ Administración de Clases de Inventario")
-        try:
-            clases_actuales = ejecutar_consulta("SELECT * FROM clases_inventario ORDER BY id DESC")
-            if not clases_actuales.empty:
-                st.dataframe(clases_actuales, use_container_width=True)
-            else:
-                st.info("No hay clases de inventario registradas.")
-            
-            with st.expander("Crear"):
-                with st.form("form_crear_clase", clear_on_submit=True):
-                    nueva_clase = st.text_input("Nombre de la Clase (Ej: HERRAMIENTA, MATERIA PRIMA)")
-                    if st.form_submit_button("Guardar Clase", type="primary", use_container_width=True):
-                        if nueva_clase.strip():
-                            ejecutar_comando("INSERT INTO clases_inventario (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (nueva_clase.upper().strip(),))
-                            st.success(f"Clase '{nueva_clase.upper()}' creada con éxito.")
-                            st.rerun()
-                        else:
-                            st.error("Escribe un nombre válido.")
+    # --- TABS EXCLUSIVOS DE ADMIN (Clases, Usuarios) ---
+    if rol == "admin":
+        # --- TAB: CLASES ---
+        with tab_clases:
+            st.subheader("🏷️ Administración de Clases de Inventario")
+            try:
+                clases_actuales = ejecutar_consulta("SELECT * FROM clases_inventario ORDER BY id DESC")
+                if not clases_actuales.empty:
+                    st.dataframe(clases_actuales, use_container_width=True)
+                else:
+                    st.info("No hay clases de inventario registradas.")
+                
+                with st.expander("Crear"):
+                    with st.form("form_crear_clase", clear_on_submit=True):
+                        nueva_clase = st.text_input("Nombre de la Clase (Ej: HERRAMIENTA, MATERIA PRIMA)")
+                        if st.form_submit_button("Guardar Clase", type="primary", use_container_width=True):
+                            if nueva_clase.strip():
+                                ejecutar_comando("INSERT INTO clases_inventario (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (nueva_clase.upper().strip(),))
+                                st.success(f"Clase '{nueva_clase.upper()}' creada con éxito.")
+                                st.rerun()
+                            else:
+                                st.error("Escribe un nombre válido.")
 
-            if not clases_actuales.empty:
-                with st.expander("Eliminar"):
-                    with st.form("form_del_clase", clear_on_submit=True):
-                        clase_del = st.selectbox("Selecciona la Clase a Borrar", clases_actuales["nombre"].tolist())
-                        if st.form_submit_button("Eliminar Clase", type="primary", use_container_width=True):
-                            ejecutar_comando("DELETE FROM clases_inventario WHERE nombre = %s", (clase_del,))
-                            st.success(f"Clase '{clase_del}' eliminada definitivamente.")
-                            st.rerun()
-        except Exception as e:
-            st.error(f"Error en clases: {e}")
+                if not clases_actuales.empty:
+                    with st.expander("Eliminar"):
+                        with st.form("form_del_clase", clear_on_submit=True):
+                            clase_del = st.selectbox("Selecciona la Clase a Borrar", clases_actuales["nombre"].tolist())
+                            if st.form_submit_button("Eliminar Clase", type="primary", use_container_width=True):
+                                ejecutar_comando("DELETE FROM clases_inventario WHERE nombre = %s", (clase_del,))
+                                st.success(f"Clase '{clase_del}' eliminada definitivamente.")
+                                st.rerun()
+            except Exception as e:
+                st.error(f"Error en clases: {e}")
 
-    # --- TAB 12: USUARIOS ---
-    with tab_usu:
-        st.subheader("⚙️ Gestión de Usuarios del Sistema")
-        try:
-            users_df = ejecutar_consulta("SELECT id, username, nombre, rol FROM usuarios")
-            st.dataframe(users_df, use_container_width=True)
-            
-            with st.expander("Crear"):
-                with st.form("form_crear_usuario", clear_on_submit=True):
-                    u_user = st.text_input("Usuario (Login)")
-                    u_pass = st.text_input("Contraseña", type="password")
-                    u_nom = st.text_input("Nombre Completo")
-                    u_rol = st.selectbox("Rol en Planta", ["operario", "produccion", "admin"])
-                    if st.form_submit_button("Guardar Usuario", type="primary", use_container_width=True):
-                        ejecutar_comando("INSERT INTO usuarios (username, password, nombre, rol) VALUES (%s, %s, %s, %s)", (u_user, u_pass, u_nom, u_rol))
-                        st.success(f"Usuario '{u_nom}' creado con el rol '{u_rol}'.")
-                        st.rerun()
-        except Exception as e:
-            st.error(f"Error en usuarios: {e}")
+        # --- TAB: USUARIOS ---
+        with tab_usu:
+            st.subheader("⚙️ Gestión de Usuarios del Sistema")
+            try:
+                users_df = ejecutar_consulta("SELECT id, username, nombre, rol FROM usuarios")
+                st.dataframe(users_df, use_container_width=True)
+                
+                with st.expander("Crear"):
+                    with st.form("form_crear_usuario", clear_on_submit=True):
+                        u_user = st.text_input("Usuario (Login)")
+                        u_pass = st.text_input("Contraseña", type="password")
+                        u_nom = st.text_input("Nombre Completo")
+                        u_rol = st.selectbox("Rol en Planta", ["operario", "produccion", "admin"])
+                        if st.form_submit_button("Guardar Usuario", type="primary", use_container_width=True):
+                            ejecutar_comando("INSERT INTO usuarios (username, password, nombre, rol) VALUES (%s, %s, %s, %s)", (u_user, u_pass, u_nom, u_rol))
+                            st.success(f"Usuario '{u_nom}' creado con el rol '{u_rol}'.")
+                            st.rerun()
+            except Exception as e:
+                st.error(f"Error en usuarios: {e}")
