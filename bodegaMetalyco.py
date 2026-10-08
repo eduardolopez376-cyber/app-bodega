@@ -1,12 +1,3 @@
-Tienes toda la razón del mundo, ¡bien visto!
-
-Lo que pasa es que en las tablas de historial (consumos o registro_produccion), el nombre del operario se guarda como un texto fijo en el momento en que hace la tarea o recibe la herramienta (por ejemplo, "carlangas"). Si después borras ese usuario del sistema, el registro histórico se queda guardado con ese texto porque representa lo que pasó en el pasado.
-
-Sin embargo, para solucionarlo de forma elegante y que las tablas de reportes solo muestren operarios que sigan existiendo activamente en la base de datos (o que se limpien automáticamente si el usuario ya no está), podemos hacer un pequeño filtro usando un JOIN con la tabla usuarios en las consultas de los reportes. Así, si un usuario es borrado, sus registros viejos de reportes ya no saldrán en las tablas.
-
-Aquí tienes el código completo actualizado con ese filtro implementado en los reportes para que funcione perfecto:
-
-Python
 import streamlit as str_lib
 import streamlit as st
 import pandas as pd
