@@ -36,7 +36,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Buscar imagen disponible en el directorio
-NOMBRES_LOGO = ["WhatsApp Image 2026-10-06 at 6.50.00 PM.jpeg", "logo.jpeg", "logo.png", "logo.jpg"]
+NOMBRES_LOGO = ["Gemini_Generated_Image_dxxfwxdxxfwxdxxf.jpg", "logo.jpeg", "logo.png", "logo.jpg"]
 LOGO_PATH = None
 for nombre in NOMBRES_LOGO:
     if os.path.exists(nombre):
