@@ -73,7 +73,7 @@ def ejecutar_comando(query, params=None):
     cur.close()
     conn.close()
 
-# Inicializar y actualizar tablas del sistema
+# Inicializar y actualizar tablas del sistema (Sin autorecreación forzosa para permitir borrados libres en pruebas)
 def inicializar_tablas_sistema():
     try:
         # Tabla de Servicios Prestados
@@ -83,9 +83,6 @@ def inicializar_tablas_sistema():
                 nombre VARCHAR(100) UNIQUE NOT NULL
             );
         """)
-        servicios_iniciales = ["TROQUELADO", "CONFORMADO", "CORTE LASER", "PINTURA", "FABRICACION DE ESTRUCTURAS METALICAS"]
-        for s in servicios_iniciales:
-            ejecutar_comando("INSERT INTO servicios_prestados (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (s,))
 
         # Tabla de Clases de Inventario
         ejecutar_comando("""
@@ -512,7 +509,7 @@ elif rol in ["admin", "produccion"]:
             lista_refs = refs_db['codigo'].tolist() if not refs_db.empty else []
             
             serv_db = ejecutar_consulta("SELECT nombre FROM servicios_prestados")
-            lista_servicios = serv_db['nombre'].tolist() if not serv_db.empty else ["TROQUELADO", "CORTE LASER"]
+            lista_servicios = serv_db['nombre'].tolist() if not serv_db.empty else []
             
             if not lista_refs:
                 st.warning("⚠️ Primero debes crear referencias en la pestaña 'Referencias' antes de crear Órdenes de Compra.")
@@ -522,7 +519,7 @@ elif rol in ["admin", "produccion"]:
                         num_oc = st.text_input("Número de Orden de Compra (Ej: OC-9021)")
                         cliente = st.text_input("Nombre del Cliente (Ej: Metalmecánica S.A.S)")
                         ref_oc = st.selectbox("Referencia Base", lista_refs)
-                        servicio_oc = st.selectbox("Servicio Prestado", lista_servicios)
+                        servicio_oc = st.selectbox("Servicio Prestado", lista_servicios if lista_servicios else ["NINGUNO"])
                         
                         requiere_uni = st.checkbox("¿Este servicio requiere control por unidades?", value=True)
                         meta_oc = st.number_input("Cantidad Total Pedida (Meta)", min_value=0, value=1000)
@@ -624,13 +621,13 @@ elif rol in ["admin", "produccion"]:
                         else:
                             st.error("Escribe un nombre válido.")
 
-            if not df_serv.empty and rol == "admin":
+            if not df_serv.empty:
                 with st.expander("Eliminar"):
                     with st.form("form_del_serv", clear_on_submit=True):
                         serv_del = st.selectbox("Servicio a Borrar", df_serv["nombre"].tolist())
                         if st.form_submit_button("Eliminar Servicio", type="primary", use_container_width=True):
                             ejecutar_comando("DELETE FROM servicios_prestados WHERE nombre = %s", (serv_del,))
-                            st.success(f"Servicio '{serv_del}' eliminado.")
+                            st.success(f"Servicio '{serv_del}' eliminado definitivamente.")
                             st.rerun()
         except Exception as e:
             st.error(f"Error en Servicios: {e}")
@@ -689,7 +686,7 @@ elif rol in ["admin", "produccion"]:
 
             st.write("---")
             st.write("#### 2. Reporte de Producción Detallado")
-            # IMPORTANTE: Se usa INNER JOIN (JOIN) para que si la orden de compra fue eliminada, el reporte de producción la oculte de inmediato
+            # INNER JOIN estricto para ocultar reportes de OCs eliminadas
             df_prod_rep = ejecutar_consulta("""
                 SELECT r.id, r.fecha, r.numero_oc, r.operario_nombre, r.maquina, m.tipo_propiedad as tipo_maquina, 
                        r.referencia, r.hora_inicio_real, r.hora_fin_real, r.unidades_producidas, r.observaciones 
@@ -721,7 +718,6 @@ elif rol in ["admin", "produccion"]:
             
             tipo_periodo = st.selectbox("Selecciona Periodo de Reporte", ["Diario (Hoy)", "Semanal (Últimos 7 días)", "Mensual (Mes Actual)", "Histórico Completo"], key="sel_periodo_alq")
             
-            # También protegemos este reporte con un JOIN estricto a las órdenes de compra para pruebas
             query_alq = """
                 SELECT r.id, r.fecha, r.numero_oc, r.maquina, r.operario_nombre, r.horas_trabajadas, r.unidades_producidas, r.observaciones 
                 FROM registro_produccion r 
