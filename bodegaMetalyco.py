@@ -74,8 +74,23 @@ def ejecutar_comando(query, params=None):
     cur.close()
     conn.close()
 
-def inicializar_tabla_clases():
+# Inicializar tablas para Órdenes de Compra y Referencias
+def inicializar_tablas_avanzadas():
     try:
+        ejecutar_comando("""
+            CREATE TABLE IF NOT EXISTS ordenes_compra (
+                id SERIAL PRIMARY KEY,
+                numero_oc VARCHAR(100) NOT NULL,
+                cliente VARCHAR(150) NOT NULL,
+                referencia VARCHAR(100) NOT NULL,
+                servicio VARCHAR(100) NOT NULL,
+                requiere_unidades BOOLEAN DEFAULT TRUE,
+                meta_unidades INT DEFAULT 0,
+                unidades_entregadas INT DEFAULT 0,
+                estado VARCHAR(50) DEFAULT 'PENDIENTE',
+                fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
         ejecutar_comando("""
             CREATE TABLE IF NOT EXISTS clases_inventario (
                 id SERIAL PRIMARY KEY,
@@ -85,7 +100,7 @@ def inicializar_tabla_clases():
     except Exception:
         pass
 
-inicializar_tabla_clases()
+inicializar_tablas_avanzadas()
 
 # ----------------------------------------------------
 # INICIALIZACIÓN BLINDADA DEL ESTADO DE SESIÓN
@@ -273,7 +288,6 @@ if rol == "operario":
 
     with tab_nueva:
         st.subheader("➕ Registrar e Iniciar Tarea Imprevista No Programada")
-        st.write("Si surgieron imprevistos y tuviste que realizar una tarea no programada hoy, repórtala aquí directamente:")
         try:
             maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
             refs = ejecutar_consulta("SELECT codigo FROM referencias")['codigo'].tolist()
@@ -316,8 +330,9 @@ if rol == "operario":
 # VISTA COMPLETA PARA ADMINISTRADOR Y PRODUCCIÓN
 # ====================================================
 elif rol in ["admin", "produccion"]:
-    tab_prog, tab_eq, tab_ref, tab_rep, tab_ent, tab_herramientas, tab_cargue, tab_inv_gen, tab_clases, tab_usu = st.tabs([
+    tab_prog, tab_oc, tab_eq, tab_ref, tab_rep, tab_ent, tab_herramientas, tab_cargue, tab_inv_gen, tab_clases, tab_usu = st.tabs([
         "📅 Programar", 
+        "📋 Órdenes de Compra",
         "⚙️ Equipos",
         "📄 Referencias",
         "📊 Reportes", 
@@ -422,7 +437,102 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Programación: {e}")
 
-    # --- TAB 2: EQUIPOS Y MÁQUINAS ---
+    # --- TAB 2: ÓRDENES DE COMPRA Y SERVICIOS ---
+    with tab_oc:
+        st.subheader("📋 Gestión de Órdenes de Compra (OC), Clientes y Saldos")
+        try:
+            refs_db = ejecutar_consulta("SELECT codigo FROM referencias")
+            lista_refs = refs_db['codigo'].tolist() if not refs_db.empty else []
+            
+            if not lista_refs:
+                st.warning("⚠️ Primero debes crear referencias en la pestaña 'Referencias' para poder asociarlas a las Órdenes de Compra.")
+            else:
+                # Formulario para registrar OC ligada a una referencia y cliente
+                with st.expander("➕ Registrar Nueva Orden de Compra (Asociar Referencia a Cliente)", expanded=True):
+                    with st.form("form_crear_oc", clear_on_submit=True):
+                        num_oc = st.text_input("Número de Orden de Compra (Ej: OC-9021)")
+                        cliente = st.text_input("Nombre del Cliente (Ej: Metalmecánica S.A.S)")
+                        ref_oc = st.selectbox("Selecciona la Referencia Base", lista_refs)
+                        
+                        servicio = st.selectbox("Servicio Ofrecido", [
+                            "TROQUELADO", 
+                            "CONFORMADO", 
+                            "CORTE LASER", 
+                            "PINTURA", 
+                            "FABRICACION DE ESTRUCTURAS METALICAS", 
+                            "OTRO"
+                        ])
+                        
+                        requiere_uni = st.checkbox("¿Este servicio requiere control por unidades?", value=True)
+                        meta_oc = st.number_input("Cantidad Pedida para esta OC (Meta de Unidades)", min_value=0, value=1000)
+                        
+                        btn_guardar_oc = st.form_submit_button("Guardar Orden de Compra", type="primary", use_container_width=True)
+                        
+                        if btn_guardar_oc:
+                            if num_oc.strip() and cliente.strip():
+                                meta_final = meta_oc if requiere_uni else 0
+                                ejecutar_comando(
+                                    """INSERT INTO ordenes_compra 
+                                    (numero_oc, cliente, referencia, servicio, requiere_unidades, meta_unidades, unidades_entregadas, estado) 
+                                    VALUES (%s, %s, %s, %s, %s, %s, 0, 'PENDIENTE')""",
+                                    (num_oc.upper().strip(), cliente.strip(), ref_oc, servicio, requiere_uni, meta_final)
+                                )
+                                st.success(f"Orden de Compra #{num_oc} para el cliente '{cliente}' asociada a la referencia '{ref_oc}' registrada con éxito.")
+                                st.rerun()
+                            else:
+                                st.error("Por favor completa el número de OC y el cliente.")
+
+            st.write("---")
+            st.write("### 📊 Seguimiento de Órdenes de Compra y Saldos Pendientes")
+            df_oc = ejecutar_consulta("SELECT * FROM ordenes_compra ORDER BY id DESC")
+            
+            if not df_oc.empty:
+                # Calcular saldo pendiente en vivo sin perder la meta original
+                df_oc['saldo_pendiente'] = df_oc.apply(
+                    lambda row: row['meta_unidades'] - row['unidades_entregadas'] if row['requiere_unidades'] else 'N/A (Servicio Libre)', 
+                    axis=1
+                )
+                st.dataframe(df_oc, use_container_width=True)
+
+                # Abonar producción a una OC específica
+                with st.expander("⚙️ Abonar Producción a una Orden de Compra (Descontar Saldo)"):
+                    with st.form("form_abonar_oc", clear_on_submit=True):
+                        ocs_pendientes = df_oc[df_oc['estado'] != 'COMPLETADO']['numero_oc'].tolist()
+                        if ocs_pendientes:
+                            oc_elegida = st.selectbox("Selecciona el Número de OC", ocs_pendientes)
+                            unidades_hechas = st.number_input("Unidades Producidas / Entregadas", min_value=1, value=500)
+                            btn_abonar = st.form_submit_button("Abonar y Actualizar Saldo Pendiente", type="primary", use_container_width=True)
+                            
+                            if btn_abonar:
+                                row_oc = df_oc[df_oc['numero_oc'] == oc_elegida].iloc[0]
+                                nuevo_entregado = int(row_oc['unidades_entregadas']) + unidades_hechas
+                                meta_meta = int(row_oc['meta_unidades'])
+                                
+                                nuevo_estado = 'COMPLETADO' if row_oc['requiere_unidades'] and nuevo_entregado >= meta_meta else 'EN PROCESO'
+                                
+                                ejecutar_comando(
+                                    "UPDATE ordenes_compra SET unidades_entregadas = %s, estado = %s WHERE numero_oc = %s",
+                                    (nuevo_entregado, nuevo_estado, oc_elegida)
+                                )
+                                st.success(f"¡Abonadas {unidades_hechas} unidades a la OC #{oc_elegida}! El saldo pendiente se ha actualizado.")
+                                st.rerun()
+                        else:
+                            st.info("No hay órdenes de compra pendientes por procesar.")
+
+                with st.expander("🗑️ Eliminar Orden de Compra"):
+                    with st.form("form_del_oc", clear_on_submit=True):
+                        oc_del = st.selectbox("Selecciona la OC a Borrar", df_oc["numero_oc"].tolist())
+                        if st.form_submit_button("Confirmar Eliminación de OC", type="primary", use_container_width=True):
+                            ejecutar_comando("DELETE FROM ordenes_compra WHERE numero_oc = %s", (oc_del,))
+                            st.success(f"Orden de Compra #{oc_del} eliminada.")
+                            st.rerun()
+            else:
+                st.info("No hay órdenes de compra registradas.")
+
+        except Exception as e:
+            st.error(f"Error en Órdenes de Compra: {e}")
+
+    # --- TAB 3: EQUIPOS Y MÁQUINAS ---
     with tab_eq:
         st.subheader("⚙️ Gestión de Máquinas y Equipos")
         try:
@@ -449,20 +559,21 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Máquinas: {e}")
 
-    # --- TAB 3: REFERENCIAS ---
+    # --- TAB 4: REFERENCIAS (Catálogo Base) ---
     with tab_ref:
-        st.subheader("📄 Gestión de Referencias de Productos")
+        st.subheader("📄 Gestión de Referencias de Productos (Catálogo General)")
+        st.write("Aquí creas las referencias base. Después, en la pestaña **'Órdenes de Compra'**, podrás asignar esas mismas referencias a los diferentes clientes cada vez que te envíen pedidos nuevos.")
         try:
             df_refs = ejecutar_consulta("SELECT * FROM referencias")
             st.dataframe(df_refs, use_container_width=True)
             
-            with st.expander("➕ Crear Nueva Referencia"):
+            with st.expander("➕ Crear Nueva Referencia Base"):
                 with st.form("form_crear_ref", clear_on_submit=True):
-                    r_cod = st.text_input("Código Referencia")
-                    r_desc = st.text_input("Descripción")
+                    r_cod = st.text_input("Código Referencia (Ej: REF-001)")
+                    r_desc = st.text_input("Descripción del Producto")
                     if st.form_submit_button("Guardar Referencia", type="primary", use_container_width=True):
                         ejecutar_comando("INSERT INTO referencias (codigo, descripcion) VALUES (%s, %s)", (r_cod, r_desc))
-                        st.success("Referencia agregada.")
+                        st.success("Referencia agregada al catálogo.")
                         st.rerun()
 
             if not df_refs.empty and rol == "admin":
@@ -476,14 +587,31 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Referencias: {e}")
 
-    # --- TAB 4: REPORTES EXCEL INDEPENDIENTES ---
+    # --- TAB 5: REPORTES EXCEL INDEPENDIENTES ---
     with tab_rep:
         st.subheader("📊 Centro de Reportes y Descargas Independientes")
-        st.write("Selecciona y descarga en Excel exactamente el reporte que necesitas (solo incluye operarios activos en el sistema):")
-        
         try:
             st.write("---")
-            st.write("### 🏭 1. Reporte de Producción de Operarios")
+            st.write("### 📋 1. Reporte de Órdenes de Compra y Saldos")
+            df_oc_rep = ejecutar_consulta("SELECT * FROM ordenes_compra ORDER BY id DESC")
+            if not df_oc_rep.empty:
+                st.dataframe(df_oc_rep, use_container_width=True)
+                buffer_oc = io.BytesIO()
+                with pd.ExcelWriter(buffer_oc, engine='openpyxl') as writer:
+                    df_oc_rep.to_excel(writer, index=False, sheet_name='Ordenes_Compra')
+                st.download_button(
+                    label="📥 Descargar Reporte de Órdenes de Compra en Excel",
+                    data=buffer_oc.getvalue(),
+                    file_name=f"Reporte_OC_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key="dl_oc_excel"
+                )
+            else:
+                st.info("No hay órdenes de compra registradas.")
+
+            st.write("---")
+            st.write("### 🏭 2. Reporte de Producción de Operarios")
             df_prod_rep = ejecutar_consulta("""
                 SELECT r.* FROM registro_produccion r 
                 JOIN usuarios u ON r.operario_nombre = u.nombre 
@@ -502,18 +630,11 @@ elif rol in ["admin", "produccion"]:
                     use_container_width=True,
                     key="dl_prod_excel"
                 )
-                
-                with st.expander("🗑️ Eliminar Reportes de Producción Viejos"):
-                    id_reporte_del = st.selectbox("Selecciona el ID del Reporte a Borrar", df_prod_rep["id"].tolist(), key="del_reporte_id")
-                    if st.button("Confirmar Eliminación de Reporte", type="primary", use_container_width=True):
-                        ejecutar_comando("DELETE FROM registro_produccion WHERE id = %s", (id_reporte_del,))
-                        st.success(f"Reporte ID #{id_reporte_del} eliminado correctamente.")
-                        st.rerun()
             else:
-                st.info("No hay registros de producción de operarios activos.")
+                st.info("No hay registros de producción.")
 
             st.write("---")
-            st.write("### 📦 2. Reporte de Inventario General")
+            st.write("### 📦 3. Reporte de Inventario General")
             df_inv_rep = ejecutar_consulta("SELECT codigo, nombre, tipo as clase, cantidad, stock_minimo FROM inventario")
             if not df_inv_rep.empty:
                 st.dataframe(df_inv_rep, use_container_width=True)
@@ -532,7 +653,7 @@ elif rol in ["admin", "produccion"]:
                 st.info("El inventario está vacío.")
 
             st.write("---")
-            st.write("### 🔨 3. Reporte de Herramientas y Préstamos")
+            st.write("### 🔨 4. Reporte de Herramientas y Préstamos")
             df_her_rep = ejecutar_consulta("""
                 SELECT c.id, c.fecha, c.operario, c.codigo_material, i.nombre as herramienta, c.cantidad, c.estado 
                 FROM consumos c 
@@ -554,35 +675,12 @@ elif rol in ["admin", "produccion"]:
                     key="dl_her_excel"
                 )
             else:
-                st.info("No hay registros de herramientas o préstamos de operarios activos.")
-
-            st.write("---")
-            st.write("### 🚀 4. Reporte de Entregas y Salidas")
-            df_ent_rep = ejecutar_consulta("""
-                SELECT c.* FROM consumos c 
-                JOIN usuarios u ON c.operario = u.nombre 
-                ORDER BY c.id DESC
-            """)
-            if not df_ent_rep.empty:
-                st.dataframe(df_ent_rep.head(10), use_container_width=True)
-                buffer_ent = io.BytesIO()
-                with pd.ExcelWriter(buffer_ent, engine='openpyxl') as writer:
-                    df_ent_rep.to_excel(writer, index=False, sheet_name='Entregas_Salidas')
-                st.download_button(
-                    label="📥 Descargar Reporte de Entregas en Excel",
-                    data=buffer_ent.getvalue(),
-                    file_name=f"Reporte_Entregas_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    key="dl_ent_excel"
-                )
-            else:
-                st.info("No hay entregas registradas para operarios activos.")
+                st.info("No hay registros de herramientas.")
 
         except Exception as e:
             st.error(f"Error al generar reportes: {e}")
 
-    # --- TAB 5: ENTREGAS Y SALIDAS ---
+    # --- TAB 6: ENTREGAS Y SALIDAS ---
     with tab_ent:
         st.subheader("Registrar Salida de Insumo / Material")
         try:
@@ -612,7 +710,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Entregas: {e}")
 
-    # --- TAB 6: HERRAMIENTAS ---
+    # --- TAB 7: HERRAMIENTAS ---
     with tab_herramientas:
         st.subheader("🔨 Control de Herramientas y Préstamos a Operarios")
         try:
@@ -667,7 +765,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Herramientas: {e}")
 
-    # --- TAB 7: CARGUE DE ÍTEMS ---
+    # --- TAB 8: CARGUE DE ÍTEMS ---
     with tab_cargue:
         st.subheader("📥 Cargue Único de Ítems (Herramientas, Insumos, EPP, Repuestos)")
         try:
@@ -699,7 +797,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Cargue de Ítems: {e}")
 
-    # --- TAB 8: INVENTARIO GENERAL ---
+    # --- TAB 9: INVENTARIO GENERAL ---
     with tab_inv_gen:
         st.subheader("📦 Inventario General de la Empresa")
         try:
@@ -727,7 +825,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Inventario General: {e}")
 
-    # --- TAB 9: CLASES / CATEGORÍAS ---
+    # --- TAB 10: CLASES / CATEGORÍAS ---
     with tab_clases:
         st.subheader("🏷️ Administración de Clases y Categorías")
         try:
@@ -763,7 +861,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Clases: {e}")
 
-    # --- TAB 10: USUARIOS Y PERMISOS ---
+    # --- TAB 11: USUARIOS Y PERMISOS ---
     with tab_usu:
         st.subheader("⚙️ Administrar Usuarios")
         try:
