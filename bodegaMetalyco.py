@@ -8,103 +8,30 @@ from datetime import datetime, time
 
 # Configuración de página con diseño ajustado a móviles
 st.set_page_config(
-    page_title="Industrias Metal&Co",
+    page_title="Control de Producción - Metal&Co",
     page_icon="⚙️",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# ----------------------------------------------------
-# ESTILOS CSS ORIGINALES
-# ----------------------------------------------------
+# Estilos CSS optimizados
 st.markdown("""
     <style>
-        /* Fondo general negro industrial */
         .block-container {
-            padding-top: 2rem;
-            padding-bottom: 3rem;
-            padding-left: 1.5rem;
-            padding-right: 1.5rem;
-            background-color: #0b0b0b;
-            color: #f3f4f6;
+            padding-top: 1.5rem;
+            padding-bottom: 2rem;
+            padding-left: 1rem;
+            padding-right: 1rem;
         }
-        
-        /* Tipografía limpia */
-        h1, h2, h3, h4, h5, h6, p, label, span {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-        }
-
-        /* Botones principales en color Naranja Industrial */
         .stButton>button {
             width: 100%;
-            height: 3.2rem;
+            height: 3rem;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border-radius: 8px;
+        }
+        input {
             font-size: 1rem !important;
-            font-weight: 600 !important;
-            border-radius: 8px !important;
-            border: none !important;
-            background: linear-gradient(135deg, #f97316 0%, #ea580c 100%) !important;
-            color: white !important;
-            box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
-            transition: all 0.3s ease;
-        }
-        .stButton>button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(249, 115, 22, 0.5);
-        }
-
-        /* Botón de envío de formularios (Submit) en Naranja */
-        .stFormSubmitButton>button {
-            width: 100%;
-            height: 3.4rem;
-            font-size: 1.05rem !important;
-            font-weight: 700 !important;
-            border-radius: 8px !important;
-            background: linear-gradient(135deg, #f97316 0%, #c2410c 100%) !important;
-            color: white !important;
-            box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
-            border: none !important;
-        }
-        .stFormSubmitButton>button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(249, 115, 22, 0.5);
-        }
-
-        /* Tarjetas / Expanders con bordes sutiles */
-        div.stExpander {
-            background-color: #141414 !important;
-            border: 1px solid #262626 !important;
-            border-radius: 10px !important;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
-        }
-
-        /* Campos de entrada (Inputs y selects) */
-        input, select, textarea {
-            border-radius: 8px !important;
-            background-color: #141414 !important;
-            border: 1px solid #262626 !important;
-            color: #f3f4f6 !important;
-            font-size: 0.95rem !important;
-        }
-        
-        /* Pestañas (Tabs) con selección Naranja */
-        .stTabs [data-baseweb="tab-list"] {
-            gap: 6px;
-            background-color: #0b0b0b;
-            padding: 4px;
-            border-radius: 10px;
-        }
-        .stTabs [data-baseweb="tab"] {
-            height: 42px;
-            background-color: #141414;
-            border-radius: 6px;
-            color: #a3a3a3;
-            font-weight: 600;
-            border: 1px solid #262626;
-        }
-        .stTabs [aria-selected="true"] {
-            background-color: #f97316 !important;
-            color: white !important;
-            border: 1px solid #ea580c !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -121,7 +48,7 @@ def mostrar_logo(ancho=100):
     if LOGO_PATH:
         st.image(LOGO_PATH, width=ancho)
     else:
-        st.markdown("⚙️ **Industrias Metal&Co**")
+        st.write("📦 **Metal&Co**")
 
 # Parámetros de Conexión a Supabase
 DB_PARAMS = {
@@ -150,6 +77,7 @@ def ejecutar_comando(query, params=None):
 # Inicializar y actualizar tablas del sistema
 def inicializar_tablas_sistema():
     try:
+        # Tabla de Servicios Prestados
         ejecutar_comando("""
             CREATE TABLE IF NOT EXISTS servicios_prestados (
                 id SERIAL PRIMARY KEY,
@@ -160,6 +88,7 @@ def inicializar_tablas_sistema():
         for s in servicios_iniciales:
             ejecutar_comando("INSERT INTO servicios_prestados (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (s,))
 
+        # Tabla de Clases de Inventario
         ejecutar_comando("""
             CREATE TABLE IF NOT EXISTS clases_inventario (
                 id SERIAL PRIMARY KEY,
@@ -167,10 +96,12 @@ def inicializar_tablas_sistema():
             );
         """)
 
+        # Asegurar columna tipo_propiedad en máquinas
         ejecutar_comando("""
             ALTER TABLE maquinas ADD COLUMN IF NOT EXISTS tipo_propiedad VARCHAR(50) DEFAULT 'PROPIA';
         """)
 
+        # Asegurar columna numero_oc en programacion_diaria y registro_produccion
         ejecutar_comando("""
             ALTER TABLE programacion_diaria ADD COLUMN IF NOT EXISTS numero_oc VARCHAR(100);
         """)
@@ -198,16 +129,17 @@ if "form_key_counter" not in st.session_state:
 
 # PANTALLA DE LOGIN
 if not st.session_state["autenticado"]:
-    st.markdown("<h1 style='text-align: center; color: #f97316;'>Industrias Metal&Co</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #a3a3a3;'>Inicia sesión en el sistema de planta</p>", unsafe_allow_html=True)
+    st.title("🔑 Sistema Metal&Co")
+    st.subheader("Inicio de Sesión")
     
-    col1, col_login_box, col3 = st.columns([1, 1.2, 1])
-    with col_login_box:
+    c_logo, c_form = st.columns([1, 1], vertical_alignment="center")
+    with c_logo:
+        mostrar_logo(ancho=250)
+    with c_form:
         with st.form("form_login"):
-            mostrar_logo(ancho=120)
             user_input = st.text_input("Usuario")
             pass_input = st.text_input("Contraseña", type="password")
-            submit_login = st.form_submit_button("Ingresar al Sistema", use_container_width=True)
+            submit_login = st.form_submit_button("Ingresar", type="primary", use_container_width=True)
             
             if submit_login:
                 try:
@@ -222,7 +154,7 @@ if not st.session_state["autenticado"]:
                         st.session_state["rol"] = res.iloc[0]["rol"]
                         st.rerun()
                     else:
-                        st.error("❌ Usuario o contraseña incorrectos")
+                        st.error("Usuario o contraseña incorrectos")
                 except Exception as e:
                     st.error(f"Error de conexión: {e}")
     st.stop()
@@ -230,13 +162,13 @@ if not st.session_state["autenticado"]:
 # ----------------------------------------------------
 # ENCABEZADO Y BARRA LATERAL (Usuarios Logueados)
 # ----------------------------------------------------
-col_logo, col_titulo = st.columns([1, 5], vertical_alignment="center")
+col_logo, col_titulo = st.columns([1, 4], vertical_alignment="center")
 with col_logo:
-    mostrar_logo(ancho=90)
+    mostrar_logo(ancho=100)
 with col_titulo:
-    st.markdown("## Industrias Metal&Co")
+    st.title("Metal&Co - Planta")
 
-st.sidebar.markdown(f"👤 **Usuario:** `{st.session_state['nombre_usuario']}`")
+st.sidebar.markdown(f"👤 **Usuario:** {st.session_state['nombre_usuario']}")
 st.sidebar.markdown(f"🔰 **Rol:** `{str(st.session_state['rol']).upper()}`")
 
 st.sidebar.markdown("---")
@@ -254,15 +186,15 @@ if st.sidebar.button("🔒 Cerrar Sesión", use_container_width=True):
 rol = st.session_state["rol"]
 
 # ====================================================
-# VISTA EXCLUSIVA PARA OPERARIOS (BOTONES SIMPLES)
+# VISTA EXCLUSIVA PARA OPERARIOS
 # ====================================================
 if rol == "operario":
-    st.markdown(f"### 👋 Hola, {st.session_state['nombre_usuario']}")
+    st.subheader(f"📌 Hola, {st.session_state['nombre_usuario']}")
     
-    tab_prog, tab_prod, tab_nueva = st.tabs(["Programación", "Producción", "Imprevisto"])
+    tab_prog, tab_prod, tab_nueva = st.tabs(["📋 Mi Programación", "⚙️ Registrar Producción", "➕ Agregar Tarea Imprevista"])
     
     with tab_prog:
-        st.markdown("#### Tareas Asignadas")
+        st.write("### Consulta tus Tareas Asignadas")
         filtro_fecha = st.radio("Ver tareas de:", ["Todas mis tareas pendientes", "Filtrar por fecha específica"], horizontal=True)
         
         try:
@@ -291,8 +223,8 @@ if rol == "operario":
         except Exception as e:
             st.error(f"Error al cargar programación: {e}")
             
-        st.markdown("---")
-        st.markdown("#### Herramientas y Materiales A Cargo")
+        st.write("---")
+        st.write("### Mis Herramientas y Materiales A Cargo")
         try:
             herramientas = ejecutar_consulta(
                 "SELECT fecha, codigo_material, cantidad, tipo FROM consumos WHERE operario = %s AND estado = 'PRESTADO'",
@@ -306,7 +238,7 @@ if rol == "operario":
             st.error(f"Error al cargar consumos: {e}")
 
     with tab_prod:
-        st.markdown("#### Registrar Producción")
+        st.write("### Registrar Producción, Descontar OC y Completar Tarea")
         try:
             tareas_pendientes = ejecutar_consulta(
                 """SELECT id, fecha, numero_oc, actividad, maquina, referencia, meta_unidades FROM programacion_diaria 
@@ -324,23 +256,16 @@ if rol == "operario":
                 ]
                 
                 with st.form("form_reporte_operario"):
-                    tarea_elegida_str = st.selectbox("Selecciona la Tarea a Registrar", lista_opciones)
+                    tarea_elegida_str = st.selectbox("Selecciona la Tarea a Registrar (Puedes adelantar tareas futuras)", lista_opciones)
                     
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        h_inicio = st.time_input("Hora de Inicio Real", time(7, 0))
-                    with c2:
-                        h_fin = st.time_input("Hora de Finalización Real", time(17, 0))
+                    h_inicio = st.time_input("Hora de Inicio Real", time(7, 0))
+                    h_fin = st.time_input("Hora de Finalización Real", time(17, 0))
                         
-                    c3, c4 = st.columns(2)
-                    with c3:
-                        unidades = st.number_input("Unidades Buenas", min_value=0, step=1)
-                    with c4:
-                        defectuosas = st.number_input("Unidades Defectuosas (Scrap)", min_value=0, step=1, value=0)
-                        
+                    unidades = st.number_input("Unidades Producidas Buenas", min_value=0, step=1)
+                    defectuosas = st.number_input("Unidades Defectuosas (Scrap)", min_value=0, step=1, value=0)
                     obs_usuario = st.text_area("Observaciones / Novedades")
                     
-                    submit = st.form_submit_button("Guardar", use_container_width=True)
+                    submit = st.form_submit_button("Guardar Registro, Descontar de OC y Finalizar Tarea", type="primary", use_container_width=True)
                     
                     if submit:
                         id_tarea_str = tarea_elegida_str.split(" | ")[0].replace("ID #", "")
@@ -375,11 +300,11 @@ if rol == "operario":
                             (id_tarea,)
                         )
                         
-                        st.success("✅ ¡Producción guardada correctamente!")
+                        st.success("¡Producción registrada con éxito, saldo descontado de la OC y tarea finalizada!")
                         st.rerun()
 
-            st.markdown("---")
-            st.markdown("#### Mis Reportes Recientes")
+            st.write("---")
+            st.write("### Mis Reportes Recientes")
             reportes_recientes = ejecutar_consulta(
                 """SELECT numero_oc, hora_inicio_real, hora_fin_real, maquina, referencia, unidades_producidas, observaciones 
                    FROM registro_produccion 
@@ -396,7 +321,7 @@ if rol == "operario":
             st.error(f"Error al cargar formulario de reporte: {e}")
 
     with tab_nueva:
-        st.markdown("#### Registrar Tarea Imprevista No Programada")
+        st.subheader("➕ Registrar e Iniciar Tarea Imprevista No Programada")
         try:
             maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
             refs = ejecutar_consulta("SELECT codigo FROM referencias")['codigo'].tolist()
@@ -410,23 +335,19 @@ if rol == "operario":
                     oc_imp = st.selectbox("Orden de Compra Asociada (Opcional)", ocs_disp)
                     maq_imp = st.selectbox("Máquina", maqs)
                     ref_imp = st.selectbox("Referencia", refs)
-                    act_imp = st.text_input("Motivo imprevisto (Ej: Reparación, Reproceso)")
+                    act_imp = st.text_input("Actividad / Motivo imprevisto (Ej: Reproceso, Reparación urgente)")
                     
-                    c1, c2 = st.columns(2)
-                    with c1:
+                    c_h1, c_h2 = st.columns(2)
+                    with c_h1:
                         h_ini_imp = st.time_input("Hora de Inicio", time(8, 0))
-                    with c2:
+                    with c_h2:
                         h_fin_imp = st.time_input("Hora de Finalización", time(17, 0))
                         
-                    c3, c4 = st.columns(2)
-                    with c3:
-                        uni_imp = st.number_input("Unidades Buenas", min_value=0, value=1)
-                    with c4:
-                        def_imp = st.number_input("Unidades Defectuosas", min_value=0, value=0)
-                        
-                    obs_imp = st.text_area("Observaciones")
+                    uni_imp = st.number_input("Unidades Producidas Buenas", min_value=0, value=1)
+                    def_imp = st.number_input("Unidades Defectuosas (Scrap)", min_value=0, value=0)
+                    obs_imp = st.text_area("Observaciones del Imprevisto")
                     
-                    btn_imp = st.form_submit_button("Guardar", use_container_width=True)
+                    btn_imp = st.form_submit_button("Guardar Tarea Imprevista", type="primary", use_container_width=True)
                     
                     if btn_imp:
                         obs_final_imp = f"⚡ TAREA IMPREVISTA: {act_imp} | Buenas: {uni_imp}, Defectuosas: {def_imp}. Nota: {obs_imp}"
@@ -451,33 +372,34 @@ if rol == "operario":
                                     (nuevo_entregado, nuevo_estado, oc_imp)
                                 )
 
-                        st.success("✅ ¡Guardado!")
+                        st.success("¡Tarea imprevista registrada y saldo actualizado en la OC!")
                         st.rerun()
         except Exception as e:
-            st.error(f"Error al cargar formulario: {e}")
+            st.error(f"Error al cargar formulario de tarea imprevista: {e}")
 
 # ====================================================
 # VISTA COMPLETA PARA ADMINISTRADOR Y PRODUCCIÓN
 # ====================================================
 elif rol in ["admin", "produccion"]:
     tab_prog, tab_oc, tab_eq, tab_serv, tab_ref, tab_rep, tab_ent, tab_herramientas, tab_cargue, tab_inv_gen, tab_clases, tab_usu = st.tabs([
-        "Programar", 
-        "Órdenes Compra",
-        "Máquinas",
-        "Servicios",
-        "Referencias",
-        "Reportes", 
-        "Entregas", 
-        "Herramientas",
-        "Cargue", 
-        "Inventario",
-        "Clases", 
-        "Usuarios"
+        "📅 Programar", 
+        "📋 Órdenes Compra",
+        "⚙️ Máquinas",
+        "🛠️ Servicios",
+        "📄 Referencias",
+        "📊 Reportes", 
+        "🚀 Entregas", 
+        "🔨 Herramientas",
+        "📥 Cargue Ítems", 
+        "📦 Inventario",
+        "🏷️ Clases", 
+        "⚙️ Usuarios"
     ])
     
     # --- TAB 1: PROGRAMAR PLANTA ---
     with tab_prog:
-        st.markdown("### Programación de Planta")
+        st.subheader("📅 Programación de Planta por Fecha y Orden de Compra")
+        
         fecha_seleccionada = st.date_input("Selecciona el día a consultar/programar", value=datetime.now().date(), key="cal_admin_dia")
         
         try:
@@ -491,7 +413,8 @@ elif rol in ["admin", "produccion"]:
             if not ops or not maqs or not refs or not ocs_disp:
                 st.warning("⚠️ Asegúrate de tener operarios, máquinas, referencias y al menos una **Orden de Compra activa** creada.")
             else:
-                with st.expander("Nuevo Servicio"):
+                with st.expander(f"➕ Asignar Tarea vinculada a una Orden de Compra para el {fecha_seleccionada}", expanded=True):
+                    
                     k_sufijo = st.session_state["form_key_counter"]
                     oc_prog = st.selectbox("Orden de Compra a Ejecutar", ocs_disp, key=f"select_oc_dinamica_{k_sufijo}")
                     
@@ -500,21 +423,21 @@ elif rol in ["admin", "produccion"]:
                     serv_sugerido = oc_info.iloc[0]['servicio'] if not oc_info.empty else ""
                     meta_restante = max(1, int(oc_info.iloc[0]['meta_unidades']) - int(oc_info.iloc[0]['unidades_entregadas'])) if not oc_info.empty else 100
                     
-                    st.info(f"📌 **Referencia:** `{ref_sugerida}` &nbsp;|&nbsp; **Servicio:** `{serv_sugerido}` &nbsp;|&nbsp; **Saldo Pendiente:** `{meta_restante} u.`")
+                    st.markdown(f"📌 **Referencia de la OC:** `{ref_sugerida}` &nbsp;|&nbsp; **Servicio:** `{serv_sugerido}` &nbsp;|&nbsp; **Saldo Pendiente:** `{meta_restante} u.`")
                     
                     with st.form(f"form_programacion_{fecha_seleccionada}_{k_sufijo}", clear_on_submit=True):
                         op_p = st.selectbox("Operario", ops, key=f"op_prog_{k_sufijo}")
                         maq_p = st.selectbox("Máquina", maqs, key=f"maq_prog_{k_sufijo}")
                         act_p = st.text_input("Actividad Específica", value=serv_sugerido, key=f"act_prog_{k_sufijo}")
                         
-                        c1, c2 = st.columns(2)
-                        with c1:
+                        col_h1, col_h2 = st.columns(2)
+                        with col_h1:
                             h_ini_p = st.time_input("Inicio Turno", time(7, 0), key=f"hini_{k_sufijo}")
-                        with c2:
+                        with col_h2:
                             h_fin_p = st.time_input("Fin Turno", time(17, 0), key=f"hfin_{k_sufijo}")
                         
-                        meta_p = st.number_input("Meta de Unidades", min_value=1, value=meta_restante, key=f"meta_{k_sufijo}")
-                        btn_prog = st.form_submit_button("Guardar", use_container_width=True)
+                        meta_p = st.number_input("Meta de Unidades para esta Tarea", min_value=1, value=meta_restante, key=f"meta_{k_sufijo}")
+                        btn_prog = st.form_submit_button("Guardar Programación de Tarea", type="primary", use_container_width=True)
                         
                         if btn_prog:
                             ejecutar_comando(
@@ -524,11 +447,11 @@ elif rol in ["admin", "produccion"]:
                                 (fecha_seleccionada, oc_prog, op_p, maq_p, ref_sugerida, act_p, h_ini_p, h_fin_p, meta_p)
                             )
                             st.session_state["form_key_counter"] += 1
-                            st.success("✅ ¡Guardado!")
+                            st.success(f"¡Tarea asignada a {op_p} con éxito!")
                             st.rerun()
             
-            st.markdown("---")
-            st.markdown(f"### Actividades Programadas para el: **{fecha_seleccionada}**")
+            st.write("---")
+            st.write(f"### Actividades Programadas para el: **{fecha_seleccionada}**")
             
             df_prog_actual = ejecutar_consulta(
                 "SELECT * FROM programacion_diaria WHERE fecha = %s ORDER BY id DESC", 
@@ -538,11 +461,11 @@ elif rol in ["admin", "produccion"]:
             if not df_prog_actual.empty:
                 st.dataframe(df_prog_actual, use_container_width=True)
                 
-                with st.expander("Eliminar Servicio"):
+                with st.expander("🗑️ Eliminar Programación"):
                     id_del = st.selectbox("ID a Eliminar", df_prog_actual["id"].tolist(), key="del_prog_id_c")
-                    if st.button("Confirmar Eliminación", use_container_width=True):
+                    if st.button("Confirmar Eliminación", type="primary", use_container_width=True):
                         ejecutar_comando("DELETE FROM programacion_diaria WHERE id = %s", (id_del,))
-                        st.success("✅ Eliminado.")
+                        st.success(f"ID #{id_del} eliminado.")
                         st.rerun()
             else:
                 st.info(f"No hay actividades programadas para la fecha {fecha_seleccionada}.")
@@ -550,9 +473,9 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Programación: {e}")
 
-    # --- TAB 2: ÓRDENES DE COMPRA Y SALDOS ---
+    # --- TAB 2: ÓRDENES DE COMPRA Y SALDOS (Con Limpieza en Cascada al Borrar) ---
     with tab_oc:
-        st.markdown("### Gestión de Órdenes de Compra")
+        st.subheader("📋 Gestión de Órdenes de Compra (OC), Clientes y Saldos")
         try:
             refs_db = ejecutar_consulta("SELECT codigo FROM referencias")
             lista_refs = refs_db['codigo'].tolist() if not refs_db.empty else []
@@ -561,19 +484,19 @@ elif rol in ["admin", "produccion"]:
             lista_servicios = serv_db['nombre'].tolist() if not serv_db.empty else ["TROQUELADO", "CORTE LASER"]
             
             if not lista_refs:
-                st.warning("⚠️ Primero debes crear referencias en la pestaña 'Referencias'.")
+                st.warning("⚠️ Primero debes crear referencias en la pestaña 'Referencias' antes de crear Órdenes de Compra.")
             else:
-                with st.expander("Nuevo Servicio"):
+                with st.expander("➕ Registrar Nueva Orden de Compra", expanded=True):
                     with st.form("form_crear_oc", clear_on_submit=True):
                         num_oc = st.text_input("Número de Orden de Compra (Ej: OC-9021)")
-                        cliente = st.text_input("Nombre del Cliente")
+                        cliente = st.text_input("Nombre del Cliente (Ej: Metalmecánica S.A.S)")
                         ref_oc = st.selectbox("Referencia Base", lista_refs)
                         servicio_oc = st.selectbox("Servicio Prestado", lista_servicios)
                         
-                        requiere_uni = st.checkbox("¿Requiere control por unidades?", value=True)
+                        requiere_uni = st.checkbox("¿Este servicio requiere control por unidades?", value=True)
                         meta_oc = st.number_input("Cantidad Total Pedida (Meta)", min_value=0, value=1000)
                         
-                        btn_guardar_oc = st.form_submit_button("Guardar", use_container_width=True)
+                        btn_guardar_oc = st.form_submit_button("Guardar Orden de Compra", type="primary", use_container_width=True)
                         
                         if btn_guardar_oc:
                             if num_oc.strip() and cliente.strip():
@@ -584,30 +507,31 @@ elif rol in ["admin", "produccion"]:
                                     VALUES (%s, %s, %s, %s, %s, %s, 0, 'PENDIENTE')""",
                                     (num_oc.upper().strip(), cliente.strip(), ref_oc, servicio_oc, requiere_uni, meta_final)
                                 )
-                                st.success("✅ Guardado.")
+                                st.success(f"Orden de Compra #{num_oc} para '{cliente}' registrada con éxito.")
                                 st.rerun()
                             else:
-                                st.error("Completa el número de OC y el cliente.")
+                                st.error("Por favor completa el número de OC y el cliente.")
 
-            st.markdown("---")
-            st.markdown("### Estado y Saldos Pendientes")
+            st.write("---")
+            st.write("### 📊 Estado y Saldos Pendientes de Órdenes de Compra")
             df_oc = ejecutar_consulta("SELECT * FROM ordenes_compra ORDER BY id DESC")
             
             if not df_oc.empty:
                 df_oc['saldo_pendiente'] = df_oc.apply(
-                    lambda row: row['meta_unidades'] - row['unidades_entregadas'] if row['requiere_unidades'] else 'N/A', 
+                    lambda row: row['meta_unidades'] - row['unidades_entregadas'] if row['requiere_unidades'] else 'N/A (Servicio Libre)', 
                     axis=1
                 )
                 st.dataframe(df_oc, use_container_width=True)
 
-                with st.expander("Eliminar Servicio"):
+                with st.expander("🗑️ Eliminar Orden de Compra"):
                     with st.form("form_del_oc", clear_on_submit=True):
                         oc_del = st.selectbox("Selecciona la OC a Borrar", df_oc["numero_oc"].tolist())
-                        if st.form_submit_button("Confirmar Eliminación", use_container_width=True):
+                        if st.form_submit_button("Confirmar Eliminación de OC", type="primary", use_container_width=True):
+                            # Eliminamos la OC y limpiamos también su rastro en programación y producción para pruebas limpias
                             ejecutar_comando("DELETE FROM ordenes_compra WHERE numero_oc = %s", (oc_del,))
                             ejecutar_comando("DELETE FROM programacion_diaria WHERE numero_oc = %s", (oc_del,))
                             ejecutar_comando("DELETE FROM registro_produccion WHERE numero_oc = %s", (oc_del,))
-                            st.success("✅ Eliminado.")
+                            st.success(f"Orden de Compra #{oc_del} y sus registros asociados fueron eliminados por completo.")
                             st.rerun()
             else:
                 st.info("No hay órdenes de compra registradas.")
@@ -615,41 +539,41 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Órdenes de Compra: {e}")
 
-    # --- TAB 3: MÁQUINAS ---
+    # --- TAB 3: MÁQUINAS (Propias y Alquiladas) ---
     with tab_eq:
-        st.markdown("### Gestión de Máquinas")
+        st.subheader("⚙️ Gestión de Máquinas (Propias y Alquiladas)")
         try:
             df_maqs = ejecutar_consulta("SELECT * FROM maquinas")
             st.dataframe(df_maqs, use_container_width=True)
             
-            with st.expander("Nuevo Servicio"):
+            with st.expander("➕ Registrar Nueva Máquina"):
                 with st.form("form_crear_maquina", clear_on_submit=True):
-                    m_nom = st.text_input("Nombre de la Máquina")
+                    m_nom = st.text_input("Nombre de la Máquina (Ej: Láser CNC 01)")
                     m_tipo = st.text_input("Tipo (Ej: Corte, Dobladora)")
                     m_prop = st.selectbox("Tipo de Propiedad", ["PROPIA", "ALQUILADA"])
                     
-                    if st.form_submit_button("Guardar", use_container_width=True):
+                    if st.form_submit_button("Guardar Máquina", type="primary", use_container_width=True):
                         if m_nom.strip():
                             ejecutar_comando("INSERT INTO maquinas (nombre, tipo, tipo_propiedad) VALUES (%s, %s, %s)", (m_nom, m_tipo, m_prop))
-                            st.success("✅ Guardado.")
+                            st.success(f"Máquina '{m_nom}' ({m_prop}) agregada con éxito.")
                             st.rerun()
                         else:
-                            st.error("Escribe el nombre.")
+                            st.error("Escribe el nombre de la máquina.")
 
             if not df_maqs.empty and rol == "admin":
-                with st.expander("Eliminar Servicio"):
+                with st.expander("🗑️ Eliminar Máquina"):
                     with st.form("form_del_maquina", clear_on_submit=True):
                         m_del = st.selectbox("Máquina a Borrar", df_maqs["nombre"].tolist())
-                        if st.form_submit_button("Confirmar Eliminación", use_container_width=True):
+                        if st.form_submit_button("Eliminar Máquina", type="primary", use_container_width=True):
                             ejecutar_comando("DELETE FROM maquinas WHERE nombre = %s", (m_del,))
-                            st.success("✅ Eliminado.")
+                            st.success(f"Máquina '{m_del}' eliminada.")
                             st.rerun()
         except Exception as e:
             st.error(f"Error en Máquinas: {e}")
 
-    # --- TAB 4: SERVICIOS ---
+    # --- TAB 4: SERVICIOS PRESTADOS (Crear y Eliminar) ---
     with tab_serv:
-        st.markdown("### Servicios Prestados")
+        st.subheader("🛠️ Administración de Servicios Prestados")
         try:
             df_serv = ejecutar_consulta("SELECT * FROM servicios_prestados ORDER BY id DESC")
             if not df_serv.empty:
@@ -657,60 +581,62 @@ elif rol in ["admin", "produccion"]:
             else:
                 st.info("No hay servicios creados.")
             
-            with st.expander("Nuevo Servicio"):
+            with st.expander("➕ Crear Nuevo Servicio"):
                 with st.form("form_crear_serv", clear_on_submit=True):
-                    nom_serv = st.text_input("Nombre del Servicio")
-                    if st.form_submit_button("Guardar", use_container_width=True):
+                    nom_serv = st.text_input("Nombre del Servicio (Ej: SOLDADURA TIG)")
+                    if st.form_submit_button("Guardar Servicio", type="primary", use_container_width=True):
                         if nom_serv.strip():
                             ejecutar_comando("INSERT INTO servicios_prestados (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (nom_serv.upper().strip(),))
-                            st.success("✅ Guardado.")
+                            st.success(f"Servicio '{nom_serv.upper()}' agregado.")
                             st.rerun()
                         else:
-                            st.error("Escribe un nombre.")
+                            st.error("Escribe un nombre válido.")
 
             if not df_serv.empty and rol == "admin":
-                with st.expander("Eliminar Servicio"):
+                with st.expander("🗑️ Eliminar Servicio"):
                     with st.form("form_del_serv", clear_on_submit=True):
                         serv_del = st.selectbox("Servicio a Borrar", df_serv["nombre"].tolist())
-                        if st.form_submit_button("Confirmar Eliminación", use_container_width=True):
+                        if st.form_submit_button("Eliminar Servicio", type="primary", use_container_width=True):
                             ejecutar_comando("DELETE FROM servicios_prestados WHERE nombre = %s", (serv_del,))
-                            st.success("✅ Eliminado.")
+                            st.success(f"Servicio '{serv_del}' eliminado.")
                             st.rerun()
         except Exception as e:
             st.error(f"Error en Servicios: {e}")
 
     # --- TAB 5: REFERENCIAS ---
     with tab_ref:
-        st.markdown("### Catálogo de Referencias")
+        st.subheader("📄 Gestión de Referencias (Catálogo Base)")
         try:
             df_refs = ejecutar_consulta("SELECT * FROM referencias")
             st.dataframe(df_refs, use_container_width=True)
             
-            with st.expander("Nuevo Servicio"):
+            with st.expander("➕ Crear Nueva Referencia"):
                 with st.form("form_crear_ref", clear_on_submit=True):
-                    r_cod = st.text_input("Código Referencia")
+                    r_cod = st.text_input("Código Referencia (Ej: REF-001)")
                     r_desc = st.text_input("Descripción del Producto")
-                    if st.form_submit_button("Guardar", use_container_width=True):
+                    if st.form_submit_button("Guardar Referencia", type="primary", use_container_width=True):
                         ejecutar_comando("INSERT INTO referencias (codigo, descripcion) VALUES (%s, %s)", (r_cod, r_desc))
-                        st.success("✅ Guardado.")
+                        st.success("Referencia agregada.")
                         st.rerun()
 
             if not df_refs.empty and rol == "admin":
-                with st.expander("Eliminar Servicio"):
+                with st.expander("🗑️ Eliminar Referencia"):
                     with st.form("form_del_ref", clear_on_submit=True):
                         r_del = st.selectbox("Referencia a Borrar", df_refs["codigo"].tolist())
-                        if st.form_submit_button("Confirmar Eliminación", use_container_width=True):
+                        if st.form_submit_button("Eliminar Referencia", type="primary", use_container_width=True):
                             ejecutar_comando("DELETE FROM referencias WHERE codigo = %s", (r_del,))
-                            st.success("✅ Eliminado.")
+                            st.success(f"Referencia '{r_del}' eliminada.")
                             st.rerun()
         except Exception as e:
             st.error(f"Error en Referencias: {e}")
 
-    # --- TAB 6: REPORTES ---
+    # --- TAB 6: REPORTES EXCEL MAESTROS (Con validación estricta de OC vigentes) ---
     with tab_rep:
-        st.markdown("### Centro de Reportes y Excel")
+        st.subheader("📊 Centro de Reportes y Descargas (Excel Maestro)")
+        st.write("Reportes detallados con trazabilidad limpia (excluyendo órdenes de compra eliminadas):")
         try:
-            st.markdown("#### 1. Reporte de Saldos de Órdenes de Compra")
+            st.write("---")
+            st.write("### 📋 1. Reporte Maestro de Órdenes de Compra y Saldos")
             df_oc_rep = ejecutar_consulta("SELECT * FROM ordenes_compra ORDER BY id DESC")
             if not df_oc_rep.empty:
                 df_oc_rep['saldo_pendiente'] = df_oc_rep.apply(lambda r: r['meta_unidades'] - r['unidades_entregadas'] if r['requiere_unidades'] else 'N/A', axis=1)
@@ -720,16 +646,17 @@ elif rol in ["admin", "produccion"]:
                 with pd.ExcelWriter(buffer_oc, engine='openpyxl') as writer:
                     df_oc_rep.to_excel(writer, index=False, sheet_name='Saldos_OC')
                 st.download_button(
-                    label="📥 Descargar Reporte de Saldos OC (Excel)",
+                    label="📥 Descargar Reporte de Saldos OC en Excel",
                     data=buffer_oc.getvalue(),
-                    file_name=f"Saldos_OC_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    file_name=f"Reporte_Saldos_OC_{datetime.now().strftime('%Y%m%d')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
                     key="dl_oc_excel"
                 )
 
-            st.markdown("---")
-            st.markdown("#### 2. Reporte de Producción Detallado")
+            st.write("---")
+            st.write("### 🏭 2. Reporte de Producción Detallado (Solo OC Vigentes)")
+            # Nota: Usamos INNER JOIN con ordenes_compra para que si la OC fue borrada, sus registros huérfanos no salgan en el reporte
             df_prod_rep = ejecutar_consulta("""
                 SELECT r.id, r.fecha, r.numero_oc, r.operario_nombre, r.maquina, m.tipo_propiedad as tipo_maquina, 
                        r.referencia, r.hora_inicio_real, r.hora_fin_real, r.unidades_producidas, r.observaciones 
@@ -746,18 +673,18 @@ elif rol in ["admin", "produccion"]:
                 with pd.ExcelWriter(buffer_prod, engine='openpyxl') as writer:
                     df_prod_rep.to_excel(writer, index=False, sheet_name='Produccion_Detallada')
                 st.download_button(
-                    label="📥 Descargar Reporte de Producción (Excel)",
+                    label="📥 Descargar Reporte de Producción Detallado en Excel",
                     data=buffer_prod.getvalue(),
-                    file_name=f"Produccion_Detallada_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    file_name=f"Reporte_Produccion_Detallado_{datetime.now().strftime('%Y%m%d')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
                     key="dl_prod_excel"
                 )
             else:
-                st.info("No hay registros de producción.")
+                st.info("No hay registros de producción vinculados a órdenes activas.")
 
-            st.markdown("---")
-            st.markdown("#### 3. Reporte de Inventario")
+            st.write("---")
+            st.write("### 📦 3. Reporte de Inventario General")
             df_inv_rep = ejecutar_consulta("SELECT codigo, nombre, tipo as clase, cantidad, stock_minimo FROM inventario")
             if not df_inv_rep.empty:
                 st.dataframe(df_inv_rep, use_container_width=True)
@@ -765,9 +692,9 @@ elif rol in ["admin", "produccion"]:
                 with pd.ExcelWriter(buffer_inv, engine='openpyxl') as writer:
                     df_inv_rep.to_excel(writer, index=False, sheet_name='Inventario')
                 st.download_button(
-                    label="📥 Descargar Reporte de Inventario (Excel)",
+                    label="📥 Descargar Reporte de Inventario en Excel",
                     data=buffer_inv.getvalue(),
-                    file_name=f"Inventario_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    file_name=f"Reporte_Inventario_{datetime.now().strftime('%Y%m%d')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
                     key="dl_inv_excel"
@@ -776,9 +703,9 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error al generar reportes: {e}")
 
-    # --- TAB 7: ENTREGAS ---
+    # --- TAB 7: ENTREGAS Y SALIDAS ---
     with tab_ent:
-        st.markdown("### Registrar Salida de Insumo / Material")
+        st.subheader("Registrar Salida de Insumo / Material")
         try:
             ops_df = ejecutar_consulta("SELECT nombre FROM usuarios WHERE rol = 'operario'")
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
@@ -787,10 +714,10 @@ elif rol in ["admin", "produccion"]:
             if ops and not mats.empty:
                 with st.form("form_entregas", clear_on_submit=True):
                     op_sel = st.selectbox("Operario", ops)
-                    mat_sel = st.selectbox("Ítem en Inventario", mats['nombre'].tolist())
+                    mat_sel = st.selectbox("Ítems en Inventario", mats['nombre'].tolist())
                     cant = st.number_input("Cantidad", min_value=1, value=1)
                     
-                    if st.form_submit_button("Registrar Salida", use_container_width=True):
+                    if st.form_submit_button("Registrar Salida", type="primary", use_container_width=True):
                         row = mats[mats['nombre'] == mat_sel].iloc[0]
                         cod, tipo = row['codigo'], row['tipo']
                         
@@ -799,18 +726,20 @@ elif rol in ["admin", "produccion"]:
                             (datetime.now().strftime("%Y-%m-%d %H:%M"), op_sel, cod, cant, tipo)
                         )
                         ejecutar_comando("UPDATE inventario SET cantidad = cantidad - %s WHERE codigo = %s", (cant, cod))
-                        st.success("✅ Salida registrada.")
+                        st.success("Salida registrada y descontada del inventario.")
                         st.rerun()
             else:
                 st.info("No hay operarios o ítems disponibles en inventario.")
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"Error en Entregas: {e}")
 
     # --- TAB 8: HERRAMIENTAS ---
     with tab_herramientas:
-        st.markdown("### Préstamos de Herramientas")
+        st.subheader("🔨 Control de Herramientas y Préstamos a Operarios")
         try:
             herramientas_db = ejecutar_consulta("SELECT codigo, nombre, cantidad FROM inventario WHERE tipo ILIKE '%HERRAMIENTA%'")
+            
+            st.write("### Herramientas Disponibles en Stock")
             if not herramientas_db.empty:
                 st.dataframe(herramientas_db, use_container_width=True)
             else:
@@ -820,12 +749,12 @@ elif rol in ["admin", "produccion"]:
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
             
             if ops and not herramientas_db.empty:
-                with st.expander("Nuevo Servicio"):
+                with st.expander("🤝 Prestar Herramienta a Operario"):
                     with st.form("form_prestar_herramienta", clear_on_submit=True):
                         op_her = st.selectbox("Operario", ops)
                         her_sel = st.selectbox("Herramienta", herramientas_db['nombre'].tolist())
                         cant_her = st.number_input("Cantidad", min_value=1, value=1)
-                        btn_prestar = st.form_submit_button("Registrar Préstamo", use_container_width=True)
+                        btn_prestar = st.form_submit_button("Registrar Préstamo", type="primary", use_container_width=True)
                         
                         if btn_prestar:
                             row_h = herramientas_db[herramientas_db['nombre'] == her_sel].iloc[0]
@@ -835,11 +764,11 @@ elif rol in ["admin", "produccion"]:
                                 "INSERT INTO consumos (fecha, operario, codigo_material, cantidad, tipo, estado) VALUES (%s, %s, %s, %s, 'HERRAMIENTA', 'PRESTADO')",
                                 (datetime.now().strftime("%Y-%m-%d %H:%M"), op_her, cod_h, cant_her)
                             )
-                            st.success("✅ Préstamo registrado.")
+                            st.success(f"Préstamo de {her_sel} registrado a {op_her}.")
                             st.rerun()
 
-            st.markdown("---")
-            st.markdown("#### Herramientas Actualmente Prestadas")
+            st.write("---")
+            st.write("### Herramientas Actualmente Prestadas")
             prestados = ejecutar_consulta("""
                 SELECT c.id, c.fecha, c.operario, c.codigo_material, i.nombre as herramienta, c.cantidad, c.estado 
                 FROM consumos c 
@@ -850,24 +779,24 @@ elif rol in ["admin", "produccion"]:
             if not prestados.empty:
                 st.dataframe(prestados, use_container_width=True)
                 id_dev = st.selectbox("ID de Préstamo a Devolver", prestados['id'].tolist(), key="dev_id_her")
-                if st.button("Marcar como Devuelta", use_container_width=True):
+                if st.button("Marcar Herramienta como Devuelta", use_container_width=True):
                     ejecutar_comando("UPDATE consumos SET estado = 'DEVUELTO' WHERE id = %s", (id_dev,))
-                    st.success("✅ Devuelta.")
+                    st.success("¡Herramienta marcada como devuelta!")
                     st.rerun()
             else:
                 st.success("No hay herramientas pendientes de devolución.")
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"Error en Herramientas: {e}")
 
-    # --- TAB 9: CARGUE ---
+    # --- TAB 9: CARGUE DE ÍTEMS ---
     with tab_cargue:
-        st.markdown("### Cargue Único de Ítems")
+        st.subheader("📥 Cargue Único de Ítems")
         try:
             clases_df = ejecutar_consulta("SELECT nombre FROM clases_inventario")
             lista_clases = clases_df['nombre'].tolist() if not clases_df.empty else []
             
             if not lista_clases:
-                st.warning("⚠️ Crea al menos una clase en la pestaña 'Clases'.")
+                st.warning("⚠️ No hay clases creadas. Ve a la pestaña 'Clases' y crea al menos una.")
             else:
                 with st.form("form_cargue_item", clear_on_submit=True):
                     c_cod = st.text_input("Código del Ítem")
@@ -876,33 +805,33 @@ elif rol in ["admin", "produccion"]:
                     c_cant = st.number_input("Cantidad Inicial", min_value=0, value=10)
                     c_min = st.number_input("Stock Mínimo de Alerta", min_value=0, value=5)
                     
-                    if st.form_submit_button("Guardar Ítem", use_container_width=True):
+                    if st.form_submit_button("Guardar Ítem", type="primary", use_container_width=True):
                         if c_cod.strip() and c_nom.strip():
                             ejecutar_comando(
                                 "INSERT INTO inventario (codigo, nombre, tipo, cantidad, stock_minimo) VALUES (%s, %s, %s, %s, %s)",
                                 (c_cod, c_nom, c_clase, c_cant, c_min)
                             )
-                            st.success("✅ Guardado.")
+                            st.success(f"Ítem '{c_nom}' guardado con éxito.")
                             st.rerun()
                         else:
                             st.error("Completa código y nombre.")
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"Error en Cargue: {e}")
 
     # --- TAB 10: INVENTARIO GENERAL ---
     with tab_inv_gen:
-        st.markdown("### Inventario General")
+        st.subheader("📦 Inventario General")
         try:
             inv_gen = ejecutar_consulta("SELECT codigo, nombre, tipo as clase, cantidad, stock_minimo FROM inventario")
             if not inv_gen.empty:
                 st.dataframe(inv_gen, use_container_width=True)
                 if rol == "admin":
-                    with st.expander("Eliminar Servicio"):
+                    with st.expander("🗑️ Eliminar Ítem"):
                         with st.form("form_del_inv", clear_on_submit=True):
                             del_cod_gen = st.selectbox("Código a Eliminar", inv_gen["codigo"].tolist())
-                            if st.form_submit_button("Confirmar Eliminación", use_container_width=True):
+                            if st.form_submit_button("Confirmar", type="primary", use_container_width=True):
                                 ejecutar_comando("DELETE FROM inventario WHERE codigo = %s", (del_cod_gen,))
-                                st.success("✅ Eliminado.")
+                                st.success("Eliminado.")
                                 st.rerun()
             else:
                 st.info("Inventario vacío.")
@@ -911,39 +840,39 @@ elif rol in ["admin", "produccion"]:
 
     # --- TAB 11: CLASES ---
     with tab_clases:
-        st.markdown("### Clases de Inventario")
+        st.subheader("🏷️ Clases / Categorías de Inventario")
         try:
             clases_actuales = ejecutar_consulta("SELECT * FROM clases_inventario")
             if not clases_actuales.empty:
                 st.dataframe(clases_actuales, use_container_width=True)
             
-            with st.expander("Nuevo Servicio"):
+            with st.expander("➕ Crear Clase"):
                 with st.form("form_crear_clase", clear_on_submit=True):
                     nueva_clase = st.text_input("Nombre de Clase")
-                    if st.form_submit_button("Guardar", use_container_width=True):
+                    if st.form_submit_button("Guardar", type="primary", use_container_width=True):
                         if nueva_clase.strip():
                             ejecutar_comando("INSERT INTO clases_inventario (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (nueva_clase.upper().strip(),))
-                            st.success("✅ Creado.")
+                            st.success("Creada.")
                             st.rerun()
         except Exception as e:
             st.error(f"Error: {e}")
 
     # --- TAB 12: USUARIOS ---
     with tab_usu:
-        st.markdown("### Gestión de Usuarios")
+        st.subheader("⚙️ Gestión de Usuarios")
         try:
             users_df = ejecutar_consulta("SELECT id, username, nombre, rol FROM usuarios")
             st.dataframe(users_df, use_container_width=True)
             
-            with st.expander("Nuevo Servicio"):
+            with st.expander("➕ Crear Usuario"):
                 with st.form("form_crear_usuario", clear_on_submit=True):
                     u_user = st.text_input("Usuario")
                     u_pass = st.text_input("Clave", type="password")
                     u_nom = st.text_input("Nombre Completo")
                     u_rol = st.selectbox("Rol", ["operario", "produccion", "admin"])
-                    if st.form_submit_button("Guardar", use_container_width=True):
+                    if st.form_submit_button("Guardar Usuario", type="primary", use_container_width=True):
                         ejecutar_comando("INSERT INTO usuarios (username, password, nombre, rol) VALUES (%s, %s, %s, %s)", (u_user, u_pass, u_nom, u_rol))
-                        st.success("✅ Creado.")
+                        st.success("Creado.")
                         st.rerun()
         except Exception as e:
             st.error(f"Error: {e}")
