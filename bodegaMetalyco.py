@@ -74,6 +74,25 @@ def ejecutar_comando(query, params=None):
     cur.close()
     conn.close()
 
+# Asegurar tablas auxiliares para clases si no existen
+def inicializar_tablas_adicionales():
+    try:
+        ejecutar_comando("""
+            CREATE TABLE IF NOT EXISTS clases_inventario (
+                id SERIAL PRIMARY KEY,
+                nombre VARCHAR(100) UNIQUE NOT NULL
+            );
+        """)
+        # Insertar clases por defecto si está vacía
+        res = ejecutar_consulta("SELECT COUNT(*) as total FROM clases_inventario")
+        if res.iloc[0]['total'] == 0:
+            for c in ["HERRAMIENTA", "INSUMO", "EPP", "REPUESTO"]:
+                ejecutar_comando("INSERT INTO clases_inventario (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (c,))
+    except Exception:
+        pass
+
+inicializar_tablas_adicionales()
+
 # ----------------------------------------------------
 # INICIALIZACIÓN BLINDADA DEL ESTADO DE SESIÓN
 # ----------------------------------------------------
@@ -288,7 +307,6 @@ if rol == "operario":
                     if btn_imp:
                         obs_final_imp = f"⚡ TAREA IMPREVISTA: {act_imp} | Buenas: {uni_imp}, Defectuosas: {def_imp}. Nota: {obs_imp}"
                         
-                        # Guardar como registro de producción directamente
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
                             (operario_nombre, maquina, referencia, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones) 
@@ -304,15 +322,16 @@ if rol == "operario":
 # VISTA COMPLETA PARA ADMINISTRADOR Y PRODUCCIÓN
 # ====================================================
 elif rol in ["admin", "produccion"]:
-    tab1, tab_eq, tab_ref, tab3, tab4, tab5, tab6, tab_inv, tab7 = st.tabs([
+    tab1, tab_eq, tab_ref, tab3, tab4, tab_herramientas, tab_cargue, tab_inv_gen, tab_clases, tab7 = st.tabs([
         "📅 Programar", 
         "⚙️ Equipos",
         "📄 Referencias",
         "📊 Reportes", 
         "🚀 Entregas", 
         "🔨 Herramientas",
-        "📥 Cargue Herramientas", 
-        "📦 Inventario", 
+        "📥 Cargue Ítems", 
+        "📦 Inventario General",
+        "🏷️ Clases / Categorías", 
         "⚙️ Usuarios"
     ])
     
@@ -491,43 +510,46 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en reportes: {e}")
 
-    # --- TAB 5: ENTREGAS Y SALIDAS DE CONSUMIBLES ---
+    # --- TAB 5: ENTREGAS Y SALIDAS ---
     with tab4:
-        st.subheader("Registrar Salida de Insumo / Consumible")
+        st.subheader("Registrar Salida de Insumo / Material")
         try:
             ops_df = ejecutar_consulta("SELECT nombre FROM usuarios WHERE rol = 'operario'")
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
-            mats = ejecutar_consulta("SELECT codigo, nombre, cantidad FROM inventario WHERE tipo = 'CONSUMIBLE'")
+            mats = ejecutar_consulta("SELECT codigo, nombre, cantidad, tipo FROM inventario")
             
             if ops and not mats.empty:
                 op_sel = st.selectbox("Operario", ops, key="ent_op")
-                mat_sel = st.selectbox("Insumo", mats['nombre'].tolist(), key="ent_mat")
+                mat_sel = st.selectbox("Ítems en Inventario", mats['nombre'].tolist(), key="ent_mat")
                 cant = st.number_input("Cantidad", min_value=1, value=1, key="ent_cant")
                 
-                if st.button("Registrar Salida de Insumo", type="primary", use_container_width=True):
+                if st.button("Registrar Salida", type="primary", use_container_width=True):
                     row = mats[mats['nombre'] == mat_sel].iloc[0]
-                    cod = row['codigo']
+                    cod, tipo = row['codigo'], row['tipo']
                     
                     ejecutar_comando(
-                        "INSERT INTO consumos (fecha, operario, codigo_material, cantidad, tipo, estado) VALUES (%s, %s, %s, %s, 'CONSUMIBLE', 'ENTREGADO')",
-                        (datetime.now().strftime("%Y-%m-%d %H:%M"), op_sel, cod, cant)
+                        "INSERT INTO consumos (fecha, operario, codigo_material, cantidad, tipo, estado) VALUES (%s, %s, %s, %s, %s, 'ENTREGADO')",
+                        (datetime.now().strftime("%Y-%m-%d %H:%M"), op_sel, cod, cant, tipo)
                     )
                     ejecutar_comando("UPDATE inventario SET cantidad = cantidad - %s WHERE codigo = %s", (cant, cod))
-                    st.success("Salida de insumo registrada y descontada del inventario.")
+                    st.success("Salida registrada y descontada del inventario.")
                     st.rerun()
             else:
-                st.info("No hay operarios o insumos consumibles disponibles.")
+                st.info("No hay operarios o ítems disponibles en inventario.")
         except Exception as e:
             st.error(f"Error en Entregas: {e}")
 
-    # --- TAB 6: HERRAMIENTAS (Gestión, Préstamos y Devoluciones) ---
+    # --- TAB 6: HERRAMIENTAS (Disponibles y Prestadas a Operarios) ---
     with tab5:
-        st.subheader("🔨 Gestión y Préstamo de Herramientas")
+        st.subheader("🔨 Control de Herramientas y Préstamos a Operarios")
         try:
-            herramientas_db = ejecutar_consulta("SELECT codigo, nombre, cantidad FROM inventario WHERE tipo = 'HERRAMIENTA'")
+            herramientas_db = ejecutar_consulta("SELECT codigo, nombre, cantidad FROM inventario WHERE tipo ILIKE '%HERRAMIENTA%'")
             
-            st.write("### Catálogo de Herramientas Disponibles")
-            st.dataframe(herramientas_db, use_container_width=True)
+            st.write("### Herramientas Disponibles en Stock")
+            if not herramientas_db.empty:
+                st.dataframe(herramientas_db, use_container_width=True)
+            else:
+                st.info("No hay herramientas registradas con la clase 'HERRAMIENTA'.")
             
             ops_df = ejecutar_consulta("SELECT nombre FROM usuarios WHERE rol = 'operario'")
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
@@ -552,112 +574,105 @@ elif rol in ["admin", "produccion"]:
                             st.rerun()
 
             st.write("---")
-            st.write("### Herramientas Actualmente Prestadas (Pendientes de Devolución)")
-            prestados = ejecutar_consulta("SELECT id, fecha, operario, codigo_material, cantidad FROM consumos WHERE tipo = 'HERRAMIENTA' AND estado = 'PRESTADO'")
+            st.write("### Herramientas Actualmente Prestadas (Con Detalle de Operario)")
+            prestados = ejecutar_consulta("""
+                SELECT c.id, c.fecha, c.operario, c.codigo_material, i.nombre as herramienta, c.cantidad, c.estado 
+                FROM consumos c 
+                LEFT JOIN inventario i ON c.codigo_material = i.codigo 
+                WHERE c.tipo ILIKE '%HERRAMIENTA%' AND c.estado = 'PRESTADO'
+            """)
             if not prestados.empty:
                 st.dataframe(prestados, use_container_width=True)
                 id_dev = st.selectbox("ID de Préstamo a Devolver", prestados['id'].tolist(), key="dev_id_her")
                 if st.button("Marcar Herramienta como Devuelta", use_container_width=True):
                     ejecutar_comando("UPDATE consumos SET estado = 'DEVUELTO' WHERE id = %s", (id_dev,))
-                    st.success("¡Herramienta marcada como devuelta con éxito!")
+                    st.success("¡Herramienta marcada como devuelta y restaurada!")
                     st.rerun()
-
-                if rol == "admin":
-                    with st.expander("🗑️ Eliminar Registro de Préstamo"):
-                        del_pres = st.selectbox("ID Préstamo a Eliminar", prestados['id'].tolist(), key="del_pres_id")
-                        if st.button("Eliminar Préstamo", type="primary", use_container_width=True):
-                            ejecutar_comando("DELETE FROM consumos WHERE id = %s", (del_pres,))
-                            st.success(f"Registro #{del_pres} eliminado.")
-                            st.rerun()
             else:
                 st.success("No hay herramientas pendientes de devolución.")
         except Exception as e:
             st.error(f"Error en Herramientas: {e}")
 
-    # --- TAB 7: CARGUE DE HERRAMIENTAS (Aparte) ---
-    with tab_inv:
-        st.subheader("📥 Cargue de Nuevas Herramientas al Sistema")
-        st.write("Registra aquí nuevas herramientas físicas que ingresen al taller (Sin stock mínimo requerido).")
+    # --- TAB 7: CARGUE DE ÍTEMS (Unificado para Herramientas, Insumos, EPP, Repuestos) ---
+    with tab_cargue:
+        st.subheader("📥 Cargue Único de Ítems (Herramientas, Insumos, EPP, Repuestos)")
         try:
-            with st.form("form_cargar_herramienta"):
-                h_cod = st.text_input("Código de Herramienta")
-                h_nom = st.text_input("Nombre de la Herramienta")
-                h_cant = st.number_input("Cantidad Inicial", min_value=1, value=1)
+            clases_df = ejecutar_consulta("SELECT nombre FROM clases_inventario")
+            lista_clases = clases_df['nombre'].tolist() if not clases_df.empty else ["HERRAMIENTA", "INSUMO", "EPP", "REPUESTO"]
+            
+            with st.form("form_cargue_item"):
+                c_cod = st.text_input("Código del Ítem")
+                c_nom = st.text_input("Nombre del Ítem")
+                c_clase = st.selectbox("Clase / Categoría", lista_clases)
+                c_cant = st.number_input("Cantidad Inicial", min_value=0, value=10)
+                c_min = st.number_input("Stock Mínimo de Alerta (0 si no aplica)", min_value=0, value=5)
                 
-                btn_carga_her = st.form_submit_button("Guardar Nueva Herramienta", type="primary", use_container_width=True)
+                btn_guardar_item = st.form_submit_button("Guardar Ítem en Inventario", type="primary", use_container_width=True)
                 
-                if btn_carga_her:
-                    if h_cod.strip() and h_nom.strip():
-                        # Guardamos con tipo HERRAMIENTA y stock_minimo en 0 o NULL
+                if btn_guardar_item:
+                    if c_cod.strip() and c_nom.strip():
                         ejecutar_comando(
-                            "INSERT INTO inventario (codigo, nombre, tipo, cantidad, stock_minimo) VALUES (%s, %s, 'HERRAMIENTA', %s, 0)",
-                            (h_cod, h_nom, h_cant)
+                            "INSERT INTO inventario (codigo, nombre, tipo, cantidad, stock_minimo) VALUES (%s, %s, %s, %s, %s)",
+                            (c_cod, c_nom, c_clase, c_cant, c_min)
                         )
-                        st.success(f"Herramienta '{h_nom}' cargada exitosamente.")
+                        st.success(f"Ítem '{c_nom}' guardado con éxito bajo la clase {c_clase}.")
                         st.rerun()
                     else:
-                        st.error("Por favor completa el código y el nombre de la herramienta.")
-
-            st.write("---")
-            st.write("### Listado de Herramientas Registradas")
-            df_herramientas_reg = ejecutar_consulta("SELECT codigo, nombre, cantidad FROM inventario WHERE tipo = 'HERRAMIENTA'")
-            if not df_herramientas_reg.empty:
-                st.dataframe(df_herramientas_reg, use_container_width=True)
-                if rol == "admin":
-                    with st.expander("🗑️ Eliminar Herramienta del Catálogo"):
-                        del_h_cod = st.selectbox("Código a Borrar", df_herramientas_reg["codigo"].tolist(), key="del_h_sel")
-                        if st.button("Confirmar Eliminación de Herramienta", type="primary", use_container_width=True):
-                            ejecutar_comando("DELETE FROM inventario WHERE codigo = %s", (del_h_cod,))
-                            st.success("Herramienta eliminada del catálogo.")
-                            st.rerun()
-            else:
-                st.info("No hay herramientas registradas todavía.")
+                        st.error("Por favor completa el código y el nombre del ítem.")
         except Exception as e:
-            st.error(f"Error en Cargue de Herramientas: {e}")
+            st.error(f"Error en Cargue de Ítems: {e}")
 
-    # --- TAB 8: INVENTARIO DE CONSUMIBLES (Con Alerta de Stock Mínimo) ---
-    with tab6:
-        st.subheader("📦 Gestión de Inventario de Consumibles e Insumos")
+    # --- TAB 8: INVENTARIO GENERAL ---
+    with tab_inv_gen:
+        st.subheader("📦 Inventario General de la Empresa")
         try:
-            inv = ejecutar_consulta("SELECT codigo, nombre, tipo, cantidad, stock_minimo FROM inventario WHERE tipo = 'CONSUMIBLE'")
+            inv_gen = ejecutar_consulta("SELECT codigo, nombre, tipo as clase, cantidad, stock_minimo FROM inventario")
             
-            if not inv.empty:
-                # Alerta visual de stock mínimo
-                criticos = inv[inv['cantidad'] <= inv['stock_minimo']]
+            if not inv_gen.empty:
+                # Alertas para los que apliquen stock mínimo > 0
+                criticos = inv_gen[(inv_gen['stock_minimo'] > 0) & (inv_gen['cantidad'] <= inv_gen['stock_minimo'])]
                 if not criticos.empty:
-                    st.warning("⚠️ **¡Alerta! Los siguientes consumibles están por debajo o igual al stock mínimo:**")
+                    st.warning("⚠️ **¡Alerta de Stock Bajo en los siguientes ítems!**")
                     st.dataframe(criticos, use_container_width=True)
                 
-                st.write("### Inventario Completo de Consumibles")
-                st.dataframe(inv, use_container_width=True)
+                st.write("### Listado Consolidado")
+                st.dataframe(inv_gen, use_container_width=True)
+
+                if rol == "admin":
+                    with st.expander("🗑️ Eliminar Ítem del Inventario General"):
+                        del_cod_gen = st.selectbox("Código a Eliminar", inv_gen["codigo"].tolist(), key="del_gen_sel")
+                        if st.button("Confirmar Eliminación de Ítem", type="primary", use_container_width=True):
+                            ejecutar_comando("DELETE FROM inventario WHERE codigo = %s", (del_cod_gen,))
+                            st.success("Ítem eliminado del inventario.")
+                            st.rerun()
             else:
-                st.info("No hay insumos consumibles registrados.")
-            
-            with st.expander("➕ Agregar Nuevo Consumible al Inventario"):
-                c_cod = st.text_input("Código Insumo", key="inv_add_cod")
-                c_nom = st.text_input("Nombre", key="inv_add_nom")
-                c_cant = st.number_input("Cantidad Inicial", min_value=0, value=10, key="inv_add_cant")
-                c_min = st.number_input("Stock Mínimo de Alerta", min_value=0, value=5, key="inv_add_min")
-                
-                if st.button("Guardar Consumible", use_container_width=True):
-                    ejecutar_comando(
-                        "INSERT INTO inventario (codigo, nombre, tipo, cantidad, stock_minimo) VALUES (%s, %s, 'CONSUMIBLE', %s, %s)",
-                        (c_cod, c_nom, c_cant, c_min)
-                    )
-                    st.success("Consumible guardado con éxito.")
-                    st.rerun()
-
-            if not inv.empty and rol == "admin":
-                with st.expander("🗑️ Eliminar Consumible del Inventario"):
-                    inv_del_cod = st.selectbox("Código a Borrar", inv["codigo"].tolist(), key="inv_del_sel")
-                    if st.button("Eliminar Consumible", type="primary", use_container_width=True):
-                        ejecutar_comando("DELETE FROM inventario WHERE codigo = %s", (inv_del_cod,))
-                        st.success(f"Insumo '{inv_del_cod}' eliminado.")
-                        st.rerun()
+                st.info("El inventario general se encuentra vacío.")
         except Exception as e:
-            st.error(f"Error en Inventario: {e}")
+            st.error(f"Error en Inventario General: {e}")
 
-    # --- TAB 9: USUARIOS Y PERMISOS ---
+    # --- TAB 9: GESTIÓN DE CLASES / CATEGORÍAS ---
+    with tab_clases:
+        st.subheader("🏷️ Administración de Clases y Categorías")
+        st.write("Crea nuevas clases (como Neumática, Eléctricos, etc.) si tu operación lo requiere.")
+        try:
+            clases_actuales = ejecutar_consulta("SELECT * FROM clases_inventario")
+            st.dataframe(clases_actuales, use_container_width=True)
+            
+            with st.form("form_crear_clase"):
+                nueva_clase = st.text_input("Nombre de la Nueva Clase (Ej: REPUESTO_ELECTRICO)")
+                btn_crear_clase = st.form_submit_button("Crear Nueva Clase", type="primary", use_container_width=True)
+                
+                if btn_crear_clase:
+                    if nueva_clase.strip():
+                        ejecutar_comando("INSERT INTO clases_inventario (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (nueva_clase.upper().strip(),))
+                        st.success(f"Clase '{nueva_clase.upper()}' creada con éxito.")
+                        st.rerun()
+                    else:
+                        st.error("Escribe un nombre válido para la clase.")
+        except Exception as e:
+            st.error(f"Error en Clases: {e}")
+
+    # --- TAB 10: USUARIOS Y PERMISOS ---
     with tab7:
         st.subheader("⚙️ Administrar Usuarios")
         try:
