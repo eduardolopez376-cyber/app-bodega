@@ -955,7 +955,7 @@ elif rol in ["admin", "produccion"]:
             except Exception as e:
                 st.error(f"Error en clases: {e}")
 
-        # --- TAB: USUARIOS (CREAR, EDITAR CONTRASEÑA/ROLES Y ELIMINAR) ---
+        # --- TAB: USUARIOS (CREAR, EDITAR Y ELIMINAR SIN EMOJIS) ---
         with tab_usu:
             st.subheader("⚙️ Gestión y Seguridad de Usuarios del Sistema")
             try:
@@ -966,7 +966,7 @@ elif rol in ["admin", "produccion"]:
                     st.info("No hay usuarios registrados.")
                 
                 # 1. EXPANSOR CREAR USUARIO
-                with st.expander("➕ Crear Nuevo Usuario"):
+                with st.expander("Crear"):
                     with st.form("form_crear_usuario", clear_on_submit=True):
                         u_user = st.text_input("Usuario (Login)")
                         u_pass = st.text_input("Contraseña", type="password")
@@ -982,11 +982,10 @@ elif rol in ["admin", "produccion"]:
 
                 # 2. EXPANSOR EDITAR USUARIO (CONTRASEÑA Y ROLES)
                 if not users_df.empty:
-                    with st.expander("✏️ Editar Usuario (Cambiar Contraseña o Rol)"):
+                    with st.expander("Editar"):
                         with st.form("form_editar_usuario"):
                             edit_user_sel = st.selectbox("Selecciona el Usuario a Editar", users_df["username"].tolist())
                             
-                            # Buscar datos actuales del usuario seleccionado
                             user_actual = ejecutar_consulta("SELECT nombre, rol FROM usuarios WHERE username = %s", (edit_user_sel,))
                             nombre_actual = user_actual.iloc[0]['nombre'] if not user_actual.empty else ""
                             rol_actual = user_actual.iloc[0]['rol'] if not user_actual.empty else "operario"
@@ -1001,7 +1000,6 @@ elif rol in ["admin", "produccion"]:
                             
                             if btn_actualizar:
                                 if nueva_pass.strip():
-                                    # Actualizar nombre, rol y contraseña nueva
                                     ejecutar_comando(
                                         "UPDATE usuarios SET nombre = %s, password = %s, rol = %s WHERE username = %s",
                                         (nuevo_nombre.strip(), nueva_pass, nuevo_rol, edit_user_sel)
@@ -1009,7 +1007,6 @@ elif rol in ["admin", "produccion"]:
                                     st.success(f"¡Usuario '{edit_user_sel}' actualizado con éxito (incluyendo contraseña y rol)! 🎉")
                                     st.rerun()
                                 else:
-                                    # Actualizar nombre y rol sin tocar la contraseña anterior
                                     ejecutar_comando(
                                         "UPDATE usuarios SET nombre = %s, rol = %s WHERE username = %s",
                                         (nuevo_nombre.strip(), nuevo_rol, edit_user_sel)
@@ -1019,7 +1016,7 @@ elif rol in ["admin", "produccion"]:
 
                 # 3. EXPANSOR ELIMINAR USUARIO
                 if not users_df.empty:
-                    with st.expander("🗑️ Eliminar Usuario"):
+                    with st.expander("Eliminar"):
                         with st.form("form_del_usuario", clear_on_submit=True):
                             usuario_del = st.selectbox("Selecciona el Usuario a Borrar", users_df["username"].tolist(), key="del_u_key")
                             if st.form_submit_button("Eliminar Usuario", type="primary", use_container_width=True):
