@@ -125,6 +125,8 @@ if "nombre_usuario" not in st.session_state:
     st.session_state["nombre_usuario"] = None
 if "username" not in st.session_state:
     st.session_state["username"] = None
+if "form_key_counter" not in st.session_state:
+    st.session_state["form_key_counter"] = 0
 
 # PANTALLA DE LOGIN
 if not st.session_state["autenticado"]:
@@ -414,11 +416,11 @@ elif rol in ["admin", "produccion"]:
             else:
                 with st.expander(f"➕ Asignar Tarea vinculada a una Orden de Compra para el {fecha_seleccionada}", expanded=True):
                     
-                    # Función Callback para refrescar al cambiar la OC seleccionada
-                    def refrescar_oc():
-                        pass
-
-                    oc_prog = st.selectbox("Orden de Compra a Ejecutar", ocs_disp, key="select_oc_dinamica", on_change=refrescar_oc)
+                    # Usamos un contador dinámico en la clave (key) del formulario y selectbox 
+                    # para obligar a Streamlit a limpiar y recrear los campos al guardar cada programación.
+                    k_sufijo = st.session_state["form_key_counter"]
+                    
+                    oc_prog = st.selectbox("Orden de Compra a Ejecutar", ocs_disp, key=f"select_oc_dinamica_{k_sufijo}")
                     
                     # Consultamos al instante los datos de la OC seleccionada
                     oc_info = ejecutar_consulta("SELECT referencia, servicio, meta_unidades, unidades_entregadas FROM ordenes_compra WHERE numero_oc = %s", (oc_prog,))
@@ -428,20 +430,20 @@ elif rol in ["admin", "produccion"]:
                     
                     st.markdown(f"📌 **Referencia de la OC:** `{ref_sugerida}` &nbsp;|&nbsp; **Servicio:** `{serv_sugerido}` &nbsp;|&nbsp; **Saldo Pendiente:** `{meta_restante} u.`")
                     
-                    # Formulario para el resto de campos y el botón de guardado
-                    with st.form(f"form_programacion_{fecha_seleccionada}", clear_on_submit=True):
-                        op_p = st.selectbox("Operario", ops)
-                        maq_p = st.selectbox("Máquina", maqs)
+                    # Formulario con clave dinámica para resetear valores anteriores
+                    with st.form(f"form_programacion_{fecha_seleccionada}_{k_sufijo}", clear_on_submit=True):
+                        op_p = st.selectbox("Operario", ops, key=f"op_prog_{k_sufijo}")
+                        maq_p = st.selectbox("Máquina", maqs, key=f"maq_prog_{k_sufijo}")
                         
-                        act_p = st.text_input("Actividad Específica (Ej: Corte láser de planchas)", value=serv_sugerido)
+                        act_p = st.text_input("Actividad Específica (Ej: Corte láser de planchas)", value=serv_sugerido, key=f"act_prog_{k_sufijo}")
                         
                         col_h1, col_h2 = st.columns(2)
                         with col_h1:
-                            h_ini_p = st.time_input("Inicio Turno", time(7, 0))
+                            h_ini_p = st.time_input("Inicio Turno", time(7, 0), key=f"hini_{k_sufijo}")
                         with col_h2:
-                            h_fin_p = st.time_input("Fin Turno", time(17, 0))
+                            h_fin_p = st.time_input("Fin Turno", time(17, 0), key=f"hfin_{k_sufijo}")
                         
-                        meta_p = st.number_input("Meta de Unidades para esta Tarea", min_value=1, value=meta_restante)
+                        meta_p = st.number_input("Meta de Unidades para esta Tarea", min_value=1, value=meta_restante, key=f"meta_{k_sufijo}")
                         btn_prog = st.form_submit_button("Guardar Programación de Tarea", type="primary", use_container_width=True)
                         
                         if btn_prog:
@@ -451,7 +453,9 @@ elif rol in ["admin", "produccion"]:
                                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE')""",
                                 (fecha_seleccionada, oc_prog, op_p, maq_p, ref_sugerida, act_p, h_ini_p, h_fin_p, meta_p)
                             )
-                            st.success(f"Tarea asignada a {op_p} para la OC #{oc_prog} el día {fecha_seleccionada}.")
+                            # Incrementamos el contador para invalidar las claves anteriores y refrescar con nuevos inputs limpios
+                            st.session_state["form_key_counter"] += 1
+                            st.success(f"¡Tarea asignada a {op_p} con éxito!")
                             st.rerun()
             
             st.write("---")
