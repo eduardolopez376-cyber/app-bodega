@@ -340,7 +340,6 @@ if rol == "operario":
                         
                     obs_usuario = st.text_area("Observaciones / Novedades")
                     
-                    # Botón limpio para el operario
                     submit = st.form_submit_button("Guardar", use_container_width=True)
                     
                     if submit:
@@ -492,8 +491,8 @@ elif rol in ["admin", "produccion"]:
             if not ops or not maqs or not refs or not ocs_disp:
                 st.warning("⚠️ Asegúrate de tener operarios, máquinas, referencias y al menos una **Orden de Compra activa** creada.")
             else:
-                with st.expander("➕ Asignar Nueva Tarea", expanded=True):
-                    
+                with st.container():
+                    st.markdown("#### ➕ Asignar Nueva Tarea")
                     k_sufijo = st.session_state["form_key_counter"]
                     oc_prog = st.selectbox("Orden de Compra a Ejecutar", ocs_disp, key=f"select_oc_dinamica_{k_sufijo}")
                     
@@ -540,9 +539,10 @@ elif rol in ["admin", "produccion"]:
             if not df_prog_actual.empty:
                 st.dataframe(df_prog_actual, use_container_width=True)
                 
-                with st.expander("🗑️ Eliminar Programación"):
+                with st.container():
+                    st.markdown("#### 🗑️ Eliminar Programación")
                     id_del = st.selectbox("ID a Eliminar", df_prog_actual["id"].tolist(), key="del_prog_id_c")
-                    if st.button("Confirmar", use_container_width=True):
+                    if st.button("Confirmar Eliminación", use_container_width=True):
                         ejecutar_comando("DELETE FROM programacion_diaria WHERE id = %s", (id_del,))
                         st.success("✅ Eliminado.")
                         st.rerun()
@@ -565,7 +565,8 @@ elif rol in ["admin", "produccion"]:
             if not lista_refs:
                 st.warning("⚠️ Primero debes crear referencias en la pestaña 'Referencias'.")
             else:
-                with st.expander("➕ Registrar Nueva Orden de Compra", expanded=True):
+                with st.container():
+                    st.markdown("#### ➕ Registrar Nueva Orden de Compra")
                     with st.form("form_crear_oc", clear_on_submit=True):
                         num_oc = st.text_input("Número de Orden de Compra (Ej: OC-9021)")
                         cliente = st.text_input("Nombre del Cliente")
@@ -602,10 +603,11 @@ elif rol in ["admin", "produccion"]:
                 )
                 st.dataframe(df_oc, use_container_width=True)
 
-                with st.expander("🗑️ Eliminar Orden de Compra"):
+                with st.container():
+                    st.markdown("#### 🗑️ Eliminar Orden de Compra")
                     with st.form("form_del_oc", clear_on_submit=True):
                         oc_del = st.selectbox("Selecciona la OC a Borrar", df_oc["numero_oc"].tolist())
-                        if st.form_submit_button("Confirmar", use_container_width=True):
+                        if st.form_submit_button("Confirmar Eliminación", use_container_width=True):
                             ejecutar_comando("DELETE FROM ordenes_compra WHERE numero_oc = %s", (oc_del,))
                             ejecutar_comando("DELETE FROM programacion_diaria WHERE numero_oc = %s", (oc_del,))
                             ejecutar_comando("DELETE FROM registro_produccion WHERE numero_oc = %s", (oc_del,))
@@ -624,7 +626,8 @@ elif rol in ["admin", "produccion"]:
             df_maqs = ejecutar_consulta("SELECT * FROM maquinas")
             st.dataframe(df_maqs, use_container_width=True)
             
-            with st.expander("➕ Registrar Nueva Máquina"):
+            with st.container():
+                st.markdown("#### ➕ Registrar Nueva Máquina")
                 with st.form("form_crear_maquina", clear_on_submit=True):
                     m_nom = st.text_input("Nombre de la Máquina")
                     m_tipo = st.text_input("Tipo (Ej: Corte, Dobladora)")
@@ -639,10 +642,11 @@ elif rol in ["admin", "produccion"]:
                             st.error("Escribe el nombre.")
 
             if not df_maqs.empty and rol == "admin":
-                with st.expander("🗑️ Eliminar Máquina"):
+                with st.container():
+                    st.markdown("#### 🗑️ Eliminar Máquina")
                     with st.form("form_del_maquina", clear_on_submit=True):
                         m_del = st.selectbox("Máquina a Borrar", df_maqs["nombre"].tolist())
-                        if st.form_submit_button("Confirmar", use_container_width=True):
+                        if st.form_submit_button("Confirmar Eliminación", use_container_width=True):
                             ejecutar_comando("DELETE FROM maquinas WHERE nombre = %s", (m_del,))
                             st.success("✅ Eliminado.")
                             st.rerun()
@@ -659,7 +663,8 @@ elif rol in ["admin", "produccion"]:
             else:
                 st.info("No hay servicios creados.")
             
-            with st.expander("➕ Crear Nuevo Servicio"):
+            with st.container():
+                st.markdown("#### ➕ Crear Nuevo Servicio")
                 with st.form("form_crear_serv", clear_on_submit=True):
                     nom_serv = st.text_input("Nombre del Servicio")
                     if st.form_submit_button("Guardar", use_container_width=True):
@@ -671,10 +676,11 @@ elif rol in ["admin", "produccion"]:
                             st.error("Escribe un nombre.")
 
             if not df_serv.empty and rol == "admin":
-                with st.expander("🗑️ Eliminar Servicio"):
+                with st.container():
+                    st.markdown("#### 🗑️ Eliminar Servicio")
                     with st.form("form_del_serv", clear_on_submit=True):
                         serv_del = st.selectbox("Servicio a Borrar", df_serv["nombre"].tolist())
-                        if st.form_submit_button("Confirmar", use_container_width=True):
+                        if st.form_submit_button("Confirmar Eliminación", use_container_width=True):
                             ejecutar_comando("DELETE FROM servicios_prestados WHERE nombre = %s", (serv_del,))
                             st.success("✅ Eliminado.")
                             st.rerun()
@@ -688,7 +694,8 @@ elif rol in ["admin", "produccion"]:
             df_refs = ejecutar_consulta("SELECT * FROM referencias")
             st.dataframe(df_refs, use_container_width=True)
             
-            with st.expander("➕ Crear Nueva Referencia"):
+            with st.container():
+                st.markdown("#### ➕ Crear Nueva Referencia")
                 with st.form("form_crear_ref", clear_on_submit=True):
                     r_cod = st.text_input("Código Referencia")
                     r_desc = st.text_input("Descripción del Producto")
@@ -698,10 +705,11 @@ elif rol in ["admin", "produccion"]:
                         st.rerun()
 
             if not df_refs.empty and rol == "admin":
-                with st.expander("🗑️ Eliminar Referencia"):
+                with st.container():
+                    st.markdown("#### 🗑️ Eliminar Referencia")
                     with st.form("form_del_ref", clear_on_submit=True):
                         r_del = st.selectbox("Referencia a Borrar", df_refs["codigo"].tolist())
-                        if st.form_submit_button("Confirmar", use_container_width=True):
+                        if st.form_submit_button("Confirmar Eliminación", use_container_width=True):
                             ejecutar_comando("DELETE FROM referencias WHERE codigo = %s", (r_del,))
                             st.success("✅ Eliminado.")
                             st.rerun()
@@ -822,7 +830,8 @@ elif rol in ["admin", "produccion"]:
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
             
             if ops and not herramientas_db.empty:
-                with st.expander("🤝 Prestar Herramienta"):
+                with st.container():
+                    st.markdown("#### 🤝 Prestar Herramienta")
                     with st.form("form_prestar_herramienta", clear_on_submit=True):
                         op_her = st.selectbox("Operario", ops)
                         her_sel = st.selectbox("Herramienta", herramientas_db['nombre'].tolist())
@@ -899,10 +908,11 @@ elif rol in ["admin", "produccion"]:
             if not inv_gen.empty:
                 st.dataframe(inv_gen, use_container_width=True)
                 if rol == "admin":
-                    with st.expander("🗑️ Eliminar Ítem"):
+                    with st.container():
+                        st.markdown("#### 🗑️ Eliminar Ítem")
                         with st.form("form_del_inv", clear_on_submit=True):
                             del_cod_gen = st.selectbox("Código a Eliminar", inv_gen["codigo"].tolist())
-                            if st.form_submit_button("Confirmar", use_container_width=True):
+                            if st.form_submit_button("Confirmar Eliminación", use_container_width=True):
                                 ejecutar_comando("DELETE FROM inventario WHERE codigo = %s", (del_cod_gen,))
                                 st.success("✅ Eliminado.")
                                 st.rerun()
@@ -919,7 +929,8 @@ elif rol in ["admin", "produccion"]:
             if not clases_actuales.empty:
                 st.dataframe(clases_actuales, use_container_width=True)
             
-            with st.expander("➕ Crear Clase"):
+            with st.container():
+                st.markdown("#### ➕ Crear Clase")
                 with st.form("form_crear_clase", clear_on_submit=True):
                     nueva_clase = st.text_input("Nombre de Clase")
                     if st.form_submit_button("Guardar", use_container_width=True):
@@ -937,7 +948,8 @@ elif rol in ["admin", "produccion"]:
             users_df = ejecutar_consulta("SELECT id, username, nombre, rol FROM usuarios")
             st.dataframe(users_df, use_container_width=True)
             
-            with st.expander("➕ Crear Usuario"):
+            with st.container():
+                st.markdown("#### ➕ Crear Usuario")
                 with st.form("form_crear_usuario", clear_on_submit=True):
                     u_user = st.text_input("Usuario")
                     u_pass = st.text_input("Clave", type="password")
