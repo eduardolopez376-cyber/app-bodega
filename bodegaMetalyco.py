@@ -409,7 +409,7 @@ if rol == "operario":
 # ====================================================
 elif rol in ["admin", "produccion"]:
     
-    # Definir pestañas según el rol de manera limpia
+    # Definir pestañas según el rol
     if rol == "admin":
         tab_prog, tab_oc, tab_eq, tab_serv, tab_ref, tab_rep, tab_ent, tab_herramientas, tab_cargue, tab_inv_gen, tab_clases, tab_usu = st.tabs([
             "📅 Programar", 
@@ -425,7 +425,7 @@ elif rol in ["admin", "produccion"]:
             "🏷️ Clases", 
             "⚙️ Usuarios"
         ])
-    else: # Rol produccion (Sin máquinas, servicios, clases ni usuarios)
+    else:
         tab_prog, tab_oc, tab_ref, tab_rep, tab_ent, tab_herramientas, tab_cargue, tab_inv_gen = st.tabs([
             "📅 Programar", 
             "📋 Órdenes Compra",
@@ -580,9 +580,8 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Órdenes de Compra: {e}")
 
-    # --- TABS EXCLUSIVOS DE ADMIN (Máquinas, Servicios, Clases, Usuarios) ---
+    # --- TABS EXCLUSIVOS DE ADMIN (Máquinas, Servicios) ---
     if rol == "admin":
-        # --- TAB: MÁQUINAS ---
         with tab_eq:
             st.subheader("⚙️ Gestión de Máquinas (Propias y Alquiladas)")
             try:
@@ -614,7 +613,6 @@ elif rol in ["admin", "produccion"]:
             except Exception as e:
                 st.error(f"Error en Máquinas: {e}")
 
-        # --- TAB: SERVICIOS PRESTADOS ---
         with tab_serv:
             st.subheader("🛠️ Administración de Servicios Prestados")
             try:
@@ -646,7 +644,7 @@ elif rol in ["admin", "produccion"]:
             except Exception as e:
                 st.error(f"Error en Servicios: {e}")
 
-    # --- TAB: REFERENCIAS (Disponible para Admin y Producción) ---
+    # --- TAB: REFERENCIAS ---
     with tab_ref:
         st.subheader("📄 Gestión de Referencias (Catálogo Base)")
         try:
@@ -926,7 +924,6 @@ elif rol in ["admin", "produccion"]:
 
     # --- TABS EXCLUSIVOS DE ADMIN (Clases, Usuarios) ---
     if rol == "admin":
-        # --- TAB: CLASES ---
         with tab_clases:
             st.subheader("🏷️ Administración de Clases de Inventario")
             try:
@@ -958,12 +955,15 @@ elif rol in ["admin", "produccion"]:
             except Exception as e:
                 st.error(f"Error en clases: {e}")
 
-        # --- TAB: USUARIOS ---
+        # --- TAB: USUARIOS (CON OPCIÓN DE CREAR Y ELIMINAR) ---
         with tab_usu:
             st.subheader("⚙️ Gestión de Usuarios del Sistema")
             try:
-                users_df = ejecutar_consulta("SELECT id, username, nombre, rol FROM usuarios")
-                st.dataframe(users_df, use_container_width=True)
+                users_df = ejecutar_consulta("SELECT id, username, nombre, rol FROM usuarios ORDER BY id DESC")
+                if not users_df.empty:
+                    st.dataframe(users_df, use_container_width=True)
+                else:
+                    st.info("No hay usuarios registrados.")
                 
                 with st.expander("Crear"):
                     with st.form("form_crear_usuario", clear_on_submit=True):
@@ -972,8 +972,24 @@ elif rol in ["admin", "produccion"]:
                         u_nom = st.text_input("Nombre Completo")
                         u_rol = st.selectbox("Rol en Planta", ["operario", "produccion", "admin"])
                         if st.form_submit_button("Guardar Usuario", type="primary", use_container_width=True):
-                            ejecutar_comando("INSERT INTO usuarios (username, password, nombre, rol) VALUES (%s, %s, %s, %s)", (u_user, u_pass, u_nom, u_rol))
-                            st.success(f"Usuario '{u_nom}' creado con el rol '{u_rol}'.")
-                            st.rerun()
+                            if u_user.strip() and u_pass.strip() and u_nom.strip():
+                                ejecutar_comando("INSERT INTO usuarios (username, password, nombre, rol) VALUES (%s, %s, %s, %s)", (u_user.strip(), u_pass, u_nom.strip(), u_rol))
+                                st.success(f"Usuario '{u_nom}' creado con el rol '{u_rol}'.")
+                                st.rerun()
+                            else:
+                                st.error("Por favor completa todos los campos del usuario.")
+
+                if not users_df.empty:
+                    with st.expander("Eliminar"):
+                        with st.form("form_del_usuario", clear_on_submit=True):
+                            usuario_del = st.selectbox("Selecciona el Usuario a Borrar", users_df["username"].tolist())
+                            if st.form_submit_button("Eliminar Usuario", type="primary", use_container_width=True):
+                                # Validación para evitar que el admin se borre a sí mismo por accidente
+                                if usuario_del == st.session_state["username"]:
+                                    st.error("No puedes eliminar tu propia cuenta de administrador activa.")
+                                else:
+                                    ejecutar_comando("DELETE FROM usuarios WHERE username = %s", (usuario_del,))
+                                    st.success(f"Usuario '{usuario_del}' eliminado definitivamente.")
+                                    st.rerun()
             except Exception as e:
                 st.error(f"Error en usuarios: {e}")
