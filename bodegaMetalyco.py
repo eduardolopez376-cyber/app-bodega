@@ -1,4 +1,3 @@
-
 import streamlit as str_lib
 import streamlit as st
 import pandas as pd
@@ -75,7 +74,7 @@ def ejecutar_comando(query, params=None):
     cur.close()
     conn.close()
 
-# Inicializar y actualizar tablas para soportar servicios, máquinas (propias/alquiladas) y relación con OC
+# Inicializar y actualizar tablas del sistema
 def inicializar_tablas_sistema():
     try:
         # Tabla de Servicios Prestados
@@ -416,13 +415,9 @@ elif rol in ["admin", "produccion"]:
             else:
                 with st.expander(f"➕ Asignar Tarea vinculada a una Orden de Compra para el {fecha_seleccionada}", expanded=True):
                     
-                    # Usamos un contador dinámico en la clave (key) del formulario y selectbox 
-                    # para obligar a Streamlit a limpiar y recrear los campos al guardar cada programación.
                     k_sufijo = st.session_state["form_key_counter"]
-                    
                     oc_prog = st.selectbox("Orden de Compra a Ejecutar", ocs_disp, key=f"select_oc_dinamica_{k_sufijo}")
                     
-                    # Consultamos al instante los datos de la OC seleccionada
                     oc_info = ejecutar_consulta("SELECT referencia, servicio, meta_unidades, unidades_entregadas FROM ordenes_compra WHERE numero_oc = %s", (oc_prog,))
                     ref_sugerida = oc_info.iloc[0]['referencia'] if not oc_info.empty else (refs[0] if refs else "")
                     serv_sugerido = oc_info.iloc[0]['servicio'] if not oc_info.empty else ""
@@ -430,12 +425,10 @@ elif rol in ["admin", "produccion"]:
                     
                     st.markdown(f"📌 **Referencia de la OC:** `{ref_sugerida}` &nbsp;|&nbsp; **Servicio:** `{serv_sugerido}` &nbsp;|&nbsp; **Saldo Pendiente:** `{meta_restante} u.`")
                     
-                    # Formulario con clave dinámica para resetear valores anteriores
                     with st.form(f"form_programacion_{fecha_seleccionada}_{k_sufijo}", clear_on_submit=True):
                         op_p = st.selectbox("Operario", ops, key=f"op_prog_{k_sufijo}")
                         maq_p = st.selectbox("Máquina", maqs, key=f"maq_prog_{k_sufijo}")
-                        
-                        act_p = st.text_input("Actividad Específica (Ej: Corte láser de planchas)", value=serv_sugerido, key=f"act_prog_{k_sufijo}")
+                        act_p = st.text_input("Actividad Específica", value=serv_sugerido, key=f"act_prog_{k_sufijo}")
                         
                         col_h1, col_h2 = st.columns(2)
                         with col_h1:
@@ -453,7 +446,6 @@ elif rol in ["admin", "produccion"]:
                                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE')""",
                                 (fecha_seleccionada, oc_prog, op_p, maq_p, ref_sugerida, act_p, h_ini_p, h_fin_p, meta_p)
                             )
-                            # Incrementamos el contador para invalidar las claves anteriores y refrescar con nuevos inputs limpios
                             st.session_state["form_key_counter"] += 1
                             st.success(f"¡Tarea asignada a {op_p} con éxito!")
                             st.rerun()
@@ -481,7 +473,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Programación: {e}")
 
-    # --- TAB 2: ÓRDENES DE COMPRA Y SALDOS ---
+    # --- TAB 2: ÓRDENES DE COMPRA Y SALDOS (Con Limpieza en Cascada al Borrar) ---
     with tab_oc:
         st.subheader("📋 Gestión de Órdenes de Compra (OC), Clientes y Saldos")
         try:
@@ -535,8 +527,11 @@ elif rol in ["admin", "produccion"]:
                     with st.form("form_del_oc", clear_on_submit=True):
                         oc_del = st.selectbox("Selecciona la OC a Borrar", df_oc["numero_oc"].tolist())
                         if st.form_submit_button("Confirmar Eliminación de OC", type="primary", use_container_width=True):
+                            # Eliminamos la OC y limpiamos también su rastro en programación y producción para pruebas limpias
                             ejecutar_comando("DELETE FROM ordenes_compra WHERE numero_oc = %s", (oc_del,))
-                            st.success(f"Orden de Compra #{oc_del} eliminada.")
+                            ejecutar_comando("DELETE FROM programacion_diaria WHERE numero_oc = %s", (oc_del,))
+                            ejecutar_comando("DELETE FROM registro_produccion WHERE numero_oc = %s", (oc_del,))
+                            st.success(f"Orden de Compra #{oc_del} y sus registros asociados fueron eliminados por completo.")
                             st.rerun()
             else:
                 st.info("No hay órdenes de compra registradas.")
@@ -579,7 +574,6 @@ elif rol in ["admin", "produccion"]:
     # --- TAB 4: SERVICIOS PRESTADOS (Crear y Eliminar) ---
     with tab_serv:
         st.subheader("🛠️ Administración de Servicios Prestados")
-        st.write("Crea, edita o elimina los servicios que ofrece la empresa (Ej: Troquelado, Corte Láser, Pintura, etc.).")
         try:
             df_serv = ejecutar_consulta("SELECT * FROM servicios_prestados ORDER BY id DESC")
             if not df_serv.empty:
@@ -636,10 +630,10 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Referencias: {e}")
 
-    # --- TAB 6: REPORTES EXCEL MAESTROS ---
+    # --- TAB 6: REPORTES EXCEL MAESTROS (Con validación estricta de OC vigentes) ---
     with tab_rep:
         st.subheader("📊 Centro de Reportes y Descargas (Excel Maestro)")
-        st.write("Descarga los reportes detallados con toda la trazabilidad de órdenes de compra, operarios, máquinas, tiempos y saldos pendientes:")
+        st.write("Reportes detallados con trazabilidad limpia (excluyendo órdenes de compra eliminadas):")
         try:
             st.write("---")
             st.write("### 📋 1. Reporte Maestro de Órdenes de Compra y Saldos")
@@ -661,11 +655,13 @@ elif rol in ["admin", "produccion"]:
                 )
 
             st.write("---")
-            st.write("### 🏭 2. Reporte de Producción Detallado")
+            st.write("### 🏭 2. Reporte de Producción Detallado (Solo OC Vigentes)")
+            # Nota: Usamos INNER JOIN con ordenes_compra para que si la OC fue borrada, sus registros huérfanos no salgan en el reporte
             df_prod_rep = ejecutar_consulta("""
                 SELECT r.id, r.fecha, r.numero_oc, r.operario_nombre, r.maquina, m.tipo_propiedad as tipo_maquina, 
                        r.referencia, r.hora_inicio_real, r.hora_fin_real, r.unidades_producidas, r.observaciones 
                 FROM registro_produccion r 
+                JOIN ordenes_compra oc ON r.numero_oc = oc.numero_oc
                 JOIN usuarios u ON r.operario_nombre = u.nombre 
                 LEFT JOIN maquinas m ON r.maquina = m.nombre
                 ORDER BY r.id DESC
@@ -685,7 +681,7 @@ elif rol in ["admin", "produccion"]:
                     key="dl_prod_excel"
                 )
             else:
-                st.info("No hay registros de producción.")
+                st.info("No hay registros de producción vinculados a órdenes activas.")
 
             st.write("---")
             st.write("### 📦 3. Reporte de Inventario General")
