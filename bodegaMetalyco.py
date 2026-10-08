@@ -85,7 +85,6 @@ def inicializar_tablas_sistema():
                 nombre VARCHAR(100) UNIQUE NOT NULL
             );
         """)
-        # Insertar servicios por defecto si está vacía
         servicios_iniciales = ["TROQUELADO", "CONFORMADO", "CORTE LASER", "PINTURA", "FABRICACION DE ESTRUCTURAS METALICAS"]
         for s in servicios_iniciales:
             ejecutar_comando("INSERT INTO servicios_prestados (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (s,))
@@ -98,12 +97,12 @@ def inicializar_tablas_sistema():
             );
         """)
 
-        # Asegurar columna tipo_propiedad en máquinas (Propia / Alquilada)
+        # Asegurar columna tipo_propiedad en máquinas
         ejecutar_comando("""
             ALTER TABLE maquinas ADD COLUMN IF NOT EXISTS tipo_propiedad VARCHAR(50) DEFAULT 'PROPIA';
         """)
 
-        # Asegurar columna numero_oc en programacion_diaria y registro_produccion para enlazar directamente
+        # Asegurar columna numero_oc en programacion_diaria y registro_produccion
         ejecutar_comando("""
             ALTER TABLE programacion_diaria ADD COLUMN IF NOT EXISTS numero_oc VARCHAR(100);
         """)
@@ -233,14 +232,13 @@ if rol == "operario":
             if not herramientas.empty:
                 st.dataframe(herramientas, use_container_width=True)
             else:
-                st.success("Sin herramientas o materiales pendientes de devolución.")
+                st.success("Sin herramientas or materiales pendientes de devolución.")
         except Exception as e:
             st.error(f"Error al cargar consumos: {e}")
 
     with tab_prod:
         st.write("### Registrar Producción, Descontar OC y Completar Tarea")
         try:
-            # Mostramos todas las tareas pendientes (hoy y días futuros para permitir adelantar)
             tareas_pendientes = ejecutar_consulta(
                 """SELECT id, fecha, numero_oc, actividad, maquina, referencia, meta_unidades FROM programacion_diaria 
                    WHERE operario_nombre = %s AND estado NOT IN ('FINALIZADO', 'CANCELADO')
@@ -274,7 +272,6 @@ if rol == "operario":
                         row_t = tareas_pendientes[tareas_pendientes['id'] == id_tarea].iloc[0]
                         num_oc_asociada = row_t['numero_oc']
                         
-                        # Guardar en registro de producción con su OC
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
                             (operario_nombre, maquina, referencia, numero_oc, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones) 
@@ -282,7 +279,6 @@ if rol == "operario":
                             (st.session_state['nombre_usuario'], row_t['maquina'], row_t['referencia'], num_oc_asociada, h_inicio, h_fin, unidades, f"Buenas: {unidades}, Defectuosas: {defectuosas}. {obs_usuario}")
                         )
                         
-                        # Descontar / Abonar automáticamente a la Orden de Compra si tiene OC asignada
                         if num_oc_asociada and num_oc_asociada != "SIN OC":
                             oc_db = ejecutar_consulta("SELECT unidades_entregadas, meta_unidades, requiere_unidades FROM ordenes_compra WHERE numero_oc = %s", (num_oc_asociada,))
                             if not oc_db.empty:
@@ -298,7 +294,6 @@ if rol == "operario":
                                     (nuevo_entregado, nuevo_estado, num_oc_asociada)
                                 )
 
-                        # Finalizar tarea en programación
                         ejecutar_comando(
                             "UPDATE programacion_diaria SET estado = 'FINALIZADO' WHERE id = %s",
                             (id_tarea,)
@@ -417,19 +412,23 @@ elif rol in ["admin", "produccion"]:
             if not ops or not maqs or not refs or not ocs_disp:
                 st.warning("⚠️ Asegúrate de tener operarios, máquinas, referencias y al menos una **Orden de Compra activa** creada.")
             else:
-                with st.expander(f"➕ Asignar Tarea vinculada a una Orden de Compra para el {fecha_seleccionada}", expanded=False):
+                with st.expander(f"➕ Asignar Tarea vinculada a una Orden de Compra para el {fecha_seleccionada}", expanded=True):
+                    
+                    # 1. Selector de OC FUERA del formulario para que refresque al instante al cambiar
+                    oc_prog = st.selectbox("Orden de Compra a Ejecutar", ocs_disp, key="select_oc_dinamica")
+                    
+                    # Consultamos al instante los datos de la OC seleccionada
+                    oc_info = ejecutar_consulta("SELECT referencia, servicio, meta_unidades, unidades_entregadas FROM ordenes_compra WHERE numero_oc = %s", (oc_prog,))
+                    ref_sugerida = oc_info.iloc[0]['referencia'] if not oc_info.empty else (refs[0] if refs else "")
+                    serv_sugerido = oc_info.iloc[0]['servicio'] if not oc_info.empty else ""
+                    meta_restante = max(1, int(oc_info.iloc[0]['meta_unidades']) - int(oc_info.iloc[0]['unidades_entregadas'])) if not oc_info.empty else 100
+                    
+                    st.markdown(f"📌 **Referencia de la OC:** `{ref_sugerida}` &nbsp;|&nbsp; **Servicio:** `{serv_sugerido}` &nbsp;|&nbsp; **Saldo Pendiente:** `{meta_restante} u.`")
+                    
+                    # 2. Formulario para el resto de campos y el botón de guardado
                     with st.form(f"form_programacion_{fecha_seleccionada}", clear_on_submit=True):
-                        oc_prog = st.selectbox("Orden de Compra a Ejecutar", ocs_disp)
                         op_p = st.selectbox("Operario", ops)
                         maq_p = st.selectbox("Máquina", maqs)
-                        
-                        # Autocompletar referencia y servicio basados en la OC seleccionada
-                        oc_info = ejecutar_consulta("SELECT referencia, servicio, meta_unidades, unidades_entregadas FROM ordenes_compra WHERE numero_oc = %s", (oc_prog,))
-                        ref_sugerida = oc_info.iloc[0]['referencia'] if not oc_info.empty else (refs[0] if refs else "")
-                        serv_sugerido = oc_info.iloc[0]['servicio'] if not oc_info.empty else ""
-                        meta_restante = max(1, int(oc_info.iloc[0]['meta_unidades']) - int(oc_info.iloc[0]['unidades_entregadas'])) if not oc_info.empty else 100
-                        
-                        st.write(f"📌 **Referencia de la OC:** `{ref_sugerida}` | **Servicio:** `{serv_sugerido}` | **Saldo Pendiente:** `{meta_restante} u.`")
                         
                         act_p = st.text_input("Actividad Específica (Ej: Corte láser de planchas)", value=serv_sugerido)
                         
@@ -633,7 +632,7 @@ elif rol in ["admin", "produccion"]:
     # --- TAB 6: REPORTES EXCEL MAESTROS ---
     with tab_rep:
         st.subheader("📊 Centro de Reportes y Descargas (Excel Maestro)")
-        st.write("Descarga los reportes detallados con toda la trazabilidad de órdenes de compra, operarios, máquinas (propias/alquiladas), tiempos y saldos pendientes:")
+        st.write("Descarga los reportes detallados con toda la trazabilidad de órdenes de compra, operarios, máquinas, tiempos y saldos pendientes:")
         try:
             st.write("---")
             st.write("### 📋 1. Reporte Maestro de Órdenes de Compra y Saldos")
@@ -655,7 +654,7 @@ elif rol in ["admin", "produccion"]:
                 )
 
             st.write("---")
-            st.write("### 🏭 2. Reporte de Producción Detallado (Quién hizo qué, Máquina, Tiempo, OC)")
+            st.write("### 🏭 2. Reporte de Producción Detallado")
             df_prod_rep = ejecutar_consulta("""
                 SELECT r.id, r.fecha, r.numero_oc, r.operario_nombre, r.maquina, m.tipo_propiedad as tipo_maquina, 
                        r.referencia, r.hora_inicio_real, r.hora_fin_real, r.unidades_producidas, r.observaciones 
