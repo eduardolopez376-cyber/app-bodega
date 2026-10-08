@@ -955,9 +955,9 @@ elif rol in ["admin", "produccion"]:
             except Exception as e:
                 st.error(f"Error en clases: {e}")
 
-        # --- TAB: USUARIOS (CON OPCIÓN DE CREAR Y ELIMINAR) ---
+        # --- TAB: USUARIOS (CREAR, EDITAR CONTRASEÑA/ROLES Y ELIMINAR) ---
         with tab_usu:
-            st.subheader("⚙️ Gestión de Usuarios del Sistema")
+            st.subheader("⚙️ Gestión y Seguridad de Usuarios del Sistema")
             try:
                 users_df = ejecutar_consulta("SELECT id, username, nombre, rol FROM usuarios ORDER BY id DESC")
                 if not users_df.empty:
@@ -965,7 +965,8 @@ elif rol in ["admin", "produccion"]:
                 else:
                     st.info("No hay usuarios registrados.")
                 
-                with st.expander("Crear"):
+                # 1. EXPANSOR CREAR USUARIO
+                with st.expander("➕ Crear Nuevo Usuario"):
                     with st.form("form_crear_usuario", clear_on_submit=True):
                         u_user = st.text_input("Usuario (Login)")
                         u_pass = st.text_input("Contraseña", type="password")
@@ -974,17 +975,54 @@ elif rol in ["admin", "produccion"]:
                         if st.form_submit_button("Guardar Usuario", type="primary", use_container_width=True):
                             if u_user.strip() and u_pass.strip() and u_nom.strip():
                                 ejecutar_comando("INSERT INTO usuarios (username, password, nombre, rol) VALUES (%s, %s, %s, %s)", (u_user.strip(), u_pass, u_nom.strip(), u_rol))
-                                st.success(f"Usuario '{u_nom}' creado con el rol '{u_rol}'.")
+                                st.success(f"Usuario '{u_nom}' creado con éxito.")
                                 st.rerun()
                             else:
-                                st.error("Por favor completa todos los campos del usuario.")
+                                st.error("Por favor completa todos los campos.")
 
+                # 2. EXPANSOR EDITAR USUARIO (CONTRASEÑA Y ROLES)
                 if not users_df.empty:
-                    with st.expander("Eliminar"):
+                    with st.expander("✏️ Editar Usuario (Cambiar Contraseña o Rol)"):
+                        with st.form("form_editar_usuario"):
+                            edit_user_sel = st.selectbox("Selecciona el Usuario a Editar", users_df["username"].tolist())
+                            
+                            # Buscar datos actuales del usuario seleccionado
+                            user_actual = ejecutar_consulta("SELECT nombre, rol FROM usuarios WHERE username = %s", (edit_user_sel,))
+                            nombre_actual = user_actual.iloc[0]['nombre'] if not user_actual.empty else ""
+                            rol_actual = user_actual.iloc[0]['rol'] if not user_actual.empty else "operario"
+                            
+                            idx_rol = ["operario", "produccion", "admin"].index(rol_actual) if rol_actual in ["operario", "produccion", "admin"] else 0
+                            
+                            nuevo_nombre = st.text_input("Nombre Completo", value=nombre_actual)
+                            nueva_pass = st.text_input("Nueva Contraseña (Dejar en blanco si no deseas cambiarla)", type="password")
+                            nuevo_rol = st.selectbox("Nuevo Rol en Planta", ["operario", "produccion", "admin"], index=idx_rol)
+                            
+                            btn_actualizar = st.form_submit_button("Actualizar Datos de Usuario", type="primary", use_container_width=True)
+                            
+                            if btn_actualizar:
+                                if nueva_pass.strip():
+                                    # Actualizar nombre, rol y contraseña nueva
+                                    ejecutar_comando(
+                                        "UPDATE usuarios SET nombre = %s, password = %s, rol = %s WHERE username = %s",
+                                        (nuevo_nombre.strip(), nueva_pass, nuevo_rol, edit_user_sel)
+                                    )
+                                    st.success(f"¡Usuario '{edit_user_sel}' actualizado con éxito (incluyendo contraseña y rol)! 🎉")
+                                    st.rerun()
+                                else:
+                                    # Actualizar nombre y rol sin tocar la contraseña anterior
+                                    ejecutar_comando(
+                                        "UPDATE usuarios SET nombre = %s, rol = %s WHERE username = %s",
+                                        (nuevo_nombre.strip(), nuevo_rol, edit_user_sel)
+                                    )
+                                    st.success(f"¡Usuario '{edit_user_sel}' actualizado con éxito (rol y nombre)! 🎉")
+                                    st.rerun()
+
+                # 3. EXPANSOR ELIMINAR USUARIO
+                if not users_df.empty:
+                    with st.expander("🗑️ Eliminar Usuario"):
                         with st.form("form_del_usuario", clear_on_submit=True):
-                            usuario_del = st.selectbox("Selecciona el Usuario a Borrar", users_df["username"].tolist())
+                            usuario_del = st.selectbox("Selecciona el Usuario a Borrar", users_df["username"].tolist(), key="del_u_key")
                             if st.form_submit_button("Eliminar Usuario", type="primary", use_container_width=True):
-                                # Validación para evitar que el admin se borre a sí mismo por accidente
                                 if usuario_del == st.session_state["username"]:
                                     st.error("No puedes eliminar tu propia cuenta de administrador activa.")
                                 else:
