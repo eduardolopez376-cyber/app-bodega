@@ -232,7 +232,7 @@ if rol == "operario":
             if not herramientas.empty:
                 st.dataframe(herramientas, use_container_width=True)
             else:
-                st.success("Sin herramientas or materiales pendientes de devolución.")
+                st.success("Sin herramientas o materiales pendientes de devolución.")
         except Exception as e:
             st.error(f"Error al cargar consumos: {e}")
 
@@ -414,8 +414,11 @@ elif rol in ["admin", "produccion"]:
             else:
                 with st.expander(f"➕ Asignar Tarea vinculada a una Orden de Compra para el {fecha_seleccionada}", expanded=True):
                     
-                    # 1. Selector de OC FUERA del formulario para que refresque al instante al cambiar
-                    oc_prog = st.selectbox("Orden de Compra a Ejecutar", ocs_disp, key="select_oc_dinamica")
+                    # Función Callback para refrescar al cambiar la OC seleccionada
+                    def refrescar_oc():
+                        pass
+
+                    oc_prog = st.selectbox("Orden de Compra a Ejecutar", ocs_disp, key="select_oc_dinamica", on_change=refrescar_oc)
                     
                     # Consultamos al instante los datos de la OC seleccionada
                     oc_info = ejecutar_consulta("SELECT referencia, servicio, meta_unidades, unidades_entregadas FROM ordenes_compra WHERE numero_oc = %s", (oc_prog,))
@@ -425,7 +428,7 @@ elif rol in ["admin", "produccion"]:
                     
                     st.markdown(f"📌 **Referencia de la OC:** `{ref_sugerida}` &nbsp;|&nbsp; **Servicio:** `{serv_sugerido}` &nbsp;|&nbsp; **Saldo Pendiente:** `{meta_restante} u.`")
                     
-                    # 2. Formulario para el resto de campos y el botón de guardado
+                    # Formulario para el resto de campos y el botón de guardado
                     with st.form(f"form_programacion_{fecha_seleccionada}", clear_on_submit=True):
                         op_p = st.selectbox("Operario", ops)
                         maq_p = st.selectbox("Máquina", maqs)
