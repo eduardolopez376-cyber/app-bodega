@@ -727,25 +727,36 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Inventario General: {e}")
 
-    # --- TAB 9: CLASES / CATEGORÍAS ---
+    # --- TAB 9: CLASES / CATEGORÍAS (Crear y Eliminar) ---
     with tab_clases:
         st.subheader("🏷️ Administración de Clases y Categorías")
-        st.write("Crea nuevas clases (como Neumática, Eléctricos, etc.) si tu operación lo requiere.")
         try:
             clases_actuales = ejecutar_consulta("SELECT * FROM clases_inventario")
             st.dataframe(clases_actuales, use_container_width=True)
             
-            with st.form("form_crear_clase"):
-                nueva_clase = st.text_input("Nombre de la Nueva Clase (Ej: REPUESTO_ELECTRICO)")
-                btn_crear_clase = st.form_submit_button("Crear Nueva Clase", type="primary", use_container_width=True)
-                
-                if btn_crear_clase:
-                    if nueva_clase.strip():
-                        ejecutar_comando("INSERT INTO clases_inventario (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (nueva_clase.upper().strip(),))
-                        st.success(f"Clase '{nueva_clase.upper()}' creada con éxito.")
-                        st.rerun()
-                    else:
-                        st.error("Escribe un nombre válido para la clase.")
+            with st.expander("➕ Crear Nueva Clase"):
+                with st.form("form_crear_clase"):
+                    nueva_clase = st.text_input("Nombre de la Nueva Clase (Ej: NEUMATICA)")
+                    btn_crear_clase = st.form_submit_button("Guardar Clase", type="primary", use_container_width=True)
+                    
+                    if btn_crear_clase:
+                        if nueva_clase.strip():
+                            ejecutar_comando("INSERT INTO clases_inventario (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (nueva_clase.upper().strip(),))
+                            st.success(f"Clase '{nueva_clase.upper()}' creada con éxito.")
+                            st.rerun()
+                        else:
+                            st.error("Escribe un nombre válido para la clase.")
+
+            if not clases_actuales.empty and rol == "admin":
+                with st.expander("🗑️ Eliminar Clase"):
+                    with st.form("form_eliminar_clase"):
+                        clase_a_borrar = st.selectbox("Selecciona la Clase a Borrar", clases_actuales["nombre"].tolist())
+                        btn_eliminar_clase = st.form_submit_button("Confirmar Eliminación de Clase", type="primary", use_container_width=True)
+                        
+                        if btn_eliminar_clase:
+                            ejecutar_comando("DELETE FROM clases_inventario WHERE nombre = %s", (clase_a_borrar,))
+                            st.success(f"Clase '{clase_a_borrar}' eliminada con éxito.")
+                            st.rerun()
         except Exception as e:
             st.error(f"Error en Clases: {e}")
 
