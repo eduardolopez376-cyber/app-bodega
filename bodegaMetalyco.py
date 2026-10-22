@@ -762,7 +762,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Referencias: {e}")
 
-    # --- TAB: REPORTES (INCLUYE REPORTE DE 10 COLUMNAS Y COSTOS DE MÁQUINAS ALQUILADAS) ---
+    # --- TAB: REPORTES (INCLUYE REPORTE EXCEL DE 10 COLUMNAS SEPARADAS) ---
     with tab_rep:
         st.subheader("📊 Centro de Reportes Gerenciales y de Producción")
         
@@ -773,19 +773,23 @@ elif rol in ["admin", "produccion"]:
         )
         
         if tipo_reporte_gerencial == "Reporte Detallado de Producción (10 Columnas)":
-            st.markdown("### 📥 Reporte de Producción Exacto para Excel (10 Columnas)")
+            st.markdown("### 📥 Reporte de Producción en Columnas Separadas para Excel")
             try:
                 df_produccion_raw = ejecutar_consulta("SELECT * FROM registro_produccion ORDER BY id DESC")
                 if not df_produccion_raw.empty:
                     df_final = generar_reporte_produccion_excel(df_produccion_raw)
                     st.dataframe(df_final, use_container_width=True)
                     
-                    csv_data = df_final.to_csv(index=False).encode('utf-8')
+                    # Generar archivo Excel real (.xlsx) para separar columnas correctamente
+                    buffer_prod = io.BytesIO()
+                    with pd.ExcelWriter(buffer_prod, engine='openpyxl') as writer:
+                        df_final.to_excel(writer, index=False, sheet_name='Reporte_Produccion')
+                    
                     st.download_button(
-                        label="📥 Descargar Reporte Completo (CSV para Excel)",
-                        data=csv_data,
-                        file_name=f"reporte_produccion_metalco_{date.today()}.csv",
-                        mime="text/csv",
+                        label="📥 Descargar Reporte de Producción (Excel)",
+                        data=buffer_prod.getvalue(),
+                        file_name=f"reporte_produccion_{date.today()}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         use_container_width=True
                     )
                 else:
