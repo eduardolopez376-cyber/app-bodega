@@ -359,9 +359,11 @@ def generar_pdf_f01_01(datos):
     p.drawString(x_margen + 8, y_actual - 23, "DIMENSIONES")
     p.drawString(x_margen + 252, y_actual - 23, "X")
     
+    p.setFont("Helvetica", 8)
     p.drawString(x_margen + 8, y_actual - 32, "ACABADO SUPERFICIAL")
     p.drawString(x_margen + 252, y_actual - 32, "X")
     
+    p.setFont("Helvetica", 8)
     p.drawString(x_margen + 8, y_actual - 41, "SOLDADURA / PINTURA")
     p.drawString(x_margen + 252, y_actual - 41, "X")
     
@@ -710,12 +712,8 @@ elif rol in ["admin", "produccion"]:
                     oc_num = str(r['numero_oc']).strip()
                     ocs_activas_validas.append(oc_num)
                     
-                    # CÁLCULO ESTRICTO Y AISLADO: Sumar las unidades ya programadas o entregadas de ESTA OC específica en la base de datos
-                    prog_registrada_df = ejecutar_consulta("SELECT COALESCE(SUM(meta_unidades), 0) as total_prog FROM programacion_diaria WHERE numero_oc = %s AND estado != 'CANCELADO'", (oc_num,))
-                    total_programado_oc = int(prog_registrada_df.iloc[0]['total_prog']) if not prog_registrada_df.empty else 0
-                    
-                    # Saldo pendiente real descontando lo que ya se programó para esta OC en específico
-                    saldo_calc = max(1, meta - entregado - total_programado_oc) if req else meta
+                    # CÁLCULO AISLADO Y LIMPIO: Únicamente Meta menos Unidades Entregadas en producción
+                    saldo_calc = max(1, meta - entregado) if req else meta
                     
                     info_ocs_dict[oc_num] = {
                         "referencia": str(r['referencia']).strip(),
@@ -748,7 +746,6 @@ elif rol in ["admin", "produccion"]:
                         with col_h2:
                             h_fin_p = st.time_input("Fin Turno", time(17, 0), key=f"hfin_{k_sufijo}")
                         
-                        # Meta amarrada dinámicamente y por defecto al saldo pendiente real de esta orden
                         meta_p = st.number_input(
                             "Meta de Unidades para esta Tarea", 
                             min_value=1, 
@@ -1323,14 +1320,14 @@ elif rol in ["admin", "produccion"]:
                                     st.rerun()
 
                     with st.expander("Eliminar"):
-                        with st.form("form_del_clienteeee", clear_on_submit=True):
+                        with st.form("form_del_cliente", clear_on_submit=True):
                             cliente_del = st.selectbox("Selecciona el Cliente a Borrar", clientes_df["nombre"].tolist(), key="del_cli_key")
                             if st.form_submit_button("Eliminar Cliente", type="primary", use_container_width=True):
                                 ejecutar_comando("DELETE FROM clientes WHERE nombre = %s", (cliente_del,))
                                 st.success("Cliente eliminado.")
                                 st.rerun()
             except Exception as e:
-                                st.error(f"Error: {e}")
+                st.error(f"Error: {e}")
 
         with tab_usu:
             st.subheader("⚙️ Gestión y Seguridad de Usuarios del Sistema")
