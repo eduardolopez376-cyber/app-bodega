@@ -1373,4 +1373,4 @@ elif rol in ["admin", "produccion"]:
                                     st.success("Usuario eliminado.")
                                     st.rerun()
             except Exception as e:
-                st.error(f"Error: {e}"
+                st.error(f"Error: {e}")
