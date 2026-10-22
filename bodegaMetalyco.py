@@ -551,7 +551,7 @@ if rol == "operario":
                         if num_oc_asociada and num_oc_asociada != "SIN OC":
                             oc_db = ejecutar_consulta("SELECT unidades_entregadas, meta_unidades, requiere_unidades FROM ordenes_compra WHERE numero_oc = %s", (num_oc_asociada,))
                             if not oc_db.empty:
-                                ent_actuales = int(oc_db.iloc[0]['unidades_entregadas'])
+                                ent_actuales = int(oc_db.iloc[0]['unidades_entregadas']) if pd.notna(oc_db.iloc[0]['unidades_entregadas']) else 0
                                 meta_oc = int(oc_db.iloc[0]['meta_unidades'])
                                 req_uni = oc_db.iloc[0]['requiere_unidades']
                                 nuevo_entregado = ent_actuales + unidades
@@ -694,7 +694,6 @@ elif rol in ["admin", "produccion"]:
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
             maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
             
-            # Consultamos trayendo explícitamente la cantidad total (meta) y las unidades entregadas de ESTA OC específica
             ocs_db = ejecutar_consulta("SELECT numero_oc, referencia, servicio, meta_unidades, unidades_entregadas, requiere_unidades FROM ordenes_compra WHERE estado != 'COMPLETADO'")
             
             ocs_activas_validas = []
@@ -711,7 +710,7 @@ elif rol in ["admin", "produccion"]:
                     oc_num = str(r['numero_oc']).strip()
                     ocs_activas_validas.append(oc_num)
                     
-                    # SALDO EXACTO Y AISLADO DE ESTA OC
+                    # CÁLCULO AISLADO Y BLINDADO: Si no hay entregas, toma la meta exacta de esta OC
                     saldo_calc = max(1, meta - entregado) if req else meta
                     
                     info_ocs_dict[oc_num] = {
@@ -745,7 +744,6 @@ elif rol in ["admin", "produccion"]:
                         with col_h2:
                             h_fin_p = st.time_input("Fin Turno", time(17, 0), key=f"hfin_{k_sufijo}")
                         
-                        # Meta amarrada estrictamente al saldo de ESTA OC
                         meta_p = st.number_input(
                             "Meta de Unidades para esta Tarea", 
                             min_value=1, 
@@ -806,7 +804,7 @@ elif rol in ["admin", "produccion"]:
                         if st.form_submit_button("Guardar Orden de Compra", type="primary", use_container_width=True):
                             if num_oc.strip() and cliente_oc != "SIN CLIENTE REGISTRADO":
                                 meta_final = meta_oc if requiere_uni else 0
-                                # Forzar estrictamente que unidades_entregadas comience en 0 al crear
+                                # Forzar estrictamente 0 en unidades entregadas al crear
                                 ejecutar_comando(
                                     """INSERT INTO ordenes_compra 
                                     (numero_oc, cliente, referencia, servicio, requiere_unidades, meta_unidades, unidades_entregadas, estado) 
@@ -823,7 +821,7 @@ elif rol in ["admin", "produccion"]:
             df_oc = ejecutar_consulta("SELECT * FROM ordenes_compra ORDER BY id DESC")
             if not df_oc.empty:
                 df_oc['saldo_pendiente'] = df_oc.apply(
-                    lambda row: row['meta_unidades'] - row['unidades_entregadas'] if row['requiere_unidades'] else 'N/A', axis=1
+                    lambda row: row['meta_unidades'] - (row['unidades_entregadas'] if pd.notna(row['unidades_entregadas']) else 0) if row['requiere_unidades'] else 'N/A', axis=1
                 )
                 st.dataframe(df_oc, use_container_width=True)
                 with st.expander("Eliminar"):
@@ -1106,7 +1104,7 @@ elif rol in ["admin", "produccion"]:
                 st.write("#### Saldos de Órdenes de Compra")
                 df_oc_rep = ejecutar_consulta("SELECT * FROM ordenes_compra ORDER BY id DESC")
                 if not df_oc_rep.empty:
-                    df_oc_rep['saldo_pendiente'] = df_oc_rep.apply(lambda r: r['meta_unidades'] - r['unidades_entregadas'] if r['requiere_unidades'] else 'N/A', axis=1)
+                    df_oc_rep['saldo_pendiente'] = df_oc_rep.apply(lambda r: r['meta_unidades'] - (r['unidades_entregadas'] if pd.notna(r['unidades_entregadas']) else 0) if r['requiere_unidades'] else 'N/A', axis=1)
                     st.dataframe(df_oc_rep, use_container_width=True)
             except Exception as e:
                 st.error(f"Error: {e}")
