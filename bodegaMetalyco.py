@@ -176,14 +176,10 @@ def generar_reporte_produccion_excel(df_original):
     return df[columnas_ordenadas]
 
 def generar_pdf_f01_01(datos):
-    """
-    Genera el PDF oficial con la estructura exacta del formato F-01-01 de Industrias Metal&Co.
-    """
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
     
-    # Encabezado corporativo
     p.setFont("Helvetica-Bold", 14)
     p.drawString(40, height - 40, "Metal&Co")
     p.setFont("Helvetica-Bold", 11)
@@ -195,7 +191,6 @@ def generar_pdf_f01_01(datos):
     p.setLineWidth(1)
     p.rect(40, height - 60, width - 80, 25)
     
-    # Bloque 1: Información General
     p.rect(40, height - 140, width - 80, 80)
     p.setFillColorRGB(0.1, 0.1, 0.1)
     p.rect(40, height - 85, width - 80, 15, fill=1, stroke=1)
@@ -210,7 +205,6 @@ def generar_pdf_f01_01(datos):
     p.drawString(50, height - 125, f"CLIENTE: {datos.get('cliente', 'N/A')}")
     p.drawString(300, height - 125, f"REFERENCIA PIEZA: {datos.get('referencia', 'N/A')}")
     
-    # Bloque 2: Procesos y Máquinas
     p.rect(40, height - 200, width - 80, 60)
     p.setFillColorRGB(0.1, 0.1, 0.1)
     p.rect(40, height - 160, width - 80, 15, fill=1, stroke=1)
@@ -223,7 +217,6 @@ def generar_pdf_f01_01(datos):
     p.drawString(50, height - 180, "PROCESOS: CORTE / PLEGADO / SOLDADURA")
     p.drawString(300, height - 180, f"MÁQUINA: {datos.get('maquina', 'N/A')}")
     
-    # Bloque 3: Control de Producción (Operario)
     p.rect(40, height - 280, width - 80, 80)
     p.setFillColorRGB(0.1, 0.1, 0.1)
     p.rect(40, height - 225, width - 80, 15, fill=1, stroke=1)
@@ -239,7 +232,6 @@ def generar_pdf_f01_01(datos):
     p.drawString(300, height - 250, f"Rechazadas: {datos.get('defectuosas', 0)}")
     p.drawString(420, height - 250, f"Obs: {datos.get('observaciones', '')[:30]}")
     
-    # Bloque 4: Control de Calidad Primera Pieza
     p.rect(40, height - 390, width - 80, 100)
     p.setFillColorRGB(0.1, 0.1, 0.1)
     p.rect(40, height - 305, width - 80, 15, fill=1, stroke=1)
@@ -253,7 +245,6 @@ def generar_pdf_f01_01(datos):
     p.drawString(50, height - 350, "ACABADO SUPERFICIAL: OK")
     p.drawString(50, height - 370, "SOLDADURA / PINTURA: OK")
     
-    # Bloque 5: Firmas
     p.rect(40, height - 460, width - 80, 60)
     p.setFont("Helvetica", 8)
     p.drawString(50, height - 425, f"NOMBRE OPERARIO: {datos.get('operario', 'N/A')}")
@@ -404,7 +395,6 @@ if rol == "operario":
                         maquina_elegida = row_t['maquina']
                         referencia_pieza = row_t['referencia']
                         
-                        # Buscar cliente de la OC
                         cli_db = ejecutar_consulta("SELECT cliente FROM ordenes_compra WHERE numero_oc = %s", (num_oc_asociada,))
                         cliente_nombre = cli_db.iloc[0]['cliente'] if not cli_db.empty else "N/A"
                         
@@ -441,7 +431,6 @@ if rol == "operario":
 
                         ejecutar_comando("UPDATE programacion_diaria SET estado = 'FINALIZADO' WHERE id = %s", (id_tarea,))
                         
-                        # Generar datos para el PDF F-01-01
                         datos_pdf = {
                             "fecha": date.today().strftime('%Y-%m-%d'),
                             "numero_oc": num_oc_asociada,
@@ -462,7 +451,6 @@ if rol == "operario":
                         
                         st.success("¡Producción registrada y formato F-01-01 generado con éxito!")
 
-            # Mostrar botón de descarga y WhatsApp si hay un PDF generado en la sesión
             if "ultimo_pdf_buffer" in st.session_state:
                 st.markdown("---")
                 st.write("### 📄 Formato F-01-01 Listo para Descargar y Enviar")
@@ -690,7 +678,7 @@ elif rol in ["admin", "produccion"]:
                         m_nom = st.text_input("Nombre de la Máquina (Ej: Láser CNC 01)")
                         m_tipo = st.text_input("Tipo (Ej: Corte, Dobladora)")
                         m_prop = st.selectbox("Tipo de Propiedad", ["PROPIA", "ALQUILADA"])
-                        m_costo_alq = st.number_input("Costo por Hora de Alquiler ($) (Solo si es alquilada)", min_value=0.0, step=1000.0, value=0.0)
+                        m_costo_alq = st.number_input("Costo por Hora de Alquiler ($)", min_value=0.0, step=1000.0, value=0.0)
                         if st.form_submit_button("Guardar Máquina", type="primary", use_container_width=True):
                             if m_nom.strip():
                                 ejecutar_comando(
@@ -701,7 +689,30 @@ elif rol in ["admin", "produccion"]:
                                 st.rerun()
                             else:
                                 st.error("Escribe el nombre de la máquina.")
+
                 if not df_maqs.empty:
+                    with st.expander("Editar"):
+                        with st.form("form_editar_maquina"):
+                            maq_edit_sel = st.selectbox("Selecciona la Máquina a Editar", df_maqs["nombre"].tolist())
+                            maq_data = ejecutar_consulta("SELECT tipo, tipo_propiedad, costo_hora_alquiler FROM maquinas WHERE nombre = %s", (maq_edit_sel,))
+                            t_act = maq_data.iloc[0]['tipo'] if not maq_data.empty else ""
+                            p_act = maq_data.iloc[0]['tipo_propiedad'] if not maq_data.empty else "PROPIA"
+                            c_act = float(maq_data.iloc[0]['costo_hora_alquiler']) if not maq_data.empty and maq_data.iloc[0]['costo_hora_alquiler'] else 0.0
+                            
+                            nuevo_nom_maq = st.text_input("Nuevo Nombre", value=maq_edit_sel)
+                            nuevo_tipo_maq = st.text_input("Nuevo Tipo", value=t_act)
+                            idx_p = ["PROPIA", "ALQUILADA"].index(p_act) if p_act in ["PROPIA", "ALQUILADA"] else 0
+                            nuevo_prop_maq = st.selectbox("Nuevo Tipo Propiedad", ["PROPIA", "ALQUILADA"], index=idx_p)
+                            nuevo_costo_maq = st.number_input("Nuevo Costo Hora Alquiler ($)", min_value=0.0, step=1000.0, value=c_act)
+                            
+                            if st.form_submit_button("Actualizar Máquina", type="primary", use_container_width=True):
+                                ejecutar_comando(
+                                    "UPDATE maquinas SET nombre = %s, tipo = %s, tipo_propiedad = %s, costo_hora_alquiler = %s WHERE nombre = %s",
+                                    (nuevo_nom_maq.strip(), nuevo_tipo_maq.strip(), nuevo_prop_maq, nuevo_costo_maq if nuevo_prop_maq == "ALQUILADA" else 0, maq_edit_sel)
+                                )
+                                st.success("¡Máquina actualizada con éxito!")
+                                st.rerun()
+
                     with st.expander("Eliminar"):
                         with st.form("form_del_maquina", clear_on_submit=True):
                             m_del = st.selectbox("Máquina a Borrar", df_maqs["nombre"].tolist())
@@ -726,8 +737,25 @@ elif rol in ["admin", "produccion"]:
                                 ejecutar_comando("INSERT INTO servicios_prestados (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (nom_serv.upper().strip(),))
                                 st.success("Servicio agregado.")
                                 st.rerun()
-                            else:
-                                st.error("Escribe un nombre válido.")
+
+                if not df_serv.empty:
+                    with st.expander("Editar"):
+                        with st.form("form_editar_serv"):
+                            serv_edit_sel = st.selectbox("Selecciona el Servicio a Editar", df_serv["nombre"].tolist())
+                            nuevo_nom_serv = st.text_input("Nuevo Nombre de Servicio", value=serv_edit_sel)
+                            if st.form_submit_button("Actualizar Servicio", type="primary", use_container_width=True):
+                                if nuevo_nom_serv.strip():
+                                    ejecutar_comando("UPDATE servicios_prestados SET nombre = %s WHERE nombre = %s", (nuevo_nom_serv.upper().strip(), serv_edit_sel))
+                                    st.success("¡Servicio actualizado!")
+                                    st.rerun()
+
+                    with st.expander("Eliminar"):
+                        with st.form("form_del_serv", clear_on_submit=True):
+                            serv_del = st.selectbox("Servicio a Borrar", df_serv["nombre"].tolist())
+                            if st.form_submit_button("Eliminar Servicio", type="primary", use_container_width=True):
+                                ejecutar_comando("DELETE FROM servicios_prestados WHERE nombre = %s", (serv_del,))
+                                st.success("Servicio eliminado.")
+                                st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
 
@@ -748,6 +776,32 @@ elif rol in ["admin", "produccion"]:
                         if r_cod.strip() and r_cliente != "SIN CLIENTE REGISTRADO":
                             ejecutar_comando("INSERT INTO referencias (codigo, descripcion, cliente) VALUES (%s, %s, %s)", (r_cod.upper().strip(), r_desc, r_cliente))
                             st.success("Referencia guardada.")
+                            st.rerun()
+
+            if not df_refs.empty and rol == "admin":
+                with st.expander("Editar"):
+                    with st.form("form_editar_ref"):
+                        ref_edit_sel = st.selectbox("Selecciona la Referencia a Editar", df_refs["codigo"].tolist())
+                        ref_data = ejecutar_consulta("SELECT descripcion, cliente FROM referencias WHERE codigo = %s", (ref_edit_sel,))
+                        d_act = ref_data.iloc[0]['descripcion'] if not ref_data.empty else ""
+                        cli_act = ref_data.iloc[0]['cliente'] if not ref_data.empty else ""
+                        
+                        idx_c = lista_clientes.index(cli_act) if cli_act in lista_clientes else 0
+                        nuevo_cod_ref = st.text_input("Nuevo Código de Referencia", value=ref_edit_sel)
+                        nuevo_desc_ref = st.text_input("Nueva Descripción", value=d_act)
+                        nuevo_cli_ref = st.selectbox("Nuevo Cliente Asociado", lista_clientes if lista_clientes else ["SIN CLIENTE"], index=idx_c)
+                        
+                        if st.form_submit_button("Actualizar Referencia", type="primary", use_container_width=True):
+                            ejecutar_comando("UPDATE referencias SET codigo = %s, descripcion = %s, cliente = %s WHERE codigo = %s", (nuevo_cod_ref.upper().strip(), nuevo_desc_ref, nuevo_cli_ref, ref_edit_sel))
+                            st.success("¡Referencia actualizada!")
+                            st.rerun()
+
+                with st.expander("Eliminar"):
+                    with st.form("form_del_ref", clear_on_submit=True):
+                        r_del = st.selectbox("Referencia a Borrar", df_refs["codigo"].tolist())
+                        if st.form_submit_button("Eliminar Referencia", type="primary", use_container_width=True):
+                            ejecutar_comando("DELETE FROM referencias WHERE codigo = %s", (r_del,))
+                            st.success("Referencia eliminada.")
                             st.rerun()
         except Exception as e:
             st.error(f"Error: {e}")
@@ -840,15 +894,19 @@ elif rol in ["admin", "produccion"]:
             st.error(f"Error: {e}")
 
     with tab_herramientas:
-        st.subheader("🔨 Control de Préstamos de Herramientas")
+        st.subheader("🔨 Control y Préstamos de Herramientas")
         try:
             herramientas_db = ejecutar_consulta("SELECT codigo, nombre, cantidad FROM inventario WHERE tipo ILIKE '%HERRAMIENTA%'")
             if not herramientas_db.empty:
                 st.dataframe(herramientas_db, use_container_width=True)
+            else:
+                st.info("No hay herramientas registradas con la clase 'HERRAMIENTA'.")
+            
             ops_df = ejecutar_consulta("SELECT nombre FROM usuarios WHERE rol = 'operario'")
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
+            
             if ops and not herramientas_db.empty:
-                with st.expander("Crear"):
+                with st.expander("Registrar Préstamo o Reasignación"):
                     with st.form("form_prestar_herramienta", clear_on_submit=True):
                         op_her = st.selectbox("Operario Responsable", ops)
                         her_sel = st.selectbox("Herramienta a Prestar", herramientas_db['nombre'].tolist())
@@ -861,8 +919,46 @@ elif rol in ["admin", "produccion"]:
                             )
                             st.success("Préstamo registrado.")
                             st.rerun()
+
+            st.write("---")
+            st.write("#### Herramientas Actualmente Prestadas (Ver quién las tiene)")
+            prestados = ejecutar_consulta("""
+                SELECT c.id, c.fecha, c.operario, c.codigo_material, i.nombre as herramienta, c.cantidad, c.estado 
+                FROM consumos c 
+                JOIN usuarios u ON c.operario = u.nombre
+                LEFT JOIN inventario i ON c.codigo_material = i.codigo 
+                WHERE c.tipo ILIKE '%HERRAMIENTA%' AND c.estado = 'PRESTADO'
+            """)
+            if not prestados.empty:
+                st.dataframe(prestados, use_container_width=True)
+                
+                with st.expander("Gestionar Devolución o Reasignación (Prestar a otro operario)"):
+                    with st.form("form_gestionar_prestamo"):
+                        id_prestamo_sel = st.selectbox("Selecciona el Registro de Préstamo", prestados['id'].tolist())
+                        reg_actual = prestados[prestados['id'] == id_prestamo_sel].iloc[0]
+                        st.info(f"Actual a cargo de: **{reg_actual['operario']}** | Herramienta: **{reg_actual['herramienta']}**")
+                        
+                        accion_her = st.radio("Acción a realizar:", ["Marcar como Devuelta", "Reasignar / Prestar a otro Operario"])
+                        nuevo_operario = st.selectbox("Nuevo Operario Destino (Si reasignas)", ops)
+                        
+                        if st.form_submit_button("Aplicar Acción", type="primary", use_container_width=True):
+                            if accion_her == "Marcar como Devuelta":
+                                ejecutar_comando("UPDATE consumos SET estado = 'DEVUELTO' WHERE id = %s", (id_prestamo_sel,))
+                                st.success("Herramienta marcada como devuelta.")
+                                st.rerun()
+                            else:
+                                # Marcar anterior devuelto y crear nuevo préstamo al nuevo operario
+                                ejecutar_comando("UPDATE consumos SET estado = 'DEVUELTO' WHERE id = %s", (id_prestamo_sel,))
+                                ejecutar_comando(
+                                    "INSERT INTO consumos (fecha, operario, codigo_material, cantidad, tipo, estado) VALUES (%s, %s, %s, %s, 'HERRAMIENTA', 'PRESTADO')",
+                                    (datetime.now().strftime("%Y-%m-%d %H:%M"), nuevo_operario, reg_actual['codigo_material'], reg_actual['cantidad'])
+                                )
+                                st.success(f"Herramienta reasignada exitosamente a {nuevo_operario}.")
+                                st.rerun()
+            else:
+                st.success("No hay herramientas pendientes de devolución.")
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"Error en herramientas: {e}")
 
     with tab_cargue:
         st.subheader("📥 Cargue Único de Ítems al Inventario")
@@ -895,6 +991,14 @@ elif rol in ["admin", "produccion"]:
             inv_gen = ejecutar_consulta("SELECT codigo, nombre, tipo as clase, cantidad, stock_minimo FROM inventario")
             if not inv_gen.empty:
                 st.dataframe(inv_gen, use_container_width=True)
+                if rol == "admin":
+                    with st.expander("Eliminar"):
+                        with st.form("form_del_inv", clear_on_submit=True):
+                            del_cod_gen = st.selectbox("Código a Eliminar", inv_gen["codigo"].tolist())
+                            if st.form_submit_button("Confirmar Eliminación de Ítem", type="primary", use_container_width=True):
+                                ejecutar_comando("DELETE FROM inventario WHERE codigo = %s", (del_cod_gen,))
+                                st.success("Ítem eliminado del inventario.")
+                                st.rerun()
         except Exception as e:
             st.error(f"Error: {e}")
 
@@ -912,6 +1016,25 @@ elif rol in ["admin", "produccion"]:
                             if nueva_clase.strip():
                                 ejecutar_comando("INSERT INTO clases_inventario (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (nueva_clase.upper().strip(),))
                                 st.success("Clase creada.")
+                                st.rerun()
+
+                if not clases_actuales.empty:
+                    with st.expander("Editar"):
+                        with st.form("form_editar_clase"):
+                            clase_edit_sel = st.selectbox("Selecciona la Clase a Editar", clases_actuales["nombre"].tolist())
+                            nueva_nombre_clase = st.text_input("Nuevo Nombre de Clase", value=clase_edit_sel)
+                            if st.form_submit_button("Actualizar Clase", type="primary", use_container_width=True):
+                                if nueva_nombre_clase.strip():
+                                    ejecutar_comando("UPDATE clases_inventario SET nombre = %s WHERE nombre = %s", (nueva_nombre_clase.upper().strip(), clase_edit_sel))
+                                    st.success("¡Clase actualizada!")
+                                    st.rerun()
+
+                    with st.expander("Eliminar"):
+                        with st.form("form_del_clase", clear_on_submit=True):
+                            clase_del = st.selectbox("Selecciona la Clase a Borrar", clases_actuales["nombre"].tolist())
+                            if st.form_submit_button("Eliminar Clase", type="primary", use_container_width=True):
+                                ejecutar_comando("DELETE FROM clases_inventario WHERE nombre = %s", (clase_del,))
+                                st.success("Clase eliminada.")
                                 st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
@@ -935,6 +1058,35 @@ elif rol in ["admin", "produccion"]:
                                 )
                                 st.success("Cliente agregado.")
                                 st.rerun()
+
+                if not clientes_df.empty:
+                    with st.expander("Editar"):
+                        with st.form("form_editar_cliente"):
+                            cliente_edit_sel = st.selectbox("Selecciona el Cliente a Editar", clientes_df["nombre"].tolist())
+                            datos_cli = ejecutar_consulta("SELECT nit, telefono FROM clientes WHERE nombre = %s", (cliente_edit_sel,))
+                            nit_actual = datos_cli.iloc[0]['nit'] if not datos_cli.empty and datos_cli.iloc[0]['nit'] else ""
+                            tel_actual = datos_cli.iloc[0]['telefono'] if not datos_cli.empty and datos_cli.iloc[0]['telefono'] else ""
+                            
+                            nuevo_nom_cli = st.text_input("Nueva Razón Social", value=cliente_edit_sel)
+                            nuevo_nit_cli = st.text_input("Nuevo NIT", value=nit_actual)
+                            nuevo_tel_cli = st.text_input("Nuevo Teléfono", value=tel_actual)
+                            
+                            if st.form_submit_button("Actualizar Cliente", type="primary", use_container_width=True):
+                                if nuevo_nom_cli.strip():
+                                    ejecutar_comando(
+                                        "UPDATE clientes SET nombre = %s, nit = %s, telefono = %s WHERE nombre = %s",
+                                        (nuevo_nom_cli.strip(), nuevo_nit_cli.strip(), nuevo_tel_cli.strip(), cliente_edit_sel)
+                                    )
+                                    st.success("¡Cliente actualizado!")
+                                    st.rerun()
+
+                    with st.expander("Eliminar"):
+                        with st.form("form_del_cliente", clear_on_submit=True):
+                            cliente_del = st.selectbox("Selecciona el Cliente a Borrar", clientes_df["nombre"].tolist(), key="del_cli_key")
+                            if st.form_submit_button("Eliminar Cliente", type="primary", use_container_width=True):
+                                ejecutar_comando("DELETE FROM clientes WHERE nombre = %s", (cliente_del,))
+                                st.success("Cliente eliminado.")
+                                st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
 
@@ -955,5 +1107,37 @@ elif rol in ["admin", "produccion"]:
                                 ejecutar_comando("INSERT INTO usuarios (username, password, nombre, rol) VALUES (%s, %s, %s, %s)", (u_user.strip(), u_pass, u_nom.strip(), u_rol))
                                 st.success("Usuario creado.")
                                 st.rerun()
+
+                if not users_df.empty:
+                    with st.expander("Editar"):
+                        with st.form("form_editar_usuario"):
+                            edit_user_sel = st.selectbox("Selecciona el Usuario a Editar", users_df["username"].tolist())
+                            user_actual = ejecutar_consulta("SELECT nombre, rol FROM usuarios WHERE username = %s", (edit_user_sel,))
+                            nombre_actual = user_actual.iloc[0]['nombre'] if not user_actual.empty else ""
+                            rol_actual = user_actual.iloc[0]['rol'] if not user_actual.empty else "operario"
+                            idx_rol = ["operario", "produccion", "admin"].index(rol_actual) if rol_actual in ["operario", "produccion", "admin"] else 0
+                            
+                            nuevo_nombre = st.text_input("Nombre Completo", value=nombre_actual)
+                            nueva_pass = st.text_input("Nueva Contraseña (Dejar en blanco si no cambia)", type="password")
+                            nuevo_rol = st.selectbox("Nuevo Rol en Planta", ["operario", "produccion", "admin"], index=idx_rol)
+                            
+                            if st.form_submit_button("Actualizar Usuario", type="primary", use_container_width=True):
+                                if nueva_pass.strip():
+                                    ejecutar_comando("UPDATE usuarios SET nombre = %s, password = %s, rol = %s WHERE username = %s", (nuevo_nombre.strip(), nueva_pass, nuevo_rol, edit_user_sel))
+                                else:
+                                    ejecutar_comando("UPDATE usuarios SET nombre = %s, rol = %s WHERE username = %s", (nuevo_nombre.strip(), nuevo_rol, edit_user_sel))
+                                st.success("¡Usuario actualizado!")
+                                st.rerun()
+
+                    with st.expander("Eliminar"):
+                        with st.form("form_del_usuario", clear_on_submit=True):
+                            usuario_del = st.selectbox("Selecciona el Usuario a Borrar", users_df["username"].tolist(), key="del_u_key")
+                            if st.form_submit_button("Eliminar Usuario", type="primary", use_container_width=True):
+                                if usuario_del == st.session_state["username"]:
+                                    st.error("No puedes eliminar tu propia cuenta activa.")
+                                else:
+                                    ejecutar_comando("DELETE FROM usuarios WHERE username = %s", (usuario_del,))
+                                    st.success("Usuario eliminado.")
+                                    st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
