@@ -694,6 +694,7 @@ elif rol in ["admin", "produccion"]:
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
             maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
             
+            # Asegurar la lectura estricta y limpia de cada OC por su número exacto
             ocs_db = ejecutar_consulta("SELECT numero_oc, referencia, servicio, meta_unidades, unidades_entregadas, requiere_unidades FROM ordenes_compra WHERE estado != 'COMPLETADO'")
             
             ocs_activas_validas = []
@@ -705,12 +706,12 @@ elif rol in ["admin", "produccion"]:
                     req = r['requiere_unidades']
                     if req and entregado >= meta:
                         continue
-                    oc_num = r['numero_oc']
+                    oc_num = str(r['numero_oc']).strip()
                     ocs_activas_validas.append(oc_num)
                     saldo_calc = max(1, meta - entregado) if req else 100
                     info_ocs_dict[oc_num] = {
-                        "referencia": r['referencia'],
-                        "servicio": r['servicio'],
+                        "referencia": str(r['referencia']).strip(),
+                        "servicio": str(r['servicio']).strip(),
                         "saldo": saldo_calc
                     }
 
@@ -739,12 +740,12 @@ elif rol in ["admin", "produccion"]:
                         with col_h2:
                             h_fin_p = st.time_input("Fin Turno", time(17, 0), key=f"hfin_{k_sufijo}")
                         
-                        # AQUÍ ESTÁ EL CAMBIO CLAVE: La meta arranca con el saldo pendiente exacto y tiene un tope máximo seguro
+                        # CORRECCIÓN ESTRICTA: El valor por defecto y el máximo se amarran exactamente al saldo de ESTA OC específica
                         meta_p = st.number_input(
                             "Meta de Unidades para esta Tarea", 
                             min_value=1, 
-                            max_value=saldo_sugerido, 
-                            value=saldo_sugerido, 
+                            max_value=int(saldo_sugerido), 
+                            value=int(saldo_sugerido), 
                             key=f"meta_{k_sufijo}"
                         )
                         
@@ -800,6 +801,7 @@ elif rol in ["admin", "produccion"]:
                         if st.form_submit_button("Guardar Orden de Compra", type="primary", use_container_width=True):
                             if num_oc.strip() and cliente_oc != "SIN CLIENTE REGISTRADO":
                                 meta_final = meta_oc if requiere_uni else 0
+                                # CORRECCIÓN: Al crear una nueva OC, garantizamos que unidades_entregadas inicie estrictamente en 0
                                 ejecutar_comando(
                                     """INSERT INTO ordenes_compra 
                                     (numero_oc, cliente, referencia, servicio, requiere_unidades, meta_unidades, unidades_entregadas, estado) 
@@ -1367,7 +1369,7 @@ elif rol in ["admin", "produccion"]:
                             usuario_del = st.selectbox("Selecciona el Usuario a Borrar", users_df["username"].tolist(), key="del_u_key")
                             if st.form_submit_button("Eliminar Usuario", type="primary", use_container_width=True):
                                 if usuario_del == st.session_state["username"]:
-                                    st.error("No puedes eliminar tu propia cuenta activa.")
+                                    st.error("No puedes npmre... tu propia cuenta activa.")
                                 else:
                                     ejecutar_comando("DELETE FROM usuarios WHERE username = %s", (usuario_del,))
                                     st.success("Usuario eliminado.")
