@@ -710,8 +710,12 @@ elif rol in ["admin", "produccion"]:
                     oc_num = str(r['numero_oc']).strip()
                     ocs_activas_validas.append(oc_num)
                     
-                    # CÁLCULO AISLADO Y BLINDADO: Si no hay entregas, toma la meta exacta de esta OC
-                    saldo_calc = max(1, meta - entregado) if req else meta
+                    # CÁLCULO ESTRICTO Y AISLADO: Sumar las unidades ya programadas o entregadas de ESTA OC específica en la base de datos
+                    prog_registrada_df = ejecutar_consulta("SELECT COALESCE(SUM(meta_unidades), 0) as total_prog FROM programacion_diaria WHERE numero_oc = %s AND estado != 'CANCELADO'", (oc_num,))
+                    total_programado_oc = int(prog_registrada_df.iloc[0]['total_prog']) if not prog_registrada_df.empty else 0
+                    
+                    # Saldo pendiente real descontando lo que ya se programó para esta OC en específico
+                    saldo_calc = max(1, meta - entregado - total_programado_oc) if req else meta
                     
                     info_ocs_dict[oc_num] = {
                         "referencia": str(r['referencia']).strip(),
@@ -732,7 +736,7 @@ elif rol in ["admin", "produccion"]:
                     servicio_arrastrado = datos_oc_sel.get("servicio", "SIN SERVICIO")
                     saldo_sugerido = datos_oc_sel.get("saldo", 100)
                     
-                    st.info(f"🔒 **Datos arrastrados de la OC #{oc_prog}:** \n- **Referencia:** `{ref_arrastrada}` \n- **Servicio/Actividad:** `{servicio_arrastrado}` \n- **Saldo Pendiente (Meta Sugerida):** `{saldo_sugerido} u.`")
+                    st.info(f"🔒 **Datos arrastrados de la OC #{oc_prog}:** \n- **Referencia:** `{ref_arrastrada}` \n- **Servicio/Actividad:** `{servicio_arrastrado}` \n- **Saldo Pendiente Real (Meta Sugerida):** `{saldo_sugerido} u.`")
                     
                     with st.form(f"form_programacion_{fecha_seleccionada}_{k_sufijo}", clear_on_submit=True):
                         op_p = st.selectbox("Operario", ops, key=f"op_prog_{k_sufijo}")
@@ -744,6 +748,7 @@ elif rol in ["admin", "produccion"]:
                         with col_h2:
                             h_fin_p = st.time_input("Fin Turno", time(17, 0), key=f"hfin_{k_sufijo}")
                         
+                        # Meta amarrada dinámicamente y por defecto al saldo pendiente real de esta orden
                         meta_p = st.number_input(
                             "Meta de Unidades para esta Tarea", 
                             min_value=1, 
@@ -804,7 +809,6 @@ elif rol in ["admin", "produccion"]:
                         if st.form_submit_button("Guardar Orden de Compra", type="primary", use_container_width=True):
                             if num_oc.strip() and cliente_oc != "SIN CLIENTE REGISTRADO":
                                 meta_final = meta_oc if requiere_uni else 0
-                                # Forzar estrictamente 0 en unidades entregadas al crear
                                 ejecutar_comando(
                                     """INSERT INTO ordenes_compra 
                                     (numero_oc, cliente, referencia, servicio, requiere_unidades, meta_unidades, unidades_entregadas, estado) 
@@ -1319,14 +1323,14 @@ elif rol in ["admin", "produccion"]:
                                     st.rerun()
 
                     with st.expander("Eliminar"):
-                        with st.form("form_del_cliente", clear_on_submit=True):
+                        with st.form("form_del_clienteeee", clear_on_submit=True):
                             cliente_del = st.selectbox("Selecciona el Cliente a Borrar", clientes_df["nombre"].tolist(), key="del_cli_key")
                             if st.form_submit_button("Eliminar Cliente", type="primary", use_container_width=True):
                                 ejecutar_comando("DELETE FROM clientes WHERE nombre = %s", (cliente_del,))
                                 st.success("Cliente eliminado.")
                                 st.rerun()
             except Exception as e:
-                st.error(f"Error: {e}")
+                                st.error(f"Error: {e}")
 
         with tab_usu:
             st.subheader("⚙️ Gestión y Seguridad de Usuarios del Sistema")
