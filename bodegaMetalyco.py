@@ -694,7 +694,6 @@ elif rol in ["admin", "produccion"]:
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
             maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
             
-            # Solo mostrar OCs que tengan saldo pendiente real (meta > entregadas) o que no estén completadas
             ocs_db = ejecutar_consulta("SELECT numero_oc, referencia, servicio, meta_unidades, unidades_entregadas, requiere_unidades FROM ordenes_compra WHERE estado != 'COMPLETADO'")
             
             ocs_activas_validas = []
@@ -704,15 +703,15 @@ elif rol in ["admin", "produccion"]:
                     meta = int(r['meta_unidades'])
                     entregado = int(r['unidades_entregadas'])
                     req = r['requiere_unidades']
-                    # Si requiere unidades y ya se completó, la omitimos de la lista para que no se repita
                     if req and entregado >= meta:
                         continue
                     oc_num = r['numero_oc']
                     ocs_activas_validas.append(oc_num)
+                    saldo_calc = max(1, meta - entregado) if req else 100
                     info_ocs_dict[oc_num] = {
                         "referencia": r['referencia'],
                         "servicio": r['servicio'],
-                        "saldo": max(1, meta - entregado) if req else 100
+                        "saldo": saldo_calc
                     }
 
             if not ops or not maqs or not ocs_activas_validas:
@@ -721,16 +720,14 @@ elif rol in ["admin", "produccion"]:
                 with st.expander("Crear Programación", expanded=True):
                     k_sufijo = st.session_state["form_key_counter"]
                     
-                    # 1. Selección exclusiva de la OC
                     oc_prog = st.selectbox("Orden de Compra a Ejecutar", ocs_activas_validas, key=f"select_oc_dinamica_{k_sufijo}")
                     
-                    # 2. Arrastrar automáticamente los datos de la OC (Bloqueados para edición manual)
                     datos_oc_sel = info_ocs_dict.get(oc_prog, {})
                     ref_arrastrada = datos_oc_sel.get("referencia", "")
                     servicio_arrastrado = datos_oc_sel.get("servicio", "SIN SERVICIO")
                     saldo_sugerido = datos_oc_sel.get("saldo", 100)
                     
-                    st.info(f"🔒 **Datos arrastrados de la OC #{oc_prog}:** \n- **Referencia:** `{ref_arrastrada}` \n- **Servicio/Actividad:** `{servicio_arrastrado}` \n- **Saldo Pendiente:** `{saldo_sugerido} u.`")
+                    st.info(f"🔒 **Datos arrastrados de la OC #{oc_prog}:** \n- **Referencia:** `{ref_arrastrada}` \n- **Servicio/Actividad:** `{servicio_arrastrado}` \n- **Saldo Pendiente (Meta Sugerida):** `{saldo_sugerido} u.`")
                     
                     with st.form(f"form_programacion_{fecha_seleccionada}_{k_sufijo}", clear_on_submit=True):
                         op_p = st.selectbox("Operario", ops, key=f"op_prog_{k_sufijo}")
@@ -742,8 +739,14 @@ elif rol in ["admin", "produccion"]:
                         with col_h2:
                             h_fin_p = st.time_input("Fin Turno", time(17, 0), key=f"hfin_{k_sufijo}")
                         
-                        # Las unidades se autocompletan con el saldo de la OC pero se pueden ajustar si es parcial
-                        meta_p = st.number_input("Meta de Unidades para esta Tarea", min_value=1, value=saldo_sugerido, key=f"meta_{k_sufijo}")
+                        # AQUÍ ESTÁ EL CAMBIO CLAVE: La meta arranca con el saldo pendiente exacto y tiene un tope máximo seguro
+                        meta_p = st.number_input(
+                            "Meta de Unidades para esta Tarea", 
+                            min_value=1, 
+                            max_value=saldo_sugerido, 
+                            value=saldo_sugerido, 
+                            key=f"meta_{k_sufijo}"
+                        )
                         
                         if st.form_submit_button("Guardar Programación de Tarea", type="primary", use_container_width=True):
                             ejecutar_comando(
@@ -753,7 +756,7 @@ elif rol in ["admin", "produccion"]:
                                 (fecha_seleccionada, oc_prog, op_p, maq_p, ref_arrastrada, servicio_arrastrado, h_ini_p, h_fin_p, meta_p)
                             )
                             st.session_state["form_key_counter"] += 1
-                            st.success(f"¡Tarea asignada a {op_p} con éxito para la OC #{oc_prog}!")
+                            st.success(f"¡Tarea asignada a {op_p} con éxito para la OC #{oc_prog} (Meta: {meta_p} u.)!")
                             st.rerun()
             
             st.write("---")
@@ -1370,4 +1373,4 @@ elif rol in ["admin", "produccion"]:
                                     st.success("Usuario eliminado.")
                                     st.rerun()
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Error: {e}"
