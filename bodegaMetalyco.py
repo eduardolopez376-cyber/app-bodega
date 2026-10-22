@@ -4,7 +4,7 @@ import psycopg2
 import os
 import io
 import urllib.parse
-from datetime import datetime, time, date
+from datetime import datetime, time, date, timedelta
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
@@ -105,6 +105,7 @@ def inicializar_tablas_sistema():
         ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS es_maquina_alquilada BOOLEAN DEFAULT FALSE;")
         ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS horas_trabajadas NUMERIC(5,2) DEFAULT 0;")
         ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS presion_trabajo VARCHAR(50) DEFAULT '';")
+        ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP;")
         ejecutar_comando("ALTER TABLE programacion_diaria ADD COLUMN IF NOT EXISTS numero_oc VARCHAR(100);")
         ejecutar_comando("ALTER TABLE referencias ADD COLUMN IF NOT EXISTS cliente VARCHAR(150);")
         ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS nit VARCHAR(50);")
@@ -140,7 +141,11 @@ def calcular_tipo_hora(inicio_str, fin_str):
 
 def generar_reporte_produccion_excel(df_original):
     df = df_original.copy()
-    df['Fecha'] = date.today().strftime('%Y-%m-%d')
+    if 'fecha_registro' in df.columns:
+        df['Fecha'] = pd.to_datetime(df['fecha_registro']).dt.strftime('%Y-%m-%d')
+    else:
+        df['Fecha'] = date.today().strftime('%Y-%m-%d')
+        
     df['Orden'] = df['numero_oc'] if 'numero_oc' in df.columns else 'SIN OC'
     df['Area'] = 'Producción'
     df['Operario'] = df['operario_nombre'] if 'operario_nombre' in df.columns else ''
@@ -177,9 +182,6 @@ def generar_reporte_produccion_excel(df_original):
     return df[columnas_ordenadas]
 
 def generar_pdf_f01_01(datos):
-    """
-    Genera el PDF oficial F-01-01 con distribución limpia, homogénea y la actividad exacta.
-    """
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
@@ -188,7 +190,6 @@ def generar_pdf_f01_01(datos):
     ancho_util = width - 60
     y_actual = height - 40
 
-    # 1. ENCABEZADO CORPORATIVO
     if LOGO_PATH and os.path.exists(LOGO_PATH):
         try:
             p.drawImage(LOGO_PATH, x_margen, y_actual - 25, width=80, height=25, preserveAspectRatio=True, mask='auto')
@@ -210,7 +211,6 @@ def generar_pdf_f01_01(datos):
     p.setLineWidth(0.75)
     p.line(x_margen, y_actual, width - x_margen, y_actual)
     
-    # 2. INFORMACIÓN GENERAL
     y_actual -= 15
     p.setFillColorRGB(0.15, 0.15, 0.15)
     p.rect(x_margen, y_actual - 12, ancho_util, 14, fill=1, stroke=1)
@@ -242,7 +242,6 @@ def generar_pdf_f01_01(datos):
     p.setFont("Helvetica", 8)
     p.drawString(x_margen + 350, y_actual - 26, f"{datos.get('referencia', 'N/A')}")
     
-    # 3. PROCESOS Y MÁQUINAS (Diseño limpio y homogéneo con la actividad exacta)
     y_actual -= 45
     p.setFillColorRGB(0.15, 0.15, 0.15)
     p.rect(x_margen, y_actual - 14, ancho_util, 14, fill=1, stroke=1)
@@ -253,7 +252,6 @@ def generar_pdf_f01_01(datos):
     y_actual -= 14
     p.setFillColorRGB(0, 0, 0)
     
-    # Altura adaptable si hay presión de trabajo
     presion_val = datos.get('presion', '')
     alto_bloque = 30 if presion_val else 22
     p.rect(x_margen, y_actual - alto_bloque, ancho_util, alto_bloque, fill=0, stroke=1)
@@ -275,7 +273,6 @@ def generar_pdf_f01_01(datos):
         p.drawString(x_margen + 140, y_actual - 26, f"{presion_val}")
         y_actual -= 8
 
-    # 4. MATERIALES Y CANTIDADES
     y_actual -= (alto_bloque + 10)
     p.setFillColorRGB(0.15, 0.15, 0.15)
     p.rect(x_margen, y_actual - 12, ancho_util, 14, fill=1, stroke=1)
@@ -293,7 +290,6 @@ def generar_pdf_f01_01(datos):
     p.drawString(x_margen + 480, y_actual - 10, "CANTIDAD")
     p.line(x_margen, y_actual - 14, width - x_margen, y_actual - 14)
     
-    # 5. LOTE, MUESTRA Y AQL
     y_actual -= 35
     p.rect(x_margen, y_actual - 20, ancho_util, 20, fill=0, stroke=1)
     p.setFont("Helvetica-Bold", 8)
@@ -311,7 +307,6 @@ def generar_pdf_f01_01(datos):
     p.setFont("Helvetica", 8)
     p.drawString(x_margen + 460, y_actual - 13, "2.5")
     
-    # 6. CONTROL DE PRODUCCIÓN (DILIGENCIA OPERARIO)
     y_actual -= 30
     p.setFillColorRGB(0.15, 0.15, 0.15)
     p.rect(x_margen, y_actual - 12, ancho_util, 14, fill=1, stroke=1)
@@ -342,7 +337,6 @@ def generar_pdf_f01_01(datos):
     p.drawString(x_margen + 385, y_actual - 9, "0")
     p.drawString(x_margen + 440, y_actual - 9, f"{datos.get('observaciones', '')[:25]}")
     
-    # 7. CONTROL PRIMERA PIEZA TERMINADA
     y_actual -= 28
     p.setFillColorRGB(0.15, 0.15, 0.15)
     p.rect(x_margen, y_actual - 12, ancho_util, 14, fill=1, stroke=1)
@@ -371,7 +365,6 @@ def generar_pdf_f01_01(datos):
     p.drawString(x_margen + 8, y_actual - 41, "SOLDADURA / PINTURA")
     p.drawString(x_margen + 252, y_actual - 41, "X")
     
-    # 8. FIRMAS
     y_actual -= 55
     p.rect(x_margen, y_actual - 32, ancho_util, 32, fill=0, stroke=1)
     p.setFont("Helvetica-Bold", 7.5)
@@ -550,8 +543,8 @@ if rol == "operario":
                         
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
-                            (operario_nombre, maquina, referencia, numero_oc, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones, es_maquina_alquilada, horas_trabajadas, presion_trabajo) 
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                            (operario_nombre, maquina, referencia, numero_oc, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones, es_maquina_alquilada, horas_trabajadas, presion_trabajo, fecha_registro) 
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())""",
                             (st.session_state['nombre_usuario'], maquina_elegida, referencia_pieza, num_oc_asociada, h_inicio, h_fin, unidades, f"Buenas: {unidades}, Defectuosas: {defectuosas}. {obs_usuario}", es_alq, horas_calc, presion_input)
                         )
                         
@@ -615,6 +608,7 @@ if rol == "operario":
         try:
             maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
             refs = ejecutar_consulta("SELECT codigo FROM referencias")['codigo'].tolist()
+            serv_db = ejecutar_consulta("SELECT nombre FROM servicios_prestados")['nombre'].tolist()
             ocs_db = ejecutar_consulta("SELECT numero_oc, cliente FROM ordenes_compra WHERE estado != 'COMPLETADO'")
             
             ocs_disp = ["SIN OC"]
@@ -642,7 +636,7 @@ if rol == "operario":
                         presion_imp = st.text_input("Presión de Trabajo (Ej: 150 Ton / 25 MPa)")
                         
                     ref_imp = st.selectbox("Referencia", refs)
-                    act_imp = st.text_input("Actividad / Motivo imprevisto (Ej: CORTE, SOLDADURA)")
+                    act_imp = st.selectbox("Servicio / Actividad Prestada", serv_db if serv_db else ["CORTE", "PLEGADO", "SOLDADURA", "CONFORMADO", "PINTURA"])
                     
                     c_h1, c_h2 = st.columns(2)
                     with c_h1:
@@ -669,8 +663,8 @@ if rol == "operario":
 
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
-                            (operario_nombre, maquina, referencia, numero_oc, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones, es_maquina_alquilada, horas_trabajadas, presion_trabajo) 
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                            (operario_nombre, maquina, referencia, numero_oc, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones, es_maquina_alquilada, horas_trabajadas, presion_trabajo, fecha_registro) 
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())""",
                             (st.session_state['nombre_usuario'], maq_imp, ref_imp, oc_imp, h_ini_imp, h_fin_imp, uni_imp, obs_final_imp, es_alq, horas_calc, presion_imp)
                         )
                         st.success("¡Tarea imprevista registrada!")
@@ -700,6 +694,7 @@ elif rol in ["admin", "produccion"]:
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
             maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
             refs = ejecutar_consulta("SELECT codigo FROM referencias")['codigo'].tolist()
+            serv_db = ejecutar_consulta("SELECT nombre FROM servicios_prestados")['nombre'].tolist()
             ocs_disp = ejecutar_consulta("SELECT numero_oc FROM ordenes_compra WHERE estado != 'COMPLETADO'")['numero_oc'].tolist()
             
             if not ops or not maqs or not refs or not ocs_disp:
@@ -714,12 +709,14 @@ elif rol in ["admin", "produccion"]:
                     serv_sugerido = oc_info.iloc[0]['servicio'] if not oc_info.empty else ""
                     meta_restante = max(1, int(oc_info.iloc[0]['meta_unidades']) - int(oc_info.iloc[0]['unidades_entregadas'])) if not oc_info.empty else 100
                     
-                    st.markdown(f"📌 **Referencia de la OC:** `{ref_sugerida}` &nbsp;|&nbsp; **Servicio:** `{serv_sugerido}` &nbsp;|&nbsp; **Saldo Pendiente:** `{meta_restante} u.`")
+                    st.markdown(f"📌 **Referencia de la OC:** `{ref_sugerida}` &nbsp;|&nbsp; **Servicio Sugerido:** `{serv_sugerido}` &nbsp;|&nbsp; **Saldo Pendiente:** `{meta_restante} u.`")
                     
                     with st.form(f"form_programacion_{fecha_seleccionada}_{k_sufijo}", clear_on_submit=True):
                         op_p = st.selectbox("Operario", ops, key=f"op_prog_{k_sufijo}")
                         maq_p = st.selectbox("Máquina", maqs, key=f"maq_prog_{k_sufijo}")
-                        act_p = st.text_input("Actividad Específica (Ej: CORTE, SOLDADURA, PLEGADO)", value=serv_sugerido, key=f"act_prog_{k_sufijo}")
+                        
+                        idx_serv_sug = serv_db.index(serv_sugerido) if serv_sugerido in serv_db else 0
+                        act_p = st.selectbox("Servicio / Actividad a Programar", serv_db if serv_db else ["CORTE", "PLEGADO", "SOLDADURA", "CONFORMADO", "PINTURA"], index=idx_serv_sug, key=f"act_prog_{k_sufijo}")
                         
                         col_h1, col_h2 = st.columns(2)
                         with col_h1:
@@ -803,11 +800,11 @@ elif rol in ["admin", "produccion"]:
                 with st.expander("Eliminar"):
                     with st.form("form_del_oc", clear_on_submit=True):
                         oc_del = st.selectbox("Selecciona la OC a Borrar", df_oc["numero_oc"].tolist())
-                        if st.form_submit_button("Confirmar Eliminación de OC", type="primary", use_container_width=True):
+                        if st.form_submit_button("Confirmar Eliminación de OC y sus Registros", type="primary", use_container_width=True):
                             ejecutar_comando("DELETE FROM registro_produccion WHERE numero_oc = %s", (oc_del,))
                             ejecutar_comando("DELETE FROM programacion_diaria WHERE numero_oc = %s", (oc_del,))
                             ejecutar_comando("DELETE FROM ordenes_compra WHERE numero_oc = %s", (oc_del,))
-                            st.success(f"Orden de Compra #{oc_del} eliminada por completo.")
+                            st.success(f"Orden de Compra #{oc_del} y sus registros de producción asociados fueron eliminados por completo.")
                             st.rerun()
             else:
                 st.info("No hay órdenes de compra registradas.")
@@ -961,23 +958,66 @@ elif rol in ["admin", "produccion"]:
             horizontal=True
         )
         
+        # Filtros de Período para los Reportes
+        st.write("---")
+        c_p1, c_p2 = st.columns(2)
+        with c_p1:
+            filtro_periodo = st.selectbox("Filtrar Período:", ["Histórico (Todo)", "Diario", "Semanal", "Mensual"])
+        with c_p2:
+            if filtro_periodo == "Diario":
+                fecha_filtro = st.date_input("Selecciona el Día", value=date.today())
+            elif filtro_periodo == "Semanal":
+                fecha_filtro = st.date_input("Selecciona una fecha de la Semana", value=date.today())
+            elif filtro_periodo == "Mensual":
+                mes_opcion = st.selectbox("Selecciona el Mes", ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"], index=datetime.now().month - 1)
+                anio_opcion = st.number_input("Año", min_value=2024, max_value=2030, value=datetime.now().year)
+
         if tipo_reporte_gerencial == "Reporte de Producción":
             st.markdown("### 📥 Reporte de Producción en Columnas Separadas para Excel")
             try:
                 df_produccion_raw = ejecutar_consulta("SELECT * FROM registro_produccion ORDER BY id DESC")
                 if not df_produccion_raw.empty:
-                    df_final = generar_reporte_produccion_excel(df_produccion_raw)
-                    st.dataframe(df_final, use_container_width=True)
-                    buffer_prod = io.BytesIO()
-                    with pd.ExcelWriter(buffer_prod, engine='openpyxl') as writer:
-                        df_final.to_excel(writer, index=False, sheet_name='Reporte_Produccion')
-                    st.download_button(
-                        label="📥 Descargar Reporte de Producción (Excel)",
-                        data=buffer_prod.getvalue(),
-                        file_name=f"reporte_produccion_{date.today()}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True
-                    )
+                    # Aplicar filtros de fecha según selección
+                    if 'fecha_registro' in df_produccion_raw.columns:
+                        df_produccion_raw['dt'] = pd.to_datetime(df_produccion_raw['fecha_registro'])
+                    else:
+                        df_produccion_raw['dt'] = pd.Timestamp.now()
+
+                    if filtro_periodo == "Diario":
+                        df_produccion_raw = df_produccion_raw[df_produccion_raw['dt'].dt.date == fecha_filtro]
+                    elif filtro_periodo == "Semanal":
+                        inicio_sem = pd.to_datetime(fecha_filtro) - timedelta(days=pd.to_datetime(fecha_filtro).weekday())
+                        fin_sem = inicio_sem + timedelta(days=6)
+                        df_produccion_raw = df_produccion_raw[(df_produccion_raw['dt'].dt.date >= inicio_sem.date()) & (df_produccion_raw['dt'].dt.date <= fin_sem.date())]
+                    elif filtro_periodo == "Mensual":
+                        meses_dict = {"Enero": 1, "Febrero": 2, "Marzo": 3, "Abril": 4, "Mayo": 5, "Junio": 6, "Julio": 7, "Agosto": 8, "Septiembre": 9, "Octubre": 10, "Noviembre": 11, "Diciembre": 12}
+                        m_num = meses_dict[mes_opcion]
+                        df_produccion_raw = df_produccion_raw[(df_produccion_raw['dt'].dt.month == m_num) & (df_produccion_raw['dt'].dt.year == anio_opcion)]
+
+                    if not df_produccion_raw.empty:
+                        df_final = generar_reporte_produccion_excel(df_produccion_raw)
+                        st.dataframe(df_final, use_container_width=True)
+                        buffer_prod = io.BytesIO()
+                        with pd.ExcelWriter(buffer_prod, engine='openpyxl') as writer:
+                            df_final.to_excel(writer, index=False, sheet_name='Reporte_Produccion')
+                        st.download_button(
+                            label="📥 Descargar Reporte de Producción Filtrado (Excel)",
+                            data=buffer_prod.getvalue(),
+                            file_name=f"reporte_produccion_{filtro_periodo.lower()}_{date.today()}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True
+                        )
+                    else:
+                        st.info(f"No hay registros de producción para el período seleccionado ({filtro_periodo}).")
+                        
+                    with st.expander("🧹 Limpiar Registros de Producción Antiguos"):
+                        with st.form("form_limpiar_prod"):
+                            reg_produccion_ids = df_produccion_raw['id'].tolist() if 'id' in df_produccion_raw.columns else []
+                            id_a_borrar = st.selectbox("Selecciona el ID de Registro de Producción a Borrar", reg_produccion_ids)
+                            if st.form_submit_button("Eliminar este Registro Antiguo", type="primary", use_container_width=True):
+                                ejecutar_comando("DELETE FROM registro_produccion WHERE id = %s", (id_a_borrar,))
+                                st.success(f"Registro de producción #{id_a_borrar} eliminado con éxito.")
+                                st.rerun()
                 else:
                     st.info("No hay registros de producción disponibles.")
             except Exception as e:
@@ -987,7 +1027,7 @@ elif rol in ["admin", "produccion"]:
             st.markdown("### 💰 Control de Uso y Costos de Máquinas Alquiladas")
             try:
                 query_alq = """
-                    SELECT R.id, R.fecha, R.operario_nombre, R.maquina, R.horas_trabajadas, 
+                    SELECT R.id, R.fecha_registro, R.operario_nombre, R.maquina, R.horas_trabajadas, 
                     M.costo_hora_alquiler, (R.horas_trabajadas * M.costo_hora_alquiler) AS costo_total
                     FROM registro_produccion R
                     JOIN maquinas M ON R.maquina = M.nombre
@@ -996,12 +1036,39 @@ elif rol in ["admin", "produccion"]:
                 """
                 df_alq = ejecutar_consulta(query_alq)
                 if not df_alq.empty:
-                    tot_horas = df_alq['horas_trabajadas'].sum()
-                    tot_costo = df_alq['costo_total'].sum()
-                    col_m1, col_m2 = st.columns(2)
-                    col_m1.metric("Total Horas Alquiladas", f"{tot_horas:.2f} hrs")
-                    col_m2.metric("Costo Total Acumulado", f"${tot_costo:,.2f}")
-                    st.dataframe(df_alq, use_container_width=True)
+                    df_alq['dt'] = pd.to_datetime(df_alq['fecha_registro'])
+                    
+                    if filtro_periodo == "Diario":
+                        df_alq = df_alq[df_alq['dt'].dt.date == fecha_filtro]
+                    elif filtro_periodo == "Semanal":
+                        inicio_sem = pd.to_datetime(fecha_filtro) - timedelta(days=pd.to_datetime(fecha_filtro).weekday())
+                        fin_sem = inicio_sem + timedelta(days=6)
+                        df_alq = df_alq[(df_alq['dt'].dt.date >= inicio_sem.date()) & (df_alq['dt'].dt.date <= fin_sem.date())]
+                    elif filtro_periodo == "Mensual":
+                        meses_dict = {"Enero": 1, "Febrero": 2, "Marzo": 3, "Abril": 4, "Mayo": 5, "Junio": 6, "Julio": 7, "Agosto": 8, "Septiembre": 9, "Octubre": 10, "Noviembre": 11, "Diciembre": 12}
+                        m_num = meses_dict[mes_opcion]
+                        df_alq = df_alq[(df_alq['dt'].dt.month == m_num) & (df_alq['dt'].dt.year == anio_opcion)]
+
+                    if not df_alq.empty:
+                        tot_horas = df_alq['horas_trabajadas'].sum()
+                        tot_costo = df_alq['costo_total'].sum()
+                        col_m1, col_m2 = st.columns(2)
+                        col_m1.metric("Total Horas Alquiladas", f"{tot_horas:.2f} hrs")
+                        col_m2.metric("Costo Total Acumulado", f"${tot_costo:,.2f}")
+                        st.dataframe(df_alq, use_container_width=True)
+                        
+                        buffer_alq = io.BytesIO()
+                        with pd.ExcelWriter(buffer_alq, engine='openpyxl') as writer:
+                            df_alq.to_excel(writer, index=False, sheet_name='Costos_Maquinas_Alquiladas')
+                        st.download_button(
+                            label="📥 Descargar Costos de Máquinas Filtrado (Excel)",
+                            data=buffer_alq.getvalue(),
+                            file_name=f"costos_maquinas_{filtro_periodo.lower()}_{date.today()}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True
+                        )
+                    else:
+                        st.info(f"No hay registros de máquinas alquiladas para el período seleccionado ({filtro_periodo}).")
                 else:
                     st.info("No hay registros de máquinas alquiladas.")
             except Exception as e:
