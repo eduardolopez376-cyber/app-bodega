@@ -178,7 +178,7 @@ def generar_reporte_produccion_excel(df_original):
 
 def generar_pdf_f01_01(datos):
     """
-    Genera el PDF oficial F-01-01 con la tabla de procesos idéntica y marcado de X[cite: 8].
+    Genera el PDF oficial F-01-01 con distribución limpia, homogénea y la actividad exacta.
     """
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
@@ -242,72 +242,41 @@ def generar_pdf_f01_01(datos):
     p.setFont("Helvetica", 8)
     p.drawString(x_margen + 350, y_actual - 26, f"{datos.get('referencia', 'N/A')}")
     
-    # 3. PROCESOS Y MÁQUINAS (Cuadrícula idéntica al formato físico con X)[cite: 8]
+    # 3. PROCESOS Y MÁQUINAS (Diseño limpio y homogéneo con la actividad exacta)
     y_actual -= 45
-    
-    # Cabecera Procesos
-    p.setFillColorRGB(0.3, 0.3, 0.3)
-    p.rect(x_margen, y_actual - 16, 170, 16, fill=1, stroke=1)
+    p.setFillColorRGB(0.15, 0.15, 0.15)
+    p.rect(x_margen, y_actual - 14, ancho_util, 14, fill=1, stroke=1)
     p.setFillColorRGB(1, 1, 1)
-    p.setFont("Helvetica-Bold", 7.5)
-    p.drawCentredString(x_margen + 85, y_actual - 8, "PROCESOS")
-    p.drawCentredString(x_margen + 85, y_actual - 14, "(marque con una X)")
+    p.setFont("Helvetica-Bold", 8)
+    p.drawCentredString(width / 2.0, y_actual - 9, "PROCESOS Y MÁQUINAS")
     
-    # Columnas de Procesos
-    procesos_lista = ["CORTE", "CONFORMADO", "PLEGADO", "SOLDADURA", "PINTURA"]
-    ancho_col = (ancho_util - 170) / 5
+    y_actual -= 14
+    p.setFillColorRGB(0, 0, 0)
     
-    p.setFillColorRGB(0.3, 0.3, 0.3)
-    for i, proc in enumerate(procesos_lista):
-        x_c = x_margen + 170 + (i * ancho_col)
-        p.rect(x_c, y_actual - 16, ancho_col, 16, fill=1, stroke=1)
-        p.setFillColorRGB(1, 1, 1)
-        p.setFont("Helvetica-Bold", 7)
-        p.drawCentredString(x_c + (ancho_col / 2.0), y_actual - 10, proc)
-    
-    # Fila casillas X
-    y_actual -= 16
-    p.setFillColorRGB(0.3, 0.3, 0.3)
-    p.rect(x_margen, y_actual - 16, 170, 16, fill=1, stroke=1)
-    p.setFillColorRGB(1, 1, 1)
-    p.setFont("Helvetica-Bold", 7.5)
-    p.drawCentredString(x_margen + 85, y_actual - 10, "MÁQUINAS / PRESIÓN")
-    
-    actividad_actual = str(datos.get('actividad', '')).upper()
-    
-    for i, proc in enumerate(procesos_lista):
-        x_c = x_margen + 170 + (i * ancho_col)
-        p.setFillColorRGB(1, 1, 1)
-        p.rect(x_c, y_actual - 16, ancho_col, 16, fill=1, stroke=1)
-        p.setFillColorRGB(0, 0, 0)
-        p.setFont("Helvetica-Bold", 9)
-        # Si la actividad coincide con el proceso, ponemos la X
-        if proc in actividad_actual:
-            p.drawCentredString(x_c + (ancho_col / 2.0), y_actual - 12, "X")
-            
-    # Fila de Máquinas
-    y_actual -= 16
-    p.setFillColorRGB(0.3, 0.3, 0.3)
-    p.rect(x_margen, y_actual - 16, 170, 16, fill=1, stroke=1)
-    p.setFillColorRGB(1, 1, 1)
-    p.setFont("Helvetica-Bold", 7.5)
-    p.drawCentredString(x_margen + 85, y_actual - 10, f"{datos.get('maquina', 'N/A')}")
-    
-    for i, proc in enumerate(procesos_lista):
-        x_c = x_margen + 170 + (i * ancho_col)
-        p.setFillColorRGB(1, 1, 1)
-        p.rect(x_c, y_actual - 16, ancho_col, 16, fill=1, stroke=1)
-    
-    # Si hay presión de trabajo (prensa), la mostramos abajo
+    # Altura adaptable si hay presión de trabajo
     presion_val = datos.get('presion', '')
+    alto_bloque = 30 if presion_val else 22
+    p.rect(x_margen, y_actual - alto_bloque, ancho_util, alto_bloque, fill=0, stroke=1)
+    
+    p.setFont("Helvetica-Bold", 8)
+    p.drawString(x_margen + 10, y_actual - 15, "PROCESO / ACTIVIDAD:")
+    p.setFont("Helvetica", 8.5)
+    p.drawString(x_margen + 140, y_actual - 15, f"[ X ] {str(datos.get('actividad', 'N/A')).upper()}")
+    
+    p.setFont("Helvetica-Bold", 8)
+    p.drawString(x_margen + 320, y_actual - 15, "MÁQUINA:")
+    p.setFont("Helvetica", 8.5)
+    p.drawString(x_margen + 380, y_actual - 15, f"{str(datos.get('maquina', 'N/A')).upper()}")
+    
     if presion_val:
-        y_actual -= 18
-        p.setFillColorRGB(0, 0, 0)
         p.setFont("Helvetica-Bold", 8)
-        p.drawString(x_margen, y_actual, f"⚙️ PRESIÓN DE TRABAJO (PRENSA): {presion_val}")
+        p.drawString(x_margen + 10, y_actual - 26, "PRESIÓN DE TRABAJO:")
+        p.setFont("Helvetica", 8.5)
+        p.drawString(x_margen + 140, y_actual - 26, f"{presion_val}")
+        y_actual -= 8
 
     # 4. MATERIALES Y CANTIDADES
-    y_actual -= 25
+    y_actual -= (alto_bloque + 10)
     p.setFillColorRGB(0.15, 0.15, 0.15)
     p.rect(x_margen, y_actual - 12, ancho_util, 14, fill=1, stroke=1)
     p.setFillColorRGB(1, 1, 1)
@@ -540,8 +509,6 @@ if rol == "operario":
                 with st.form("form_reporte_operario"):
                     tarea_elegida_str = st.selectbox("Selecciona la Tarea a Registrar", lista_opciones)
                     
-                    # Verificamos si la máquina asociada es una prensa para pedir presión
-                    # (Buscamos si la palabra 'prensa' o 'troqueladora' está en la máquina seleccionada)
                     id_t_temp = int(tarea_elegida_str.split(" | ")[0].replace("ID #", ""))
                     maq_nombre_temp = tareas_pendientes[tareas_pendientes['id'] == id_t_temp].iloc[0]['maquina']
                     
