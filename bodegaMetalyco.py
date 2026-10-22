@@ -693,30 +693,48 @@ elif rol in ["admin", "produccion"]:
             ops_df = ejecutar_consulta("SELECT nombre FROM usuarios WHERE rol = 'operario'")
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
             maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
-            refs = ejecutar_consulta("SELECT codigo FROM referencias")['codigo'].tolist()
-            serv_db = ejecutar_consulta("SELECT nombre FROM servicios_prestados")['nombre'].tolist()
-            ocs_disp = ejecutar_consulta("SELECT numero_oc FROM ordenes_compra WHERE estado != 'COMPLETADO'")['numero_oc'].tolist()
             
-            if not ops or not maqs or not refs or not ocs_disp:
-                st.warning("⚠️ Asegúrate de tener operarios, máquinas, referencias y al menos una **Orden de Compra activa** creada.")
+            # Solo mostrar OCs que tengan saldo pendiente real (meta > entregadas) o que no estén completadas
+            ocs_db = ejecutar_consulta("SELECT numero_oc, referencia, servicio, meta_unidades, unidades_entregadas, requiere_unidades FROM ordenes_compra WHERE estado != 'COMPLETADO'")
+            
+            ocs_activas_validas = []
+            info_ocs_dict = {}
+            if not ocs_db.empty:
+                for _, r in ocs_db.iterrows():
+                    meta = int(r['meta_unidades'])
+                    entregado = int(r['unidades_entregadas'])
+                    req = r['requiere_unidades']
+                    # Si requiere unidades y ya se completó, la omitimos de la lista para que no se repita
+                    if req and entregado >= meta:
+                        continue
+                    oc_num = r['numero_oc']
+                    ocs_activas_validas.append(oc_num)
+                    info_ocs_dict[oc_num] = {
+                        "referencia": r['referencia'],
+                        "servicio": r['servicio'],
+                        "saldo": max(1, meta - entregado) if req else 100
+                    }
+
+            if not ops or not maqs or not ocs_activas_validas:
+                st.warning("⚠️ Asegúrate de tener operarios, máquinas y al menos una **Orden de Compra activa con saldo pendiente** creada.")
             else:
-                with st.expander("Crear", expanded=True):
+                with st.expander("Crear Programación", expanded=True):
                     k_sufijo = st.session_state["form_key_counter"]
-                    oc_prog = st.selectbox("Orden de Compra a Ejecutar", ocs_disp, key=f"select_oc_dinamica_{k_sufijo}")
                     
-                    oc_info = ejecutar_consulta("SELECT referencia, servicio, meta_unidades, unidades_entregadas FROM ordenes_compra WHERE numero_oc = %s", (oc_prog,))
-                    ref_sugerida = oc_info.iloc[0]['referencia'] if not oc_info.empty else (refs[0] if refs else "")
-                    serv_sugerido = oc_info.iloc[0]['servicio'] if not oc_info.empty else ""
-                    meta_restante = max(1, int(oc_info.iloc[0]['meta_unidades']) - int(oc_info.iloc[0]['unidades_entregadas'])) if not oc_info.empty else 100
+                    # 1. Selección exclusiva de la OC
+                    oc_prog = st.selectbox("Orden de Compra a Ejecutar", ocs_activas_validas, key=f"select_oc_dinamica_{k_sufijo}")
                     
-                    st.markdown(f"📌 **Referencia de la OC:** `{ref_sugerida}` &nbsp;|&nbsp; **Servicio Sugerido:** `{serv_sugerido}` &nbsp;|&nbsp; **Saldo Pendiente:** `{meta_restante} u.`")
+                    # 2. Arrastrar automáticamente los datos de la OC (Bloqueados para edición manual)
+                    datos_oc_sel = info_ocs_dict.get(oc_prog, {})
+                    ref_arrastrada = datos_oc_sel.get("referencia", "")
+                    servicio_arrastrado = datos_oc_sel.get("servicio", "SIN SERVICIO")
+                    saldo_sugerido = datos_oc_sel.get("saldo", 100)
+                    
+                    st.info(f"🔒 **Datos arrastrados de la OC #{oc_prog}:** \n- **Referencia:** `{ref_arrastrada}` \n- **Servicio/Actividad:** `{servicio_arrastrado}` \n- **Saldo Pendiente:** `{saldo_sugerido} u.`")
                     
                     with st.form(f"form_programacion_{fecha_seleccionada}_{k_sufijo}", clear_on_submit=True):
                         op_p = st.selectbox("Operario", ops, key=f"op_prog_{k_sufijo}")
                         maq_p = st.selectbox("Máquina", maqs, key=f"maq_prog_{k_sufijo}")
-                        
-                        idx_serv_sug = serv_db.index(serv_sugerido) if serv_sugerido in serv_db else 0
-                        act_p = st.selectbox("Servicio / Actividad a Programar", serv_db if serv_db else ["CORTE", "PLEGADO", "SOLDADURA", "CONFORMADO", "PINTURA"], index=idx_serv_sug, key=f"act_prog_{k_sufijo}")
                         
                         col_h1, col_h2 = st.columns(2)
                         with col_h1:
@@ -724,17 +742,18 @@ elif rol in ["admin", "produccion"]:
                         with col_h2:
                             h_fin_p = st.time_input("Fin Turno", time(17, 0), key=f"hfin_{k_sufijo}")
                         
-                        meta_p = st.number_input("Meta de Unidades para esta Tarea", min_value=1, value=meta_restante, key=f"meta_{k_sufijo}")
+                        # Las unidades se autocompletan con el saldo de la OC pero se pueden ajustar si es parcial
+                        meta_p = st.number_input("Meta de Unidades para esta Tarea", min_value=1, value=saldo_sugerido, key=f"meta_{k_sufijo}")
                         
                         if st.form_submit_button("Guardar Programación de Tarea", type="primary", use_container_width=True):
                             ejecutar_comando(
                                 """INSERT INTO programacion_diaria 
                                 (fecha, numero_oc, operario_nombre, maquina, referencia, actividad, hora_inicio, hora_fin, meta_unidades, estado) 
                                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE')""",
-                                (fecha_seleccionada, oc_prog, op_p, maq_p, ref_sugerida, act_p, h_ini_p, h_fin_p, meta_p)
+                                (fecha_seleccionada, oc_prog, op_p, maq_p, ref_arrastrada, servicio_arrastrado, h_ini_p, h_fin_p, meta_p)
                             )
                             st.session_state["form_key_counter"] += 1
-                            st.success(f"¡Tarea asignada a {op_p} con éxito!")
+                            st.success(f"¡Tarea asignada a {op_p} con éxito para la OC #{oc_prog}!")
                             st.rerun()
             
             st.write("---")
@@ -742,7 +761,7 @@ elif rol in ["admin", "produccion"]:
             df_prog_actual = ejecutar_consulta("SELECT * FROM programacion_diaria WHERE fecha = %s ORDER BY id DESC", (fecha_seleccionada,))
             if not df_prog_actual.empty:
                 st.dataframe(df_prog_actual, use_container_width=True)
-                with st.expander("Eliminar"):
+                with st.expander("Eliminar Programación"):
                     id_del = st.selectbox("ID a Eliminar", df_prog_actual["id"].tolist(), key="del_prog_id_c")
                     if st.button("Confirmar Eliminación", type="primary", use_container_width=True):
                         ejecutar_comando("DELETE FROM programacion_diaria WHERE id = %s", (id_del,))
@@ -958,7 +977,6 @@ elif rol in ["admin", "produccion"]:
             horizontal=True
         )
         
-        # Filtros de Período para los Reportes
         st.write("---")
         c_p1, c_p2 = st.columns(2)
         with c_p1:
@@ -977,7 +995,6 @@ elif rol in ["admin", "produccion"]:
             try:
                 df_produccion_raw = ejecutar_consulta("SELECT * FROM registro_produccion ORDER BY id DESC")
                 if not df_produccion_raw.empty:
-                    # Aplicar filtros de fecha según selección
                     if 'fecha_registro' in df_produccion_raw.columns:
                         df_produccion_raw['dt'] = pd.to_datetime(df_produccion_raw['fecha_registro'])
                     else:
