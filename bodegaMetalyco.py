@@ -104,6 +104,7 @@ def inicializar_tablas_sistema():
         ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS numero_oc VARCHAR(100);")
         ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS es_maquina_alquilada BOOLEAN DEFAULT FALSE;")
         ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS horas_trabajadas NUMERIC(5,2) DEFAULT 0;")
+        ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS presion_trabajo VARCHAR(50) DEFAULT '';")
         ejecutar_comando("ALTER TABLE programacion_diaria ADD COLUMN IF NOT EXISTS numero_oc VARCHAR(100);")
         ejecutar_comando("ALTER TABLE referencias ADD COLUMN IF NOT EXISTS cliente VARCHAR(150);")
         ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS nit VARCHAR(50);")
@@ -177,13 +178,12 @@ def generar_reporte_produccion_excel(df_original):
 
 def generar_pdf_f01_01(datos):
     """
-    Genera el PDF oficial F-01-01 con la estructura limpia, espaciada y con logo corporativo.
+    Genera el PDF oficial F-01-01 con la tabla de procesos idéntica y marcado de X[cite: 8].
     """
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
     
-    # Márgenes y coordenadas limpias
     x_margen = 30
     ancho_util = width - 60
     y_actual = height - 40
@@ -223,49 +223,91 @@ def generar_pdf_f01_01(datos):
     p.rect(x_margen, y_actual - 35, ancho_util, 35, fill=0, stroke=1)
     
     p.setFont("Helvetica-Bold", 8)
-    p.drawString(x_margen + 8, y_actual - 12, f"FECHA:")
+    p.drawString(x_margen + 8, y_actual - 12, "FECHA:")
     p.setFont("Helvetica", 8)
     p.drawString(x_margen + 50, y_actual - 12, f"{datos.get('fecha', date.today())}")
     
     p.setFont("Helvetica-Bold", 8)
-    p.drawString(x_margen + 260, y_actual - 12, f"OP (ORDEN DE PRODUCCIÓN):")
+    p.drawString(x_margen + 260, y_actual - 12, "OP (ORDEN DE PRODUCCIÓN):")
     p.setFont("Helvetica", 8)
     p.drawString(x_margen + 390, y_actual - 12, f"{datos.get('numero_oc', 'N/A')}")
     
     p.setFont("Helvetica-Bold", 8)
-    p.drawString(x_margen + 8, y_actual - 26, f"CLIENTE:")
+    p.drawString(x_margen + 8, y_actual - 26, "CLIENTE:")
     p.setFont("Helvetica", 8)
     p.drawString(x_margen + 50, y_actual - 26, f"{datos.get('cliente', 'N/A')}")
     
     p.setFont("Helvetica-Bold", 8)
-    p.drawString(x_margen + 260, y_actual - 26, f"REFERENCIA PIEZA:")
+    p.drawString(x_margen + 260, y_actual - 26, "REFERENCIA PIEZA:")
     p.setFont("Helvetica", 8)
     p.drawString(x_margen + 350, y_actual - 26, f"{datos.get('referencia', 'N/A')}")
     
-    # 3. PROCESOS Y MÁQUINAS
+    # 3. PROCESOS Y MÁQUINAS (Cuadrícula idéntica al formato físico con X)[cite: 8]
     y_actual -= 45
-    p.setFillColorRGB(0.15, 0.15, 0.15)
-    p.rect(x_margen, y_actual - 12, ancho_util, 14, fill=1, stroke=1)
+    
+    # Cabecera Procesos
+    p.setFillColorRGB(0.3, 0.3, 0.3)
+    p.rect(x_margen, y_actual - 16, 170, 16, fill=1, stroke=1)
     p.setFillColorRGB(1, 1, 1)
     p.setFont("Helvetica-Bold", 7.5)
-    p.drawCentredString(width / 2.0, y_actual - 8, "PROCESOS Y MÁQUINAS")
+    p.drawCentredString(x_margen + 85, y_actual - 8, "PROCESOS")
+    p.drawCentredString(x_margen + 85, y_actual - 14, "(marque con una X)")
     
-    y_actual -= 12
-    p.setFillColorRGB(0, 0, 0)
-    p.rect(x_margen, y_actual - 25, ancho_util, 25, fill=0, stroke=1)
+    # Columnas de Procesos
+    procesos_lista = ["CORTE", "CONFORMADO", "PLEGADO", "SOLDADURA", "PINTURA"]
+    ancho_col = (ancho_util - 170) / 5
     
-    p.setFont("Helvetica-Bold", 8)
-    p.drawString(x_margen + 8, y_actual - 16, "PROCESOS:")
-    p.setFont("Helvetica", 8)
-    p.drawString(x_margen + 75, y_actual - 16, "[ X ] CORTE / PLEGADO / SOLDADURA")
+    p.setFillColorRGB(0.3, 0.3, 0.3)
+    for i, proc in enumerate(procesos_lista):
+        x_c = x_margen + 170 + (i * ancho_col)
+        p.rect(x_c, y_actual - 16, ancho_col, 16, fill=1, stroke=1)
+        p.setFillColorRGB(1, 1, 1)
+        p.setFont("Helvetica-Bold", 7)
+        p.drawCentredString(x_c + (ancho_col / 2.0), y_actual - 10, proc)
     
-    p.setFont("Helvetica-Bold", 8)
-    p.drawString(x_margen + 260, y_actual - 16, "MÁQUINA:")
-    p.setFont("Helvetica", 8)
-    p.drawString(x_margen + 315, y_actual - 16, f"{datos.get('maquina', 'N/A')}")
+    # Fila casillas X
+    y_actual -= 16
+    p.setFillColorRGB(0.3, 0.3, 0.3)
+    p.rect(x_margen, y_actual - 16, 170, 16, fill=1, stroke=1)
+    p.setFillColorRGB(1, 1, 1)
+    p.setFont("Helvetica-Bold", 7.5)
+    p.drawCentredString(x_margen + 85, y_actual - 10, "MÁQUINAS / PRESIÓN")
     
+    actividad_actual = str(datos.get('actividad', '')).upper()
+    
+    for i, proc in enumerate(procesos_lista):
+        x_c = x_margen + 170 + (i * ancho_col)
+        p.setFillColorRGB(1, 1, 1)
+        p.rect(x_c, y_actual - 16, ancho_col, 16, fill=1, stroke=1)
+        p.setFillColorRGB(0, 0, 0)
+        p.setFont("Helvetica-Bold", 9)
+        # Si la actividad coincide con el proceso, ponemos la X
+        if proc in actividad_actual:
+            p.drawCentredString(x_c + (ancho_col / 2.0), y_actual - 12, "X")
+            
+    # Fila de Máquinas
+    y_actual -= 16
+    p.setFillColorRGB(0.3, 0.3, 0.3)
+    p.rect(x_margen, y_actual - 16, 170, 16, fill=1, stroke=1)
+    p.setFillColorRGB(1, 1, 1)
+    p.setFont("Helvetica-Bold", 7.5)
+    p.drawCentredString(x_margen + 85, y_actual - 10, f"{datos.get('maquina', 'N/A')}")
+    
+    for i, proc in enumerate(procesos_lista):
+        x_c = x_margen + 170 + (i * ancho_col)
+        p.setFillColorRGB(1, 1, 1)
+        p.rect(x_c, y_actual - 16, ancho_col, 16, fill=1, stroke=1)
+    
+    # Si hay presión de trabajo (prensa), la mostramos abajo
+    presion_val = datos.get('presion', '')
+    if presion_val:
+        y_actual -= 18
+        p.setFillColorRGB(0, 0, 0)
+        p.setFont("Helvetica-Bold", 8)
+        p.drawString(x_margen, y_actual, f"⚙️ PRESIÓN DE TRABAJO (PRENSA): {presion_val}")
+
     # 4. MATERIALES Y CANTIDADES
-    y_actual -= 35
+    y_actual -= 25
     p.setFillColorRGB(0.15, 0.15, 0.15)
     p.rect(x_margen, y_actual - 12, ancho_util, 14, fill=1, stroke=1)
     p.setFillColorRGB(1, 1, 1)
@@ -273,35 +315,35 @@ def generar_pdf_f01_01(datos):
     p.drawCentredString(width / 2.0, y_actual - 8, "MATERIALES Y CANTIDADES")
     
     y_actual -= 12
-    p.rect(x_margen, y_actual - 30, ancho_util, 30, fill=0, stroke=1)
+    p.rect(x_margen, y_actual - 25, ancho_util, 25, fill=0, stroke=1)
     p.setFillColorRGB(0, 0, 0)
     p.setFont("Helvetica-Bold", 8)
-    p.drawString(x_margen + 8, y_actual - 12, "DESCRIPCIÓN")
-    p.drawString(x_margen + 200, y_actual - 12, "CANTIDAD")
-    p.drawString(x_margen + 290, y_actual - 12, "DESCRIPCIÓN")
-    p.drawString(x_margen + 480, y_actual - 12, "CANTIDAD")
-    p.line(x_margen, y_actual - 16, width - x_margen, y_actual - 16)
+    p.drawString(x_margen + 8, y_actual - 10, "DESCRIPCIÓN")
+    p.drawString(x_margen + 200, y_actual - 10, "CANTIDAD")
+    p.drawString(x_margen + 290, y_actual - 10, "DESCRIPCIÓN")
+    p.drawString(x_margen + 480, y_actual - 10, "CANTIDAD")
+    p.line(x_margen, y_actual - 14, width - x_margen, y_actual - 14)
     
     # 5. LOTE, MUESTRA Y AQL
-    y_actual -= 40
-    p.rect(x_margen, y_actual - 22, ancho_util, 22, fill=0, stroke=1)
+    y_actual -= 35
+    p.rect(x_margen, y_actual - 20, ancho_util, 20, fill=0, stroke=1)
     p.setFont("Helvetica-Bold", 8)
-    p.drawString(x_margen + 8, y_actual - 14, "CANTIDAD DEL LOTE:")
+    p.drawString(x_margen + 8, y_actual - 13, "CANTIDAD DEL LOTE:")
     p.setFont("Helvetica", 8)
-    p.drawString(x_margen + 115, y_actual - 14, f"{datos.get('producidas', 0)}")
+    p.drawString(x_margen + 115, y_actual - 13, f"{datos.get('producidas', 0)}")
     
     p.setFont("Helvetica-Bold", 8)
-    p.drawString(x_margen + 200, y_actual - 14, "TAMAÑO MUESTRA:")
+    p.drawString(x_margen + 200, y_actual - 13, "TAMAÑO MUESTRA:")
     p.setFont("Helvetica", 8)
-    p.drawString(x_margen + 295, y_actual - 14, "N/A")
+    p.drawString(x_margen + 295, y_actual - 13, "N/A")
     
     p.setFont("Helvetica-Bold", 8)
-    p.drawString(x_margen + 400, y_actual - 14, "NIVEL AQL:")
+    p.drawString(x_margen + 400, y_actual - 13, "NIVEL AQL:")
     p.setFont("Helvetica", 8)
-    p.drawString(x_margen + 460, y_actual - 14, "2.5")
+    p.drawString(x_margen + 460, y_actual - 13, "2.5")
     
     # 6. CONTROL DE PRODUCCIÓN (DILIGENCIA OPERARIO)
-    y_actual -= 32
+    y_actual -= 30
     p.setFillColorRGB(0.15, 0.15, 0.15)
     p.rect(x_margen, y_actual - 12, ancho_util, 14, fill=1, stroke=1)
     p.setFillColorRGB(1, 1, 1)
@@ -310,29 +352,29 @@ def generar_pdf_f01_01(datos):
     
     y_actual -= 12
     p.setFillColorRGB(0, 0, 0)
-    p.rect(x_margen, y_actual - 30, ancho_util, 30, fill=0, stroke=1)
+    p.rect(x_margen, y_actual - 28, ancho_util, 28, fill=0, stroke=1)
     p.setFont("Helvetica-Bold", 7.5)
-    p.drawString(x_margen + 5, y_actual - 12, "HORA INICIO")
-    p.drawString(x_margen + 75, y_actual - 12, "HORA FIN")
-    p.drawString(x_margen + 135, y_actual - 12, "PARÁMETROS")
-    p.drawString(x_margen + 220, y_actual - 12, "PRODUCIDAS")
-    p.drawString(x_margen + 290, y_actual - 12, "RECHAZADAS")
-    p.drawString(x_margen + 370, y_actual - 12, "RETRABAJO")
-    p.drawString(x_margen + 440, y_actual - 12, "OBSERVACIONES")
-    p.line(x_margen, y_actual - 16, width - x_margen, y_actual - 16)
+    p.drawString(x_margen + 5, y_actual - 11, "HORA INICIO")
+    p.drawString(x_margen + 75, y_actual - 11, "HORA FIN")
+    p.drawString(x_margen + 135, y_actual - 11, "PARÁMETROS")
+    p.drawString(x_margen + 220, y_actual - 11, "PRODUCIDAS")
+    p.drawString(x_margen + 290, y_actual - 11, "RECHAZADAS")
+    p.drawString(x_margen + 370, y_actual - 11, "RETRABAJO")
+    p.drawString(x_margen + 440, y_actual - 11, "OBSERVACIONES")
+    p.line(x_margen, y_actual - 14, width - x_margen, y_actual - 14)
     
-    y_actual -= 16
+    y_actual -= 14
     p.setFont("Helvetica", 8)
-    p.drawString(x_margen + 8, y_actual - 10, f"{datos.get('hora_inicio', '')}")
-    p.drawString(x_margen + 78, y_actual - 10, f"{datos.get('hora_fin', '')}")
-    p.drawString(x_margen + 145, y_actual - 10, "OK")
-    p.drawString(x_margen + 235, y_actual - 10, f"{datos.get('producidas', 0)}")
-    p.drawString(x_margen + 310, y_actual - 10, f"{datos.get('defectuosas', 0)}")
-    p.drawString(x_margen + 385, y_actual - 10, "0")
-    p.drawString(x_margen + 440, y_actual - 10, f"{datos.get('observaciones', '')[:25]}")
+    p.drawString(x_margen + 8, y_actual - 9, f"{datos.get('hora_inicio', '')}")
+    p.drawString(x_margen + 78, y_actual - 9, f"{datos.get('hora_fin', '')}")
+    p.drawString(x_margen + 145, y_actual - 9, "OK")
+    p.drawString(x_margen + 235, y_actual - 9, f"{datos.get('producidas', 0)}")
+    p.drawString(x_margen + 310, y_actual - 9, f"{datos.get('defectuosas', 0)}")
+    p.drawString(x_margen + 385, y_actual - 9, "0")
+    p.drawString(x_margen + 440, y_actual - 9, f"{datos.get('observaciones', '')[:25]}")
     
     # 7. CONTROL PRIMERA PIEZA TERMINADA
-    y_actual -= 30
+    y_actual -= 28
     p.setFillColorRGB(0.15, 0.15, 0.15)
     p.rect(x_margen, y_actual - 12, ancho_util, 14, fill=1, stroke=1)
     p.setFillColorRGB(1, 1, 1)
@@ -341,32 +383,32 @@ def generar_pdf_f01_01(datos):
     
     y_actual -= 12
     p.setFillColorRGB(0, 0, 0)
-    p.rect(x_margen, y_actual - 50, ancho_util, 50, fill=0, stroke=1)
+    p.rect(x_margen, y_actual - 45, ancho_util, 45, fill=0, stroke=1)
     
     p.setFont("Helvetica-Bold", 8)
-    p.drawString(x_margen + 8, y_actual - 12, "TIPO")
-    p.drawString(x_margen + 250, y_actual - 12, "OK")
-    p.drawString(x_margen + 350, y_actual - 12, "NC")
-    p.drawString(x_margen + 450, y_actual - 12, "NA")
-    p.line(x_margen, y_actual - 15, width - x_margen, y_actual - 15)
+    p.drawString(x_margen + 8, y_actual - 11, "TIPO")
+    p.drawString(x_margen + 250, y_actual - 11, "OK")
+    p.drawString(x_margen + 350, y_actual - 11, "NC")
+    p.drawString(x_margen + 450, y_actual - 11, "NA")
+    p.line(x_margen, y_actual - 14, width - x_margen, y_actual - 14)
     
     p.setFont("Helvetica", 8)
-    p.drawString(x_margen + 8, y_actual - 25, "DIMENSIONES")
-    p.drawString(x_margen + 252, y_actual - 25, "X")
+    p.drawString(x_margen + 8, y_actual - 23, "DIMENSIONES")
+    p.drawString(x_margen + 252, y_actual - 23, "X")
     
-    p.drawString(x_margen + 8, y_actual - 35, "ACABADO SUPERFICIAL")
-    p.drawString(x_margen + 252, y_actual - 35, "X")
+    p.drawString(x_margen + 8, y_actual - 32, "ACABADO SUPERFICIAL")
+    p.drawString(x_margen + 252, y_actual - 32, "X")
     
-    p.drawString(x_margen + 8, y_actual - 45, "SOLDADURA / PINTURA")
-    p.drawString(x_margen + 252, y_actual - 45, "X")
+    p.drawString(x_margen + 8, y_actual - 41, "SOLDADURA / PINTURA")
+    p.drawString(x_margen + 252, y_actual - 41, "X")
     
     # 8. FIRMAS
-    y_actual -= 60
-    p.rect(x_margen, y_actual - 35, ancho_util, 35, fill=0, stroke=1)
+    y_actual -= 55
+    p.rect(x_margen, y_actual - 32, ancho_util, 32, fill=0, stroke=1)
     p.setFont("Helvetica-Bold", 7.5)
-    p.drawString(x_margen + 10, y_actual - 12, f"NOMBRE OPERARIO: {datos.get('operario', 'N/A')}")
-    p.drawString(x_margen + 300, y_actual - 12, "NOMBRE INSPECTOR: _____________________")
-    p.drawString(x_margen + 150, y_actual - 28, "NOMBRE AUDITOR EXTERNO (SI APLICA): _____________________")
+    p.drawString(x_margen + 10, y_actual - 11, f"NOMBRE OPERARIO: {datos.get('operario', 'N/A')}")
+    p.drawString(x_margen + 300, y_actual - 11, "NOMBRE INSPECTOR: _____________________")
+    p.drawString(x_margen + 150, y_actual - 24, "NOMBRE AUDITOR EXTERNO (SI APLICA): _____________________")
     
     p.showPage()
     p.save()
@@ -497,6 +539,17 @@ if rol == "operario":
                 
                 with st.form("form_reporte_operario"):
                     tarea_elegida_str = st.selectbox("Selecciona la Tarea a Registrar", lista_opciones)
+                    
+                    # Verificamos si la máquina asociada es una prensa para pedir presión
+                    # (Buscamos si la palabra 'prensa' o 'troqueladora' está en la máquina seleccionada)
+                    id_t_temp = int(tarea_elegida_str.split(" | ")[0].replace("ID #", ""))
+                    maq_nombre_temp = tareas_pendientes[tareas_pendientes['id'] == id_t_temp].iloc[0]['maquina']
+                    
+                    es_prensa = any(p in maq_nombre_temp.lower() for p in ['prensa', 'troqueladora', 'dobladora'])
+                    presion_input = ""
+                    if es_prensa:
+                        presion_input = st.text_input("Presión de Trabajo (Ej: 150 Ton / 25 MPa)")
+                    
                     h_inicio = st.time_input("Hora de Inicio Real", time(7, 0))
                     h_fin = st.time_input("Hora de Finalización Real", time(17, 0))
                     unidades = st.number_input("Unidades Producidas Buenas", min_value=0, step=1)
@@ -512,6 +565,7 @@ if rol == "operario":
                         num_oc_asociada = row_t['numero_oc']
                         maquina_elegida = row_t['maquina']
                         referencia_pieza = row_t['referencia']
+                        actividad_tarea = row_t['actividad']
                         
                         cli_db = ejecutar_consulta("SELECT cliente FROM ordenes_compra WHERE numero_oc = %s", (num_oc_asociada,))
                         cliente_nombre = cli_db.iloc[0]['cliente'] if not cli_db.empty else "N/A"
@@ -529,9 +583,9 @@ if rol == "operario":
                         
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
-                            (operario_nombre, maquina, referencia, numero_oc, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones, es_maquina_alquilada, horas_trabajadas) 
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                            (st.session_state['nombre_usuario'], maquina_elegida, referencia_pieza, num_oc_asociada, h_inicio, h_fin, unidades, f"Buenas: {unidades}, Defectuosas: {defectuosas}. {obs_usuario}", es_alq, horas_calc)
+                            (operario_nombre, maquina, referencia, numero_oc, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones, es_maquina_alquilada, horas_trabajadas, presion_trabajo) 
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                            (st.session_state['nombre_usuario'], maquina_elegida, referencia_pieza, num_oc_asociada, h_inicio, h_fin, unidades, f"Buenas: {unidades}, Defectuosas: {defectuosas}. {obs_usuario}", es_alq, horas_calc, presion_input)
                         )
                         
                         if num_oc_asociada and num_oc_asociada != "SIN OC":
@@ -555,6 +609,8 @@ if rol == "operario":
                             "cliente": cliente_nombre,
                             "referencia": referencia_pieza,
                             "maquina": maquina_elegida,
+                            "actividad": actividad_tarea,
+                            "presion": presion_input,
                             "hora_inicio": str(h_inicio),
                             "hora_fin": str(h_fin),
                             "producidas": unidades,
@@ -612,8 +668,14 @@ if rol == "operario":
                     st.info(f"🏢 **Cliente asociado automáticamente:** `{cliente_asociado_oc}`")
                     
                     maq_imp = st.selectbox("Máquina", maqs)
+                    
+                    es_prensa_imp = any(p in maq_imp.lower() for p in ['prensa', 'troqueladora', 'dobladora'])
+                    presion_imp = ""
+                    if es_prensa_imp:
+                        presion_imp = st.text_input("Presión de Trabajo (Ej: 150 Ton / 25 MPa)")
+                        
                     ref_imp = st.selectbox("Referencia", refs)
-                    act_imp = st.text_input("Actividad / Motivo imprevisto")
+                    act_imp = st.text_input("Actividad / Motivo imprevisto (Ej: CORTE, SOLDADURA)")
                     
                     c_h1, c_h2 = st.columns(2)
                     with c_h1:
@@ -640,9 +702,9 @@ if rol == "operario":
 
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
-                            (operario_nombre, maquina, referencia, numero_oc, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones, es_maquina_alquilada, horas_trabajadas) 
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                            (st.session_state['nombre_usuario'], maq_imp, ref_imp, oc_imp, h_ini_imp, h_fin_imp, uni_imp, obs_final_imp, es_alq, horas_calc)
+                            (operario_nombre, maquina, referencia, numero_oc, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones, es_maquina_alquilada, horas_trabajadas, presion_trabajo) 
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                            (st.session_state['nombre_usuario'], maq_imp, ref_imp, oc_imp, h_ini_imp, h_fin_imp, uni_imp, obs_final_imp, es_alq, horas_calc, presion_imp)
                         )
                         st.success("¡Tarea imprevista registrada!")
                         st.rerun()
@@ -690,7 +752,7 @@ elif rol in ["admin", "produccion"]:
                     with st.form(f"form_programacion_{fecha_seleccionada}_{k_sufijo}", clear_on_submit=True):
                         op_p = st.selectbox("Operario", ops, key=f"op_prog_{k_sufijo}")
                         maq_p = st.selectbox("Máquina", maqs, key=f"maq_prog_{k_sufijo}")
-                        act_p = st.text_input("Actividad Específica", value=serv_sugerido, key=f"act_prog_{k_sufijo}")
+                        act_p = st.text_input("Actividad Específica (Ej: CORTE, SOLDADURA, PLEGADO)", value=serv_sugerido, key=f"act_prog_{k_sufijo}")
                         
                         col_h1, col_h2 = st.columns(2)
                         with col_h1:
@@ -793,8 +855,8 @@ elif rol in ["admin", "produccion"]:
                 st.dataframe(df_maqs, use_container_width=True)
                 with st.expander("Crear"):
                     with st.form("form_crear_maquina", clear_on_submit=True):
-                        m_nom = st.text_input("Nombre de la Máquina (Ej: Láser CNC 01)")
-                        m_tipo = st.text_input("Tipo (Ej: Corte, Dobladora)")
+                        m_nom = st.text_input("Nombre de la Máquina (Ej: Prensa Hidráulica 01)")
+                        m_tipo = st.text_input("Tipo (Ej: Conformado, Plegadora)")
                         m_prop = st.selectbox("Tipo de Propiedad", ["PROPIA", "ALQUILADA"])
                         m_costo_alq = st.number_input("Costo por Hora de Alquiler ($)", min_value=0.0, step=1000.0, value=0.0)
                         if st.form_submit_button("Guardar Máquina", type="primary", use_container_width=True):
@@ -849,7 +911,7 @@ elif rol in ["admin", "produccion"]:
                     st.dataframe(df_serv, use_container_width=True)
                 with st.expander("Crear"):
                     with st.form("form_crear_serv", clear_on_submit=True):
-                        nom_serv = st.text_input("Nombre del Servicio (Ej: SOLDADURA TIG)")
+                        nom_serv = st.text_input("Nombre del Servicio (Ej: PLEGADO, CORTE)")
                         if st.form_submit_button("Guardar Servicio", type="primary", use_container_width=True):
                             if nom_serv.strip():
                                 ejecutar_comando("INSERT INTO servicios_prestados (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (nom_serv.upper().strip(),))
