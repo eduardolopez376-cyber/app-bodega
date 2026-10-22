@@ -176,79 +176,197 @@ def generar_reporte_produccion_excel(df_original):
     return df[columnas_ordenadas]
 
 def generar_pdf_f01_01(datos):
+    """
+    Genera el PDF oficial F-01-01 con la estructura limpia, espaciada y con logo corporativo.
+    """
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
     
-    p.setFont("Helvetica-Bold", 14)
-    p.drawString(40, height - 40, "Metal&Co")
-    p.setFont("Helvetica-Bold", 11)
-    p.drawString(240, height - 40, "CONTROL DE PRODUCCIÓN Y CALIDAD PIEZAS TERMINADAS")
+    # Márgenes y coordenadas limpias
+    x_margen = 30
+    ancho_util = width - 60
+    y_actual = height - 40
+
+    # 1. ENCABEZADO CORPORATIVO
+    if LOGO_PATH and os.path.exists(LOGO_PATH):
+        try:
+            p.drawImage(LOGO_PATH, x_margen, y_actual - 25, width=80, height=25, preserveAspectRatio=True, mask='auto')
+        except:
+            p.setFont("Helvetica-Bold", 12)
+            p.drawString(x_margen, y_actual - 15, "Metal&Co")
+    else:
+        p.setFont("Helvetica-Bold", 12)
+        p.drawString(x_margen, y_actual - 15, "Metal&Co")
+
+    p.setFont("Helvetica-Bold", 10)
+    p.drawCentredString(width / 2.0, y_actual - 10, "CONTROL DE PRODUCCIÓN Y CALIDAD PIEZAS TERMINADAS")
+    
+    p.setFont("Helvetica", 7)
+    p.drawRightString(width - x_margen, y_actual - 8, "Código: F-01-01")
+    p.drawRightString(width - x_margen, y_actual - 18, "Versión: 1")
+    
+    y_actual -= 35
+    p.setLineWidth(0.75)
+    p.line(x_margen, y_actual, width - x_margen, y_actual)
+    
+    # 2. INFORMACIÓN GENERAL
+    y_actual -= 15
+    p.setFillColorRGB(0.15, 0.15, 0.15)
+    p.rect(x_margen, y_actual - 12, ancho_util, 14, fill=1, stroke=1)
+    p.setFillColorRGB(1, 1, 1)
+    p.setFont("Helvetica-Bold", 7.5)
+    p.drawCentredString(width / 2.0, y_actual - 8, "INFORMACIÓN GENERAL (DILIGENCIA PROGRAMADOR/COORDINADOR PRODUCCIÓN)")
+    
+    y_actual -= 12
+    p.setFillColorRGB(0, 0, 0)
+    p.rect(x_margen, y_actual - 35, ancho_util, 35, fill=0, stroke=1)
+    
+    p.setFont("Helvetica-Bold", 8)
+    p.drawString(x_margen + 8, y_actual - 12, f"FECHA:")
     p.setFont("Helvetica", 8)
-    p.drawString(450, height - 35, "Código: F-01-01")
-    p.drawString(450, height - 45, "Versión: 1")
+    p.drawString(x_margen + 50, y_actual - 12, f"{datos.get('fecha', date.today())}")
     
-    p.setLineWidth(1)
-    p.rect(40, height - 60, width - 80, 25)
-    
-    p.rect(40, height - 140, width - 80, 80)
-    p.setFillColorRGB(0.1, 0.1, 0.1)
-    p.rect(40, height - 85, width - 80, 15, fill=1, stroke=1)
-    p.setFillColorRGB(1, 1, 1)
     p.setFont("Helvetica-Bold", 8)
-    p.drawString(200, height - 80, "INFORMACIÓN GENERAL (DILIGENCIA PROGRAMADOR/COORDINADOR PRODUCCIÓN)")
-    
-    p.setFillColorRGB(0, 0, 0)
-    p.setFont("Helvetica-Bold", 9)
-    p.drawString(50, height - 105, f"FECHA: {datos.get('fecha', date.today())}")
-    p.drawString(300, height - 105, f"OP (ORDEN DE PRODUCCIÓN): {datos.get('numero_oc', 'N/A')}")
-    p.drawString(50, height - 125, f"CLIENTE: {datos.get('cliente', 'N/A')}")
-    p.drawString(300, height - 125, f"REFERENCIA PIEZA: {datos.get('referencia', 'N/A')}")
-    
-    p.rect(40, height - 200, width - 80, 60)
-    p.setFillColorRGB(0.1, 0.1, 0.1)
-    p.rect(40, height - 160, width - 80, 15, fill=1, stroke=1)
-    p.setFillColorRGB(1, 1, 1)
-    p.setFont("Helvetica-Bold", 8)
-    p.drawString(250, height - 155, "PROCESOS Y MÁQUINAS")
-    
-    p.setFillColorRGB(0, 0, 0)
-    p.setFont("Helvetica-Bold", 8)
-    p.drawString(50, height - 180, "PROCESOS: CORTE / PLEGADO / SOLDADURA")
-    p.drawString(300, height - 180, f"MÁQUINA: {datos.get('maquina', 'N/A')}")
-    
-    p.rect(40, height - 280, width - 80, 80)
-    p.setFillColorRGB(0.1, 0.1, 0.1)
-    p.rect(40, height - 225, width - 80, 15, fill=1, stroke=1)
-    p.setFillColorRGB(1, 1, 1)
-    p.setFont("Helvetica-Bold", 8)
-    p.drawString(220, height - 220, "CONTROL DE PRODUCCIÓN (DILIGENCIA OPERARIO)")
-    
-    p.setFillColorRGB(0, 0, 0)
-    p.setFont("Helvetica", 9)
-    p.drawString(50, height - 250, f"Hora Inicio: {datos.get('hora_inicio', '')}")
-    p.drawString(130, height - 250, f"Hora Fin: {datos.get('hora_fin', '')}")
-    p.drawString(210, height - 250, f"Producidas: {datos.get('producidas', 0)}")
-    p.drawString(300, height - 250, f"Rechazadas: {datos.get('defectuosas', 0)}")
-    p.drawString(420, height - 250, f"Obs: {datos.get('observaciones', '')[:30]}")
-    
-    p.rect(40, height - 390, width - 80, 100)
-    p.setFillColorRGB(0.1, 0.1, 0.1)
-    p.rect(40, height - 305, width - 80, 15, fill=1, stroke=1)
-    p.setFillColorRGB(1, 1, 1)
-    p.setFont("Helvetica-Bold", 8)
-    p.drawString(180, height - 300, "CONTROL PRIMERA PIEZA TERMINADA PUESTA A PUNTO")
-    
-    p.setFillColorRGB(0, 0, 0)
+    p.drawString(x_margen + 260, y_actual - 12, f"OP (ORDEN DE PRODUCCIÓN):")
     p.setFont("Helvetica", 8)
-    p.drawString(50, height - 330, "DIMENSIONES: OK")
-    p.drawString(50, height - 350, "ACABADO SUPERFICIAL: OK")
-    p.drawString(50, height - 370, "SOLDADURA / PINTURA: OK")
+    p.drawString(x_margen + 390, y_actual - 12, f"{datos.get('numero_oc', 'N/A')}")
     
-    p.rect(40, height - 460, width - 80, 60)
+    p.setFont("Helvetica-Bold", 8)
+    p.drawString(x_margen + 8, y_actual - 26, f"CLIENTE:")
     p.setFont("Helvetica", 8)
-    p.drawString(50, height - 425, f"NOMBRE OPERARIO: {datos.get('operario', 'N/A')}")
-    p.drawString(350, height - 425, "NOMBRE INSPECTOR: ______________")
+    p.drawString(x_margen + 50, y_actual - 26, f"{datos.get('cliente', 'N/A')}")
+    
+    p.setFont("Helvetica-Bold", 8)
+    p.drawString(x_margen + 260, y_actual - 26, f"REFERENCIA PIEZA:")
+    p.setFont("Helvetica", 8)
+    p.drawString(x_margen + 350, y_actual - 26, f"{datos.get('referencia', 'N/A')}")
+    
+    # 3. PROCESOS Y MÁQUINAS
+    y_actual -= 45
+    p.setFillColorRGB(0.15, 0.15, 0.15)
+    p.rect(x_margen, y_actual - 12, ancho_util, 14, fill=1, stroke=1)
+    p.setFillColorRGB(1, 1, 1)
+    p.setFont("Helvetica-Bold", 7.5)
+    p.drawCentredString(width / 2.0, y_actual - 8, "PROCESOS Y MÁQUINAS")
+    
+    y_actual -= 12
+    p.setFillColorRGB(0, 0, 0)
+    p.rect(x_margen, y_actual - 25, ancho_util, 25, fill=0, stroke=1)
+    
+    p.setFont("Helvetica-Bold", 8)
+    p.drawString(x_margen + 8, y_actual - 16, "PROCESOS:")
+    p.setFont("Helvetica", 8)
+    p.drawString(x_margen + 75, y_actual - 16, "[ X ] CORTE / PLEGADO / SOLDADURA")
+    
+    p.setFont("Helvetica-Bold", 8)
+    p.drawString(x_margen + 260, y_actual - 16, "MÁQUINA:")
+    p.setFont("Helvetica", 8)
+    p.drawString(x_margen + 315, y_actual - 16, f"{datos.get('maquina', 'N/A')}")
+    
+    # 4. MATERIALES Y CANTIDADES
+    y_actual -= 35
+    p.setFillColorRGB(0.15, 0.15, 0.15)
+    p.rect(x_margen, y_actual - 12, ancho_util, 14, fill=1, stroke=1)
+    p.setFillColorRGB(1, 1, 1)
+    p.setFont("Helvetica-Bold", 7.5)
+    p.drawCentredString(width / 2.0, y_actual - 8, "MATERIALES Y CANTIDADES")
+    
+    y_actual -= 12
+    p.rect(x_margen, y_actual - 30, ancho_util, 30, fill=0, stroke=1)
+    p.setFillColorRGB(0, 0, 0)
+    p.setFont("Helvetica-Bold", 8)
+    p.drawString(x_margen + 8, y_actual - 12, "DESCRIPCIÓN")
+    p.drawString(x_margen + 200, y_actual - 12, "CANTIDAD")
+    p.drawString(x_margen + 290, y_actual - 12, "DESCRIPCIÓN")
+    p.drawString(x_margen + 480, y_actual - 12, "CANTIDAD")
+    p.line(x_margen, y_actual - 16, width - x_margen, y_actual - 16)
+    
+    # 5. LOTE, MUESTRA Y AQL
+    y_actual -= 40
+    p.rect(x_margen, y_actual - 22, ancho_util, 22, fill=0, stroke=1)
+    p.setFont("Helvetica-Bold", 8)
+    p.drawString(x_margen + 8, y_actual - 14, "CANTIDAD DEL LOTE:")
+    p.setFont("Helvetica", 8)
+    p.drawString(x_margen + 115, y_actual - 14, f"{datos.get('producidas', 0)}")
+    
+    p.setFont("Helvetica-Bold", 8)
+    p.drawString(x_margen + 200, y_actual - 14, "TAMAÑO MUESTRA:")
+    p.setFont("Helvetica", 8)
+    p.drawString(x_margen + 295, y_actual - 14, "N/A")
+    
+    p.setFont("Helvetica-Bold", 8)
+    p.drawString(x_margen + 400, y_actual - 14, "NIVEL AQL:")
+    p.setFont("Helvetica", 8)
+    p.drawString(x_margen + 460, y_actual - 14, "2.5")
+    
+    # 6. CONTROL DE PRODUCCIÓN (DILIGENCIA OPERARIO)
+    y_actual -= 32
+    p.setFillColorRGB(0.15, 0.15, 0.15)
+    p.rect(x_margen, y_actual - 12, ancho_util, 14, fill=1, stroke=1)
+    p.setFillColorRGB(1, 1, 1)
+    p.setFont("Helvetica-Bold", 7.5)
+    p.drawCentredString(width / 2.0, y_actual - 8, "CONTROL DE PRODUCCIÓN (DILIGENCIA OPERARIO)")
+    
+    y_actual -= 12
+    p.setFillColorRGB(0, 0, 0)
+    p.rect(x_margen, y_actual - 30, ancho_util, 30, fill=0, stroke=1)
+    p.setFont("Helvetica-Bold", 7.5)
+    p.drawString(x_margen + 5, y_actual - 12, "HORA INICIO")
+    p.drawString(x_margen + 75, y_actual - 12, "HORA FIN")
+    p.drawString(x_margen + 135, y_actual - 12, "PARÁMETROS")
+    p.drawString(x_margen + 220, y_actual - 12, "PRODUCIDAS")
+    p.drawString(x_margen + 290, y_actual - 12, "RECHAZADAS")
+    p.drawString(x_margen + 370, y_actual - 12, "RETRABAJO")
+    p.drawString(x_margen + 440, y_actual - 12, "OBSERVACIONES")
+    p.line(x_margen, y_actual - 16, width - x_margen, y_actual - 16)
+    
+    y_actual -= 16
+    p.setFont("Helvetica", 8)
+    p.drawString(x_margen + 8, y_actual - 10, f"{datos.get('hora_inicio', '')}")
+    p.drawString(x_margen + 78, y_actual - 10, f"{datos.get('hora_fin', '')}")
+    p.drawString(x_margen + 145, y_actual - 10, "OK")
+    p.drawString(x_margen + 235, y_actual - 10, f"{datos.get('producidas', 0)}")
+    p.drawString(x_margen + 310, y_actual - 10, f"{datos.get('defectuosas', 0)}")
+    p.drawString(x_margen + 385, y_actual - 10, "0")
+    p.drawString(x_margen + 440, y_actual - 10, f"{datos.get('observaciones', '')[:25]}")
+    
+    # 7. CONTROL PRIMERA PIEZA TERMINADA
+    y_actual -= 30
+    p.setFillColorRGB(0.15, 0.15, 0.15)
+    p.rect(x_margen, y_actual - 12, ancho_util, 14, fill=1, stroke=1)
+    p.setFillColorRGB(1, 1, 1)
+    p.setFont("Helvetica-Bold", 7.5)
+    p.drawCentredString(width / 2.0, y_actual - 8, "CONTROL PRIMERA PIEZA TERMINADA PUESTA A PUNTO (DILIGENCIA OPERARIO Y/O INSPECTOR)")
+    
+    y_actual -= 12
+    p.setFillColorRGB(0, 0, 0)
+    p.rect(x_margen, y_actual - 50, ancho_util, 50, fill=0, stroke=1)
+    
+    p.setFont("Helvetica-Bold", 8)
+    p.drawString(x_margen + 8, y_actual - 12, "TIPO")
+    p.drawString(x_margen + 250, y_actual - 12, "OK")
+    p.drawString(x_margen + 350, y_actual - 12, "NC")
+    p.drawString(x_margen + 450, y_actual - 12, "NA")
+    p.line(x_margen, y_actual - 15, width - x_margen, y_actual - 15)
+    
+    p.setFont("Helvetica", 8)
+    p.drawString(x_margen + 8, y_actual - 25, "DIMENSIONES")
+    p.drawString(x_margen + 252, y_actual - 25, "X")
+    
+    p.drawString(x_margen + 8, y_actual - 35, "ACABADO SUPERFICIAL")
+    p.drawString(x_margen + 252, y_actual - 35, "X")
+    
+    p.drawString(x_margen + 8, y_actual - 45, "SOLDADURA / PINTURA")
+    p.drawString(x_margen + 252, y_actual - 45, "X")
+    
+    # 8. FIRMAS
+    y_actual -= 60
+    p.rect(x_margen, y_actual - 35, ancho_util, 35, fill=0, stroke=1)
+    p.setFont("Helvetica-Bold", 7.5)
+    p.drawString(x_margen + 10, y_actual - 12, f"NOMBRE OPERARIO: {datos.get('operario', 'N/A')}")
+    p.drawString(x_margen + 300, y_actual - 12, "NOMBRE INSPECTOR: _____________________")
+    p.drawString(x_margen + 150, y_actual - 28, "NOMBRE AUDITOR EXTERNO (SI APLICA): _____________________")
     
     p.showPage()
     p.save()
@@ -947,7 +1065,6 @@ elif rol in ["admin", "produccion"]:
                                 st.success("Herramienta marcada como devuelta.")
                                 st.rerun()
                             else:
-                                # Marcar anterior devuelto y crear nuevo préstamo al nuevo operario
                                 ejecutar_comando("UPDATE consumos SET estado = 'DEVUELTO' WHERE id = %s", (id_prestamo_sel,))
                                 ejecutar_comando(
                                     "INSERT INTO consumos (fecha, operario, codigo_material, cantidad, tipo, estado) VALUES (%s, %s, %s, %s, 'HERRAMIENTA', 'PRESTADO')",
