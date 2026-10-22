@@ -762,17 +762,17 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Referencias: {e}")
 
-    # --- TAB: REPORTES (INCLUYE REPORTE EXCEL DE 10 COLUMNAS SEPARADAS) ---
+    # --- TAB: REPORTES (CON TÍTULOS CORTOS) ---
     with tab_rep:
         st.subheader("📊 Centro de Reportes Gerenciales y de Producción")
         
         tipo_reporte_gerencial = st.radio(
             "Selecciona la vista de reporte:", 
-            ["Reporte Detallado de Producción (10 Columnas)", "Control y Costos Financieros de Máquinas Alquiladas", "Saldos de Órdenes de Compra e Inventario"], 
+            ["Reporte de Producción", "Costos Máquinas Alquiladas", "Saldos de Órdenes de Compra e Inventario"], 
             horizontal=True
         )
         
-        if tipo_reporte_gerencial == "Reporte Detallado de Producción (10 Columnas)":
+        if tipo_reporte_gerencial == "Reporte de Producción":
             st.markdown("### 📥 Reporte de Producción en Columnas Separadas para Excel")
             try:
                 df_produccion_raw = ejecutar_consulta("SELECT * FROM registro_produccion ORDER BY id DESC")
@@ -797,7 +797,7 @@ elif rol in ["admin", "produccion"]:
             except Exception as e:
                 st.error(f"Error al generar reporte de producción: {e}")
 
-        elif tipo_reporte_gerencial == "Control y Costos Financieros de Máquinas Alquiladas":
+        elif tipo_reporte_gerencial == "Costos Máquinas Alquiladas":
             st.markdown("### 💰 Control de Uso y Costos de Máquinas Alquiladas")
             try:
                 query_alq = """
@@ -1136,4 +1136,3 @@ elif rol in ["admin", "produccion"]:
                                     st.rerun()
             except Exception as e:
                 st.error(f"Error en usuarios: {e}")
-       
