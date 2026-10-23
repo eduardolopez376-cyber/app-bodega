@@ -22,25 +22,25 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Estilos CSS generales para toda la app
-st.markdown(f"""
+# Estilos CSS generales para toda la app (sin 'f' para evitar conflictos con llaves CSS)
+st.markdown("""
     <style>
-        .stApp {{
-            background-color: {COLOR_FONDO_OSCURO};
-            color: {COLOR_TEXTO_CLARO};
-        }}
+        .stApp {
+            background-color: #121212;
+            color: #E0E0E0;
+        }
         
-        .block-container {{
+        .block-container {
             padding-top: 1rem;
             padding-bottom: 2rem;
             padding-left: 1rem;
             padding-right: 1rem;
-        }}
+        }
         
-        [data-testid="stSidebar"] {{
+        [data-testid="stSidebar"] {
             background-color: #1a1a1a;
-            border-right: 1px solid {COLOR_ACENTO_NARANJA};
-        }}
+            border-right: 1px solid #FF7A00;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -52,7 +52,7 @@ for nombre in NOMBRES_LOGO:
         LOGO_PATH = nombre
         break
 
-def mostrar_logo(ancho=260):  # Aumentado de tamaño para que luzca bien
+def mostrar_logo(ancho=260):
     if LOGO_PATH:
         st.image(LOGO_PATH, width=ancho)
     else:
@@ -404,24 +404,19 @@ if "form_key_counter" not in st.session_state:
 # PANTALLA DE LOGIN EXÓTICA Y LLAMATIVA (ESTILO REFERENCIA)
 # ====================================================
 if not st.session_state["autenticado"]:
-    # Estilo CSS de la tarjeta flotante, botón difuminado y fondo industrial
-    fondo_css = ""
+    # Verificamos si existe la imagen de fondo 'fondo_login.jpg'
     if os.path.exists("fondo_login.jpg"):
-        # Si pones una imagen llamada 'fondo_login.jpg' en tu carpeta, la usará de fondo con oscurecimiento
-        fondo_css = """
-            background: linear-gradient(rgba(0,0,0,0.75), rgba(0,0,0,0.85)), url('fondo_login.jpg');
-            background-size: cover;
-            background-position: center;
-        """
+        estilo_fondo = "background: linear-gradient(rgba(0,0,0,0.75), rgba(0,0,0,0.85)), url('fondo_login.jpg'); background-size: cover; background-position: center;"
     else:
-        fondo_css = "background-color: #121212;"
+        estilo_fondo = "background-color: #121212;"
 
-    st.markdown(f"""
+    # Estilo CSS general de la pantalla de login (sin f-string para evitar errores con llaves)
+    st.markdown("""
         <style>
-            .stApp {{
-                {fondo_css}
-            }}
-            .login-card {{
+            .stApp {
+                """ + estilo_fondo + """
+            }
+            .login-card {
                 background-color: rgba(26, 26, 26, 0.90);
                 backdrop-filter: blur(10px);
                 border: 1px solid rgba(255, 122, 0, 0.2);
@@ -431,21 +426,20 @@ if not st.session_state["autenticado"]:
                 max-width: 480px;
                 margin: 0 auto;
             }
-            .login-title {{
+            .login-title {
                 color: #E0E0E0;
                 font-weight: 700;
                 text-align: center;
                 margin-bottom: 0.3rem;
                 font-size: 2rem;
-            }}
-            .login-subtitle {{
+            }
+            .login-subtitle {
                 color: #888888;
                 text-align: center;
                 margin-bottom: 2rem;
                 font-size: 0.95rem;
-            }}
-            /* Estilo difuminado elegante para el botón de ingresar */
-            .stButton>button {{
+            }
+            .stButton>button {
                 width: 100%;
                 height: 3.2rem;
                 font-size: 1.1rem;
@@ -456,12 +450,12 @@ if not st.session_state["autenticado"]:
                 border: none;
                 box-shadow: 0 4px 15px rgba(255, 122, 0, 0.3);
                 transition: all 0.3s ease;
-            }}
-            .stButton>button:hover {{
+            }
+            .stButton>button:hover {
                 background: linear-gradient(135deg, #ff9124 0%, #FF7A00 100%);
                 box-shadow: 0 6px 20px rgba(255, 122, 0, 0.5);
                 transform: translateY(-1px);
-            }}
+            }
         </style>
     """, unsafe_allow_html=True)
 
@@ -470,7 +464,6 @@ if not st.session_state["autenticado"]:
     col_l1, col_l2, col_l3 = st.columns([1, 1.3, 1])
     with col_l2:
         with st.container():
-            # Logo más grande y centrado
             col_img1, col_img2, col_img3 = st.columns([0.5, 3, 0.5])
             with col_img2:
                 mostrar_logo(ancho=240)
@@ -502,7 +495,8 @@ if not st.session_state["autenticado"]:
                     except Exception as e:
                         st.error(f"⚠️ Error de conexión: {e}")
             
-            st.markdown(f"<p style='text-align: center; color: #666; font-size: 0.8rem; margin-top: 2rem;'>© {datetime.now().year} Industrias Metal&Co. Todos los derechos reservados.</p>", unsafe_allow_html=True)
+            current_yr = datetime.now().year
+            st.markdown(f"<p style='text-align: center; color: #666; font-size: 0.8rem; margin-top: 2rem;'>© {current_yr} Industrias Metal&Co. Todos los derechos reservados.</p>", unsafe_allow_html=True)
     st.stop()
 
 # ENCABEZADO Y BARRA LATERAL (UNA VEZ AUTENTICADO)
@@ -1543,10 +1537,6 @@ elif rol in ["admin", "produccion"]:
                         with st.form("form_editar_usuario"):
                             edit_user_sel = st.selectbox("Selecciona el Usuario a Editar", users_df["username"].tolist())
                             user_actual = ejecutar_consulta("SELECT nombre, rol FROM usuarios WHERE username = %s", (edit_user_sel,))
-                            nombre_actual = user_actual.iloc[0]['nombre'] if not user_actual.empty else ""
-                            rol_actual = user_actual.iloc[0]['rol'] if not user_actual.empty else "operario"
-                            idx_rol = ["operario", "produccion", "admin"].index(rol_actual) if rol_actual in ["operario", "produccion", "admin"] else 0
-                            
                             nombre_actual = user_actual.iloc[0]['nombre'] if not user_actual.empty else ""
                             rol_actual = user_actual.iloc[0]['rol'] if not user_actual.empty else "operario"
                             idx_rol = ["operario", "produccion", "admin"].index(rol_actual) if rol_actual in ["operario", "produccion", "admin"] else 0
