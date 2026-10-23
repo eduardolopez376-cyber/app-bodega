@@ -24,7 +24,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Estilos CSS generales para toda la app y la tarjeta de login exótica
+# Estilos CSS generales para toda la app
 st.markdown(f"""
     <style>
         .stApp {{
@@ -32,7 +32,6 @@ st.markdown(f"""
             color: {COLOR_TEXTO_CLARO};
         }}
         
-        /* Contenedor principal de la app */
         .block-container {{
             padding-top: 1rem;
             padding-bottom: 2rem;
@@ -40,7 +39,6 @@ st.markdown(f"""
             padding-right: 1rem;
         }}
         
-        /* Estilos generales de inputs y botones */
         .stButton>button {{
             width: 100%;
             height: 3.2rem;
@@ -57,7 +55,6 @@ st.markdown(f"""
             box-shadow: 0 0 15px rgba(255,122,0,0.4);
         }}
         
-        /* Sidebar personalizado */
         [data-testid="stSidebar"] {{
             background-color: {COLOR_TARJETA_OSCURA};
             border-right: 1px solid {COLOR_ACENTO_NARANJA};
@@ -65,7 +62,7 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# Buscar imagen del logo con el nuevo nombre
+# Buscar imagen del logo con el nombre logometalyco.jpg
 NOMBRES_LOGO = ["logometalyco.jpg", "logo.jpeg", "logo.png", "logo.jpg"]
 LOGO_PATH = None
 for nombre in NOMBRES_LOGO:
@@ -422,32 +419,33 @@ if "form_key_counter" not in st.session_state:
     st.session_state["form_key_counter"] = 0
 
 # ====================================================
-# PANTALLA DE LOGIN EXÓTICA Y LLAMATIVA
+# PANTALLA DE LOGIN EXÓTICA Y LLAMATIVA (CORREGIDA)
 # ====================================================
 if not st.session_state["autenticado"]:
-    st.markdown(f"""
+    st.markdown("""
         <style>
-            .login-card {{
-                background-color: {COLOR_TARJETA_OSCURA};
-                border: 1px solid {COLOR_GRIS_BORDE};
+            .login-card {
+                background-color: #1a1a1a;
+                border: 1px solid #2a2a2a;
                 border-radius: 20px;
                 padding: 3rem 2.5rem;
                 box-shadow: 0 10px 30px rgba(0,0,0,0.8);
                 max-width: 480px;
-                margin: 0 auto; }
-            .login-title {{
-                color: {COLOR_TEXTO_CLARO};
+                margin: 0 auto;
+            }
+            .login-title {
+                color: #E0E0E0;
                 font-weight: 700;
                 text-align: center;
                 margin-bottom: 0.3rem;
                 font-size: 2rem;
-            }}
-            .login-subtitle {{
+            }
+            .login-subtitle {
                 color: #888888;
                 text-align: center;
                 margin-bottom: 2rem;
                 font-size: 0.95rem;
-            }}
+            }
         </style>
     """, unsafe_allow_html=True)
 
