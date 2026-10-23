@@ -12,10 +12,8 @@ from reportlab.pdfgen import canvas
 # PALETA DE COLORES Y ESTILOS (INDUSTRIAL EXÓTICO)
 # =====================================================
 COLOR_FONDO_OSCURO = "#121212"  # Negro profundo
-COLOR_TARJETA_OSCURA = "#1a1a1a" # Gris ultra oscuro para tarjetas/login
 COLOR_TEXTO_CLARO = "#E0E0E0"    # Blanco suave
 COLOR_ACENTO_NARANJA = "#FF7A00" # Naranja vibrante
-COLOR_GRIS_BORDE = "#2a2a2a"     # Gris para sutiles bordes
 
 st.set_page_config(
     page_title="Control de Producción - Industrias Metal&Co",
@@ -39,30 +37,14 @@ st.markdown(f"""
             padding-right: 1rem;
         }}
         
-        .stButton>button {{
-            width: 100%;
-            height: 3.2rem;
-            font-size: 1.1rem;
-            font-weight: bold;
-            border-radius: 10px;
-            background-color: {COLOR_ACENTO_NARANJA};
-            color: #000000;
-            border: none;
-            transition: all 0.3s ease;
-        }}
-        .stButton>button:hover {{
-            background-color: #ff9124;
-            box-shadow: 0 0 15px rgba(255,122,0,0.4);
-        }}
-        
         [data-testid="stSidebar"] {{
-            background-color: {COLOR_TARJETA_OSCURA};
+            background-color: #1a1a1a;
             border-right: 1px solid {COLOR_ACENTO_NARANJA};
         }}
     </style>
 """, unsafe_allow_html=True)
 
-# Buscar imagen del logo con el nombre logometalyco.png
+# Buscar imagen del logo
 NOMBRES_LOGO = ["logometalyco.png", "logometalyco.jpg", "logo.jpeg", "logo.png"]
 LOGO_PATH = None
 for nombre in NOMBRES_LOGO:
@@ -70,11 +52,11 @@ for nombre in NOMBRES_LOGO:
         LOGO_PATH = nombre
         break
 
-def mostrar_logo(ancho=160):
+def mostrar_logo(ancho=260):  # Aumentado de tamaño para que luzca bien
     if LOGO_PATH:
         st.image(LOGO_PATH, width=ancho)
     else:
-        st.markdown(f"<h3 style='color: {COLOR_ACENTO_NARANJA};'>METAL&CO</h3>", unsafe_allow_html=True)
+        st.markdown(f"<h2 style='color: {COLOR_ACENTO_NARANJA}; text-align:center;'>METAL&CO</h2>", unsafe_allow_html=True)
 
 # Parámetros de Conexión a Supabase
 DB_PARAMS = {
@@ -419,54 +401,89 @@ if "form_key_counter" not in st.session_state:
     st.session_state["form_key_counter"] = 0
 
 # ====================================================
-# PANTALLA DE LOGIN EXÓTICA Y LLAMATIVA (CORREGIDA)
+# PANTALLA DE LOGIN EXÓTICA Y LLAMATIVA (ESTILO REFERENCIA)
 # ====================================================
 if not st.session_state["autenticado"]:
-    st.markdown("""
+    # Estilo CSS de la tarjeta flotante, botón difuminado y fondo industrial
+    fondo_css = ""
+    if os.path.exists("fondo_login.jpg"):
+        # Si pones una imagen llamada 'fondo_login.jpg' en tu carpeta, la usará de fondo con oscurecimiento
+        fondo_css = """
+            background: linear-gradient(rgba(0,0,0,0.75), rgba(0,0,0,0.85)), url('fondo_login.jpg');
+            background-size: cover;
+            background-position: center;
+        """
+    else:
+        fondo_css = "background-color: #121212;"
+
+    st.markdown(f"""
         <style>
-            .login-card {
-                background-color: #1a1a1a;
-                border: 1px solid #2a2a2a;
+            .stApp {{
+                {fondo_css}
+            }}
+            .login-card {{
+                background-color: rgba(26, 26, 26, 0.90);
+                backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 122, 0, 0.2);
                 border-radius: 20px;
                 padding: 3rem 2.5rem;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+                box-shadow: 0 15px 35px rgba(0,0,0,0.9);
                 max-width: 480px;
                 margin: 0 auto;
             }
-            .login-title {
+            .login-title {{
                 color: #E0E0E0;
                 font-weight: 700;
                 text-align: center;
                 margin-bottom: 0.3rem;
                 font-size: 2rem;
-            }
-            .login-subtitle {
+            }}
+            .login-subtitle {{
                 color: #888888;
                 text-align: center;
                 margin-bottom: 2rem;
                 font-size: 0.95rem;
-            }
+            }}
+            /* Estilo difuminado elegante para el botón de ingresar */
+            .stButton>button {{
+                width: 100%;
+                height: 3.2rem;
+                font-size: 1.1rem;
+                font-weight: bold;
+                border-radius: 12px;
+                background: linear-gradient(135deg, #FF7A00 0%, #d96800 100%);
+                color: #ffffff;
+                border: none;
+                box-shadow: 0 4px 15px rgba(255, 122, 0, 0.3);
+                transition: all 0.3s ease;
+            }}
+            .stButton>button:hover {{
+                background: linear-gradient(135deg, #ff9124 0%, #FF7A00 100%);
+                box-shadow: 0 6px 20px rgba(255, 122, 0, 0.5);
+                transform: translateY(-1px);
+            }}
         </style>
     """, unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     
-    col_l1, col_l2, col_l3 = st.columns([1, 1.2, 1])
+    col_l1, col_l2, col_l3 = st.columns([1, 1.3, 1])
     with col_l2:
         with st.container():
-            col_img1, col_img2, col_img3 = st.columns([1, 2, 1])
+            # Logo más grande y centrado
+            col_img1, col_img2, col_img3 = st.columns([0.5, 3, 0.5])
             with col_img2:
-                mostrar_logo(ancho=180)
+                mostrar_logo(ancho=240)
             
-            st.markdown("<h1 class='login-title'>Iniciar Sesión</h1>", unsafe_allow_html=True)
-            st.markdown("<p class='login-subtitle'>Accede a tu cuenta de control de producción</p>", unsafe_allow_html=True)
+            st.markdown("<h1 class='login-title'>Welcome Back</h1>", unsafe_allow_html=True)
+            st.markdown("<p class='login-subtitle'>Sign in to continue your production journey</p>", unsafe_allow_html=True)
             
             with st.form("form_login"):
                 user_input = st.text_input("Correo o Usuario", placeholder="Ingresa tu usuario")
                 pass_input = st.text_input("Contraseña", type="password", placeholder="••••••••")
                 
                 st.markdown("<br>", unsafe_allow_html=True)
-                submit_login = st.form_submit_button("Ingresar", type="primary", use_container_width=True)
+                submit_login = st.form_submit_button("Sign In →", type="primary", use_container_width=True)
                 
                 if submit_login:
                     try:
@@ -1526,6 +1543,10 @@ elif rol in ["admin", "produccion"]:
                         with st.form("form_editar_usuario"):
                             edit_user_sel = st.selectbox("Selecciona el Usuario a Editar", users_df["username"].tolist())
                             user_actual = ejecutar_consulta("SELECT nombre, rol FROM usuarios WHERE username = %s", (edit_user_sel,))
+                            nombre_actual = user_actual.iloc[0]['nombre'] if not user_actual.empty else ""
+                            rol_actual = user_actual.iloc[0]['rol'] if not user_actual.empty else "operario"
+                            idx_rol = ["operario", "produccion", "admin"].index(rol_actual) if rol_actual in ["operario", "produccion", "admin"] else 0
+                            
                             nombre_actual = user_actual.iloc[0]['nombre'] if not user_actual.empty else ""
                             rol_actual = user_actual.iloc[0]['rol'] if not user_actual.empty else "operario"
                             idx_rol = ["operario", "produccion", "admin"].index(rol_actual) if rol_actual in ["operario", "produccion", "admin"] else 0
