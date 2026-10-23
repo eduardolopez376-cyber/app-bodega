@@ -105,7 +105,7 @@ def inicializar_tablas_sistema():
         ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS es_maquina_alquilada BOOLEAN DEFAULT FALSE;")
         ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS horas_trabajadas NUMERIC(5,2) DEFAULT 0;")
         ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS presion_trabajo VARCHAR(50) DEFAULT '';")
-        ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP;")
+        ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS fecha_registro TIMESTAMP;")
         ejecutar_comando("ALTER TABLE programacion_diaria ADD COLUMN IF NOT EXISTS numero_oc VARCHAR(100);")
         ejecutar_comando("ALTER TABLE referencias ADD COLUMN IF NOT EXISTS cliente VARCHAR(150);")
         ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS nit VARCHAR(50);")
@@ -530,34 +530,40 @@ if rol == "operario":
                         actividad_tarea = row_t['actividad']
                         meta_asignada_tarea = int(row_t['meta_unidades'])
                         
-                        cli_db = ejecutar_consulta("SELECT cliente FROM ordenes_compra WHERE id = %s", (id_tarea,)) # o buscar por numero_oc
-                        # Buscamos de forma segura por numero_oc y referencia para atinarle a la línea exacta
                         cli_db = ejecutar_consulta("SELECT cliente FROM ordenes_compra WHERE numero_oc = %s AND referencia = %s", (num_oc_asociada, referencia_pieza))
                         if cli_db.empty:
                             cli_db = ejecutar_consulta("SELECT cliente FROM ordenes_compra WHERE numero_oc = %s", (num_oc_asociada,))
                         cliente_nombre = cli_db.iloc[0]['cliente'] if not cli_db.empty else "N/A"
                         
+                        # CORRECCIÓN DE CÁLCULO DE HORAS TRABAJADAS (Basado estrictamente en hora de inicio y fin)
                         maq_db = ejecutar_consulta("SELECT tipo_propiedad FROM maquinas WHERE nombre = %s", (maquina_elegida,))
                         es_alq = False
                         horas_calc = 0.0
                         if not maq_db.empty:
                             if str(maq_db.iloc[0]['tipo_propiedad']).upper() == 'ALQUILADA':
                                 es_alq = True
-                                dt_inicio = datetime.combine(datetime.today(), h_inicio)
-                                dt_fin = datetime.combine(datetime.today(), h_fin)
-                                diff = (dt_fin - dt_inicio).total_seconds() / 3600.0
-                                horas_calc = round(max(0.0, diff), 2)
+                        
+                        # Cálculo exacto de horas entre h_inicio y h_fin
+                        dt_inicio = datetime.combine(date.today(), h_inicio)
+                        dt_fin = datetime.combine(date.today(), h_fin)
+                        if dt_fin < dt_inicio: # Si pasa la medianoche
+                            dt_fin += timedelta(days=1)
+                        diff_seg = (dt_fin - dt_inicio).total_seconds()
+                        horas_calc = round(max(0.0, diff_seg / 3600.0), 2)
                         
                         alerta_pendiente_txt = ""
                         if unidades < meta_asignada_tarea:
                             faltantes = meta_asignada_tarea - unidades
                             alerta_pendiente_txt = f" ⚠️ ALARMA: Faltaron {faltantes} unidades para cumplir la meta de {meta_asignada_tarea} u."
                         
+                        # CORRECCIÓN DE FECHA Y HORA DEL MOMENTO (Usando la hora exacta local del sistema en lugar de NOW de servidor UTC)
+                        tiempo_exacto_actual = datetime.now()
+
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
                             (operario_nombre, maquina, referencia, numero_oc, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones, es_maquina_alquilada, horas_trabajadas, presion_trabajo, fecha_registro) 
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())""",
-                            (st.session_state['nombre_usuario'], maquina_elegida, referencia_pieza, num_oc_asociada, h_inicio, h_fin, unidades, f"Buenas: {unidades}, Defectuosas: {defectuosas}.{alerta_pendiente_txt} {obs_usuario}", es_alq, horas_calc, presion_input)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                            (st.session_state['nombre_usuario'], maquina_elegida, referencia_pieza, num_oc_asociada, h_inicio, h_fin, unidades, f"Buenas: {unidades}, Defectuosas: {defectuosas}.{alerta_pendiente_txt} {obs_usuario}", es_alq, horas_calc, presion_input, tiempo_exacto_actual)
                         )
                         
                         if num_oc_asociada and num_oc_asociada != "SIN OC":
@@ -674,16 +680,21 @@ if rol == "operario":
                         if not maq_db.empty:
                             if str(maq_db.iloc[0]['tipo_propiedad']).upper() == 'ALQUILADA':
                                 es_alq = True
-                                dt_inicio = datetime.combine(datetime.today(), h_ini_imp)
-                                dt_fin = datetime.combine(datetime.today(), h_fin_imp)
-                                diff = (dt_fin - dt_inicio).total_seconds() / 3600.0
-                                horas_calc = round(max(0.0, diff), 2)
+                        
+                        dt_inicio_imp = datetime.combine(date.today(), h_ini_imp)
+                        dt_fin_imp = datetime.combine(date.today(), h_fin_imp)
+                        if dt_fin_imp < dt_inicio_imp:
+                            dt_fin_imp += timedelta(days=1)
+                        diff_seg_imp = (dt_fin_imp - dt_inicio_imp).total_seconds()
+                        horas_calc = round(max(0.0, diff_seg_imp / 3600.0), 2)
+
+                        tiempo_exacto_actual_imp = datetime.now()
 
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
                             (operario_nombre, maquina, referencia, numero_oc, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones, es_maquina_alquilada, horas_trabajadas, presion_trabajo, fecha_registro) 
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())""",
-                            (st.session_state['nombre_usuario'], maq_imp, ref_imp, oc_imp, h_ini_imp, h_fin_imp, uni_imp, obs_final_imp, es_alq, horas_calc, presion_imp)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                            (st.session_state['nombre_usuario'], maq_imp, ref_imp, oc_imp, h_ini_imp, h_fin_imp, uni_imp, obs_final_imp, es_alq, horas_calc, presion_imp, tiempo_exacto_actual_imp)
                         )
                         st.success("¡Tarea imprevista registrada!")
                         st.rerun()
@@ -712,8 +723,6 @@ elif rol in ["admin", "produccion"]:
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
             maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
             
-            # FILTRO CORREGIDO: Verificamos línea por línea (OC + Referencia) en la tabla ordenes_compra 
-            # para permitir programar varias referencias de la misma OC sin bloquearse entre ellas.
             ocs_db = ejecutar_consulta("""
                 SELECT id, numero_oc, referencia, servicio, meta_unidades FROM ordenes_compra 
                 WHERE estado != 'COMPLETADO'
@@ -728,7 +737,6 @@ elif rol in ["admin", "produccion"]:
                     ref_val = str(r['referencia']).strip()
                     clave_combinada = f"ID OC #{oc_id} | OC: {oc_num} - Ref: {ref_val}"
                     
-                    # Verificamos si esta línea exacta ya tiene una programación activa o pendiente
                     ya_prog = ejecutar_consulta(
                         "SELECT id FROM programacion_diaria WHERE numero_oc = %s AND referencia = %s AND estado NOT IN ('FINALIZADO', 'CANCELADO')",
                         (oc_num, ref_val)
@@ -854,7 +862,6 @@ elif rol in ["admin", "produccion"]:
                 df_oc['estado_alarma'] = df_oc.apply(alerta_estado, axis=1)
                 st.dataframe(df_oc[['id', 'numero_oc', 'cliente', 'referencia', 'meta_unidades', 'unidades_entregadas', 'saldo_pendiente', 'estado_alarma']], use_container_width=True)
                 
-                # CORRECCIÓN: Ahora puedes eliminar por ID específico de línea de OC (sin tumbar toda la orden si tiene varias referencias)
                 with st.expander("Eliminar una Referencia Específica de la OC (Por ID de Línea)"):
                     with st.form("form_del_oc_fila", clear_on_submit=True):
                         id_oc_del = st.selectbox("Selecciona el ID de la línea de OC a borrar", df_oc["id"].tolist())
@@ -1396,7 +1403,7 @@ elif rol in ["admin", "produccion"]:
                                     ejecutar_comando("UPDATE usuarios SET nombre = %s, password = %s, rol = %s WHERE username = %s", (nuevo_nombre.strip(), nueva_pass, nuevo_rol, edit_user_sel))
                                 else:
                                     ejecutar_comando("UPDATE usuarios SET nombre = %s, rol = %s WHERE username = %s", (nuevo_nombre.strip(), nuevo_rol, edit_user_sel))
-                                st.success("¡Usuario actualizado!")
+                                st.success("¡Usuario actualizada!")
                                 st.rerun()
 
                     with st.expander("Eliminar"):
