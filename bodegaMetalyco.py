@@ -105,7 +105,7 @@ def inicializar_tablas_sistema():
         ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS es_maquina_alquilada BOOLEAN DEFAULT FALSE;")
         ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS horas_trabajadas NUMERIC(5,2) DEFAULT 0;")
         ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS presion_trabajo VARCHAR(50) DEFAULT '';")
-        ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS fecha_registro TIMESTAMP;")
+        ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS fecha_registro DATE;")
         ejecutar_comando("ALTER TABLE programacion_diaria ADD COLUMN IF NOT EXISTS numero_oc VARCHAR(100);")
         ejecutar_comando("ALTER TABLE referencias ADD COLUMN IF NOT EXISTS cliente VARCHAR(150);")
         ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS nit VARCHAR(50);")
@@ -142,10 +142,9 @@ def calcular_tipo_hora(inicio_str, fin_str):
 def generar_reporte_produccion_excel(df_original):
     df = df_original.copy()
     if 'fecha_registro' in df.columns:
-        df['dt_local'] = pd.to_datetime(df['fecha_registro']) - pd.Timedelta(hours=5)
-        df['Fecha'] = df['dt_local'].dt.strftime('%Y-%m-%d')
+        df['Fecha'] = pd.to_datetime(df['fecha_registro']).dt.strftime('%Y-%m-%d')
     else:
-        df['Fecha'] = date.today().strftime('%Y-%m-%d')
+        df['Fecha'] = (datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d')
         
     df['Orden'] = df['numero_oc'] if 'numero_oc' in df.columns else 'SIN OC'
     df['Area'] = 'Producción'
@@ -226,7 +225,7 @@ def generar_pdf_f01_01(datos):
     p.setFont("Helvetica-Bold", 8)
     p.drawString(x_margen + 8, y_actual - 12, "FECHA:")
     p.setFont("Helvetica", 8)
-    p.drawString(x_margen + 50, y_actual - 12, f"{datos.get('fecha', date.today())}")
+    p.drawString(x_margen + 50, y_actual - 12, f"{datos.get('fecha', (datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d'))}")
     
     p.setFont("Helvetica-Bold", 8)
     p.drawString(x_margen + 260, y_actual - 12, "OP (ORDEN DE PRODUCCIÓN):")
@@ -461,7 +460,7 @@ if rol == "operario":
         filtro_fecha = st.radio("Ver tareas de:", ["Todas mis tareas pendientes", "Filtrar por fecha específica"], horizontal=True)
         try:
             if filtro_fecha == "Filtrar por fecha específica":
-                fecha_operario = st.date_input("Selecciona el día a consultar", value=datetime.now().date(), key="cal_op_dia")
+                fecha_operario = st.date_input("Selecciona el día a consultar", value=(datetime.now() - timedelta(hours=5)).date(), key="cal_op_dia")
                 tareas = ejecutar_consulta(
                     """SELECT id, fecha, numero_oc, hora_inicio, hora_fin, maquina, referencia, actividad, meta_unidades, estado 
                        FROM programacion_diaria 
@@ -543,8 +542,8 @@ if rol == "operario":
                             if str(maq_db.iloc[0]['tipo_propiedad']).upper() == 'ALQUILADA':
                                 es_alq = True
                         
-                        dt_inicio = datetime.combine(date.today(), h_inicio)
-                        dt_fin = datetime.combine(date.today(), h_fin)
+                        dt_inicio = datetime.combine((datetime.now() - timedelta(hours=5)).date(), h_inicio)
+                        dt_fin = datetime.combine((datetime.now() - timedelta(hours=5)).date(), h_fin)
                         if dt_fin < dt_inicio: 
                             dt_fin += timedelta(days=1)
                         diff_seg = (dt_fin - dt_inicio).total_seconds()
@@ -555,7 +554,7 @@ if rol == "operario":
                             faltantes = meta_asignada_tarea - unidades
                             alerta_pendiente_txt = f" ⚠️ ALARMA: Faltaron {faltantes} unidades para cumplir la meta de {meta_asignada_tarea} u."
                         
-                        # 💡 GUARDAR FECHA LIMPIA (SOLO FECHA YYYY-MM-DD) DE COLOMBIA
+                        # 💡 FECHA PURA LOCAL DE COLOMBIA (YYYY-MM-DD)
                         fecha_exacta_actual = (datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d')
 
                         ejecutar_comando(
@@ -584,7 +583,7 @@ if rol == "operario":
                         ejecutar_comando("UPDATE programacion_diaria SET estado = 'FINALIZADO' WHERE id = %s", (id_tarea,))
                         
                         datos_pdf = {
-                            "fecha": date.today().strftime('%Y-%m-%d'),
+                            "fecha": fecha_exacta_actual,
                             "numero_oc": num_oc_asociada,
                             "cliente": cliente_nombre,
                             "referencia": referencia_pieza,
@@ -679,8 +678,8 @@ if rol == "operario":
                             if str(maq_db.iloc[0]['tipo_propiedad']).upper() == 'ALQUILADA':
                                 es_alq = True
                         
-                        dt_inicio_imp = datetime.combine(date.today(), h_ini_imp)
-                        dt_fin_imp = datetime.combine(date.today(), h_fin_imp)
+                        dt_inicio_imp = datetime.combine((datetime.now() - timedelta(hours=5)).date(), h_ini_imp)
+                        dt_fin_imp = datetime.combine((datetime.now() - timedelta(hours=5)).date(), h_fin_imp)
                         if dt_fin_imp < dt_inicio_imp:
                             dt_fin_imp += timedelta(days=1)
                         diff_seg_imp = (dt_fin_imp - dt_inicio_imp).total_seconds()
@@ -715,7 +714,7 @@ elif rol in ["admin", "produccion"]:
     
     with tab_prog:
         st.subheader("📅 Programación Directa por Orden de Compra y Referencia")
-        fecha_seleccionada = st.date_input("Selecciona el día a consultar/programar", value=datetime.now().date(), key="cal_admin_dia")
+        fecha_seleccionada = st.date_input("Selecciona el día a consultar/programar", value=(datetime.now() - timedelta(hours=5)).date(), key="cal_admin_dia")
         try:
             ops_df = ejecutar_consulta("SELECT nombre FROM usuarios WHERE rol = 'operario'")
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
@@ -828,11 +827,12 @@ elif rol in ["admin", "produccion"]:
                         
                         if st.form_submit_button("Guardar Orden de Compra", type="primary", use_container_width=True):
                             if num_oc.strip() and cliente_oc != "SIN CLIENTE REGISTRADO":
+                                ej_fecha = (datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d')
                                 ejecutar_comando(
                                     """INSERT INTO ordenes_compra 
-                                    (numero_oc, cliente, referencia, servicio, requiere_unidades, meta_unidades, unidades_entregadas, estado) 
-                                    VALUES (%s, %s, %s, %s, TRUE, %s, 0, 'PENDIENTE')""",
-                                    (num_oc.upper().strip(), cliente_oc, ref_oc, servicio_oc, meta_oc)
+                                    (numero_oc, cliente, referencia, servicio, requiere_unidades, meta_unidades, unidades_entregadas, estado, fecha_registro) 
+                                    VALUES (%s, %s, %s, %s, TRUE, %s, 0, 'PENDIENTE', %s::date)""",
+                                    (num_oc.upper().strip(), cliente_oc, ref_oc, servicio_oc, meta_oc, ej_fecha)
                                 )
                                 st.success(f"Orden de Compra #{num_oc} (Ref: {ref_oc}) registrada con éxito.")
                                 st.rerun()
@@ -843,6 +843,10 @@ elif rol in ["admin", "produccion"]:
             st.write("### 📊 Estado y Reporte de Alarma de Piezas Pendientes por OC")
             df_oc = ejecutar_consulta("SELECT * FROM ordenes_compra ORDER BY id DESC")
             if not df_oc.empty:
+                # Normalizar fechas para evitar desfases visuales en saldos
+                if 'fecha_registro' in df_oc.columns:
+                    df_oc['fecha_registro'] = pd.to_datetime(df_oc['fecha_registro']).dt.strftime('%Y-%m-%d')
+                
                 df_oc['saldo_pendiente'] = df_oc.apply(
                     lambda row: row['meta_unidades'] - (row['unidades_entregadas'] if pd.notna(row['unidades_entregadas']) else 0), axis=1
                 )
@@ -858,7 +862,7 @@ elif rol in ["admin", "produccion"]:
                         return "⏳ SIN INICIAR"
                 
                 df_oc['estado_alarma'] = df_oc.apply(alerta_estado, axis=1)
-                st.dataframe(df_oc[['id', 'numero_oc', 'cliente', 'referencia', 'meta_unidades', 'unidades_entregadas', 'saldo_pendiente', 'estado_alarma']], use_container_width=True)
+                st.dataframe(df_oc, use_container_width=True)
                 
                 with st.expander("Eliminar una Referencia Específica de la OC (Por ID de Línea)"):
                     with st.form("form_del_oc_fila", clear_on_submit=True):
@@ -1028,12 +1032,12 @@ elif rol in ["admin", "produccion"]:
             filtro_periodo = st.selectbox("Filtrar Período:", ["Histórico (Todo)", "Diario", "Semanal", "Mensual"])
         with c_p2:
             if filtro_periodo == "Diario":
-                fecha_filtro = st.date_input("Selecciona el Día", value=date.today())
+                fecha_filtro = st.date_input("Selecciona el Día", value=(datetime.now() - timedelta(hours=5)).date())
             elif filtro_periodo == "Semanal":
-                fecha_filtro = st.date_input("Selecciona una fecha de la Semana", value=date.today())
+                fecha_filtro = st.date_input("Selecciona una fecha de la Semana", value=(datetime.now() - timedelta(hours=5)).date())
             elif filtro_periodo == "Mensual":
-                mes_opcion = st.selectbox("Selecciona el Mes", ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"], index=datetime.now().month - 1)
-                anio_opcion = st.number_input("Año", min_value=2024, max_value=2030, value=datetime.now().year)
+                mes_opcion = st.selectbox("Selecciona el Mes", ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"], index=(datetime.now() - timedelta(hours=5)).month - 1)
+                anio_opcion = st.number_input("Año", min_value=2024, max_value=2030, value=(datetime.now() - timedelta(hours=5)).year)
 
         if tipo_reporte_gerencial == "Reporte de Producción":
             st.markdown("### 📥 Reporte de Producción en Columnas Separadas para Excel")
@@ -1041,20 +1045,21 @@ elif rol in ["admin", "produccion"]:
                 df_produccion_raw = ejecutar_consulta("SELECT * FROM registro_produccion ORDER BY id DESC")
                 if not df_produccion_raw.empty:
                     if 'fecha_registro' in df_produccion_raw.columns:
-                        df_produccion_raw['dt'] = pd.to_datetime(df_produccion_raw['fecha_registro'])
+                        # Convertir limpio a fecha sin desfases
+                        df_produccion_raw['dt'] = pd.to_datetime(df_produccion_raw['fecha_registro']).dt.date
                     else:
-                        df_produccion_raw['dt'] = pd.Timestamp.now()
+                        df_produccion_raw['dt'] = (datetime.now() - timedelta(hours=5)).date()
 
                     if filtro_periodo == "Diario":
-                        df_produccion_raw = df_produccion_raw[df_produccion_raw['dt'].dt.date == fecha_filtro]
+                        df_produccion_raw = df_produccion_raw[df_produccion_raw['dt'] == fecha_filtro]
                     elif filtro_periodo == "Semanal":
                         inicio_sem = pd.to_datetime(fecha_filtro) - timedelta(days=pd.to_datetime(fecha_filtro).weekday())
                         fin_sem = inicio_sem + timedelta(days=6)
-                        df_produccion_raw = df_produccion_raw[(df_produccion_raw['dt'].dt.date >= inicio_sem.date()) & (df_produccion_raw['dt'].dt.date <= fin_sem.date())]
+                        df_produccion_raw = df_produccion_raw[(df_produccion_raw['dt'] >= inicio_sem.date()) & (df_produccion_raw['dt'] <= fin_sem.date())]
                     elif filtro_periodo == "Mensual":
                         meses_dict = {"Enero": 1, "Febrero": 2, "Marzo": 3, "Abril": 4, "Mayo": 5, "Junio": 6, "Julio": 7, "Agosto": 8, "Septiembre": 9, "Octubre": 10, "Noviembre": 11, "Diciembre": 12}
                         m_num = meses_dict[mes_opcion]
-                        df_produccion_raw = df_produccion_raw[(df_produccion_raw['dt'].dt.month == m_num) & (df_produccion_raw['dt'].dt.year == anio_opcion)]
+                        df_produccion_raw = df_produccion_raw[(pd.to_datetime(df_produccion_raw['dt']).dt.month == m_num) & (pd.to_datetime(df_produccion_raw['dt']).dt.year == anio_opcion)]
 
                     if not df_produccion_raw.empty:
                         df_final = generar_reporte_produccion_excel(df_produccion_raw)
@@ -1065,7 +1070,7 @@ elif rol in ["admin", "produccion"]:
                         st.download_button(
                             label="📥 Descargar Reporte de Producción Filtrado (Excel)",
                             data=buffer_prod.getvalue(),
-                            file_name=f"reporte_produccion_{filtro_periodo.lower()}_{date.today()}.xlsx",
+                            file_name=f"reporte_produccion_{filtro_periodo.lower()}_{(datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d')}.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             use_container_width=True
                         )
@@ -1098,19 +1103,19 @@ elif rol in ["admin", "produccion"]:
                 """
                 df_alq = ejecutar_consulta(query_alq)
                 if not df_alq.empty:
-                    df_alq['dt'] = pd.to_datetime(df_alq['fecha_registro'])
-                    df_alq['fecha_registro'] = df_alq['dt'].dt.strftime('%Y-%m-%d') # Limpiar hora y dejar solo fecha YYYY-MM-DD
+                    df_alq['dt'] = pd.to_datetime(df_alq['fecha_registro']).dt.date
+                    df_alq['fecha_registro'] = df_alq['dt'].astype(str)
                     
                     if filtro_periodo == "Diario":
-                        df_alq = df_alq[df_alq['dt'].dt.date == fecha_filtro]
+                        df_alq = df_alq[df_alq['dt'] == fecha_filtro]
                     elif filtro_periodo == "Semanal":
                         inicio_sem = pd.to_datetime(fecha_filtro) - timedelta(days=pd.to_datetime(fecha_filtro).weekday())
                         fin_sem = inicio_sem + timedelta(days=6)
-                        df_alq = df_alq[(df_alq['dt'].dt.date >= inicio_sem.date()) & (df_alq['dt'].dt.date <= fin_sem.date())]
+                        df_alq = df_alq[(df_alq['dt'] >= inicio_sem.date()) & (df_alq['dt'] <= fin_sem.date())]
                     elif filtro_periodo == "Mensual":
                         meses_dict = {"Enero": 1, "Febrero": 2, "Marzo": 3, "Abril": 4, "Mayo": 5, "Junio": 6, "Julio": 7, "Agosto": 8, "Septiembre": 9, "Octubre": 10, "Noviembre": 11, "Diciembre": 12}
                         m_num = meses_dict[mes_opcion]
-                        df_alq = df_alq[(df_alq['dt'].dt.month == m_num) & (df_alq['dt'].dt.year == anio_opcion)]
+                        df_alq = df_alq[(pd.to_datetime(df_alq['dt']).dt.month == m_num) & (pd.to_datetime(df_alq['dt']).dt.year == anio_opcion)]
 
                     if not df_alq.empty:
                         tot_horas = df_alq['horas_trabajadas'].sum()
@@ -1126,7 +1131,7 @@ elif rol in ["admin", "produccion"]:
                         st.download_button(
                             label="📥 Descargar Costos de Máquinas Filtrado (Excel)",
                             data=buffer_alq.getvalue(),
-                            file_name=f"costos_maquinas_{filtro_periodo.lower()}_{date.today()}.xlsx",
+                            file_name=f"costos_maquinas_{filtro_periodo.lower()}_{(datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d')}.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             use_container_width=True
                         )
@@ -1142,6 +1147,8 @@ elif rol in ["admin", "produccion"]:
                 st.write("#### Saldos y Alarmas de Órdenes de Compra")
                 df_oc_rep = ejecutar_consulta("SELECT * FROM ordenes_compra ORDER BY id DESC")
                 if not df_oc_rep.empty:
+                    if 'fecha_registro' in df_oc_rep.columns:
+                        df_oc_rep['fecha_registro'] = pd.to_datetime(df_oc_rep['fecha_registro']).dt.strftime('%Y-%m-%d')
                     df_oc_rep['saldo_pendiente'] = df_oc_rep.apply(lambda r: r['meta_unidades'] - (r['unidades_entregadas'] if pd.notna(r['unidades_entregadas']) else 0), axis=1)
                     st.dataframe(df_oc_rep, use_container_width=True)
             except Exception as e:
