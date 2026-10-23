@@ -20,10 +20,10 @@ st.set_page_config(
     page_title="Control de Producción - Industrias Metal&Co",
     page_icon="⚙️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="auto"
 )
 
-# Estilos CSS avanzados para el menú lateral tipo píldora curva y diseño industrial
+# Estilos CSS avanzados para el menú lateral minimalista y píldoras curvas
 st.markdown("""
     <style>
         .stApp {
@@ -40,7 +40,7 @@ st.markdown("""
         
         [data-testid="stSidebar"] {
             background-color: #1a1a1a;
-            border-right: 2px solid rgba(255, 122, 0, 0.3);
+            border-right: 2px solid rgba(255, 122, 0, 0.2);
             padding-top: 1rem;
         }
 
@@ -63,16 +63,35 @@ st.markdown("""
             transform: translateY(-1px);
         }
 
-        /* Transformar el radio button de la barra lateral en un menú lateral flotante estilo píldora curva */
+        /* Contenedor central para la foto de perfil en la barra lateral */
+        .profile-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        .profile-img {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid #FF7A00;
+            box-shadow: 0 4px 15px rgba(255, 122, 0, 0.3);
+        }
+
+        /* Transformar el radio button en menú lateral flotante minimalista tipo píldora */
         [data-testid="stSidebar"] .stRadio > div {
-            gap: 6px;
+            gap: 5px;
         }
         [data-testid="stSidebar"] .stRadio label {
             background-color: transparent;
-            color: #A0A0A0;
-            padding: 10px 15px;
-            border-radius: 16px 0px 0px 16px;
+            color: #B0B0B0;
+            padding: 9px 14px;
+            border-radius: 14px 0px 0px 14px;
             font-weight: 500;
+            font-size: 0.95rem;
             width: 100%;
             transition: all 0.3s ease;
             cursor: pointer;
@@ -81,7 +100,6 @@ st.markdown("""
             color: #ffffff;
             background-color: rgba(255, 122, 0, 0.1);
         }
-        /* Opción seleccionada con el diseño curvo flotante exacto de la referencia */
         [data-testid="stSidebar"] .stRadio div[checked="true"] label,
         [data-testid="stSidebar"] .stRadio input:checked + div {
             background-color: #121212 !important;
@@ -89,9 +107,8 @@ st.markdown("""
             font-weight: bold !important;
             border-left: 4px solid #FF7A00;
             box-shadow: -5px 5px 15px rgba(0,0,0,0.5);
-            border-radius: 20px 0px 0px 20px;
+            border-radius: 16px 0px 0px 16px;
         }
-        /* Ocultar el círculo nativo del radio button */
         [data-testid="stSidebar"] .stRadio input[type="radio"] {
             display: none;
         }
@@ -106,7 +123,7 @@ for nombre in NOMBRES_LOGO:
         LOGO_PATH = nombre
         break
 
-def mostrar_logo(ancho=220):
+def mostrar_logo(ancho=200):
     if LOGO_PATH:
         st.image(LOGO_PATH, width=ancho)
     else:
@@ -557,29 +574,38 @@ if not st.session_state["autenticado"]:
     st.stop()
 
 # ====================================================
-# BARRA LATERAL ESTILO DASHBOARD (FOTO DE PERFIL + MENÚ CURVO)
+# BARRA LATERAL ESTILO DASHBOARD (MINIMALISTA + RETRAÍBLE)
 # ====================================================
 with st.sidebar:
-    mostrar_logo(ancho=180)
+    mostrar_logo(ancho=160)
     st.markdown("---")
     
     avatar_actual = st.session_state.get("avatar_path", None)
     
     if avatar_actual and os.path.exists(avatar_actual):
-        st.image(avatar_actual, width=90, caption="Foto de Perfil")
+        with open(avatar_actual, "rb") as image_file:
+            encoded_avatar = base64.b64encode(image_file.read()).decode()
+        st.markdown(
+            f"""<div class='profile-container'>
+                <img src='data:image/jpeg;base64,{encoded_avatar}' class='profile-img'>
+               </div>""",
+            unsafe_allow_html=True
+        )
     else:
         st.markdown(
-            f"""<div style='display: flex; align-items: center; justify-content: center; width: 80px; height: 80px; background-color: #2a2a2a; border: 2px solid #FF7A00; border-radius: 50%; margin: 0 auto 10px auto;'>
-                <span style='font-size: 2rem; color: #FF7A00; font-weight: bold;'>{st.session_state['nombre_usuario'][0].upper()}</span>
+            f"""<div class='profile-container'>
+                <div style='display: flex; align-items: center; justify-content: center; width: 75px; height: 75px; background-color: #2a2a2a; border: 2px solid #FF7A00; border-radius: 50%; box-shadow: 0 4px 15px rgba(255, 122, 0, 0.3);'>
+                    <span style='font-size: 2rem; color: #FF7A00; font-weight: bold;'>{st.session_state['nombre_usuario'][0].upper()}</span>
+                </div>
                </div>""", 
             unsafe_allow_html=True
         )
     
-    st.markdown(f"<h4 style='text-align: center; color: #fff; margin-bottom: 0;'>{st.session_state['nombre_usuario']}</h4>", unsafe_allow_html=True)
-    st.markdown(f"<p style='text-align: center; color: #FF7A00; font-size: 0.9rem; font-weight: bold;'>ROL: {str(st.session_state['rol']).upper()}</p>", unsafe_allow_html=True)
+    st.markdown(f"<h4 style='text-align: center; color: #fff; margin-bottom: 0; font-size: 1.1rem;'>{st.session_state['nombre_usuario']}</h4>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align: center; color: #FF7A00; font-size: 0.8rem; font-weight: bold; margin-top: 2px;'>🟢 ONLINE ({str(st.session_state['rol']).upper()})</p>", unsafe_allow_html=True)
     
-    with st.expander("🖼️ Cambiar / Subir Foto de Perfil"):
-        subir_foto = st.file_uploader("Sube una foto desde tu celular o PC", type=["jpg", "png", "jpeg"], key="uploader_avatar")
+    with st.expander("🖼️ Configurar Perfil"):
+        subir_foto = st.file_uploader("Subir nueva foto", type=["jpg", "png", "jpeg"], key="uploader_avatar")
         if subir_foto is not None:
             os.makedirs("avatars", exist_ok=True)
             ruta_avatar = f"avatars/{st.session_state['username']}_{subir_foto.name}"
@@ -588,26 +614,33 @@ with st.sidebar:
             
             ejecutar_comando("UPDATE usuarios SET avatar_path = %s WHERE username = %s", (ruta_avatar, st.session_state['username']))
             st.session_state["avatar_path"] = ruta_avatar
-            st.success("¡Foto actualizada con éxito!")
+            st.success("¡Foto actualizada!")
             st.rerun()
+            
+        if avatar_actual and os.path.exists(avatar_actual):
+            if st.button("🗑️ Eliminar Foto", use_container_width=True):
+                ejecutar_comando("UPDATE usuarios SET avatar_path = NULL WHERE username = %s", (st.session_state['username'],))
+                st.session_state["avatar_path"] = None
+                st.success("¡Foto eliminada!")
+                st.rerun()
 
     st.markdown("---")
-    st.write("### 🧭 Menú de Navegación")
+    st.write("### 🧭 Menú Principal")
     
     rol = st.session_state["rol"]
     
+    # Opciones con iconos minimalistas profesionales
     if rol == "operario":
-        opciones_menu = ["📋 Mi Programación", "⚙️ Registrar Producción", "➕ Tarea Imprevista"]
+        opciones_menu = ["📋  Mi Programación", "⚙️  Registrar Producción", "➕  Tarea Imprevista"]
     elif rol == "produccion":
-        opciones_menu = ["📅 Programar", "📋 Órdenes Compra", "📄 Referencias", "📊 Reportes", "🚀 Entregas", "🔨 Herramientas", "📥 Cargue Ítems", "📦 Inventario"]
+        opciones_menu = ["📅  Programar", "📋  Órdenes Compra", "📄  Referencias", "📊  Reportes", "🚀  Entregas", "🔨  Herramientas", "📥  Cargue Ítems", "📦  Inventario"]
     else:  # Admin
         opciones_menu = [
-            "📅 Programar", "📋 Órdenes Compra", "⚙️ Máquinas", "🛠️ Servicios", 
-            "📄 Referencias", "📊 Reportes", "🚀 Entregas", "🔨 Herramientas", 
-            "📥 Cargue Ítems", "📦 Inventario", "🏷️ Clases", "👥 Clientes", "⚙️ Usuarios"
+            "📅  Programar", "📋  Órdenes Compra", "⚙️  Máquinas", "🛠️  Servicios", 
+            "📄  Referencias", "📊  Reportes", "🚀  Entregas", "🔨  Herramientas", 
+            "📥  Cargue Ítems", "📦  Inventario", "🏷️  Clases", "👥  Clientes", "⚙️  Usuarios"
         ]
     
-    # Menú lateral con diseño estilo píldora curva incrustado
     menu_seleccionado = st.radio("Navegación", opciones_menu, label_visibility="collapsed")
     
     st.markdown("---")
@@ -620,6 +653,11 @@ with st.sidebar:
         st.session_state["username"] = None
         st.session_state["avatar_path"] = None
         st.rerun()
+
+# Limpiar texto del menú seleccionado para que coincida con la lógica interna
+menu_limpio = menu_seleccionado.replace("  ", "").strip() if menu_seleccionado else ""
+if " " in menu_limpio:
+    menu_limpio = menu_limpio.split(" ", 1)[1].strip()
 
 # ====================================================
 # ENCABEZADO PRINCIPAL DE LA PÁGINA
@@ -636,7 +674,7 @@ st.markdown("---")
 # VISTA EXCLUSIVA PARA OPERARIOS
 # ====================================================
 if rol == "operario":
-    if menu_seleccionado == "📋 Mi Programación":
+    if menu_limpio == "Mi Programación":
         st.subheader("📋 Consulta tus Tareas Asignadas")
         filtro_fecha = st.radio("Ver tareas de:", ["Todas mis tareas pendientes", "Filtrar por fecha específica"], horizontal=True)
         try:
@@ -664,7 +702,7 @@ if rol == "operario":
         except Exception as e:
             st.error(f"Error al cargar programación: {e}")
 
-    elif menu_seleccionado == "⚙️ Registrar Producción":
+    elif menu_limpio == "Registrar Producción":
         st.subheader("⚙️ Registrar Producción y Generar Formato PDF (F-01-01)")
         try:
             tareas_pendientes = ejecutar_consulta(
@@ -802,7 +840,7 @@ if rol == "operario":
         except Exception as e:
             st.error(f"Error al registrar producción: {e}")
 
-    elif menu_seleccionado == "➕ Tarea Imprevista":
+    elif menu_limpio == "Tarea Imprevista":
         st.subheader("➕ Registrar e Iniciar Tarea Imprevista No Programada")
         try:
             maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
@@ -880,7 +918,7 @@ if rol == "operario":
 # ====================================================
 elif rol in ["admin", "produccion"]:
     
-    if menu_seleccionado == "📅 Programar":
+    if menu_limpio == "Programar":
         st.subheader("📅 Programación Directa por Orden de Compra y Referencia")
         fecha_seleccionada = st.date_input("Selecciona el día a consultar/programar", value=(datetime.now() - timedelta(hours=5)).date(), key="cal_admin_dia")
         try:
@@ -987,7 +1025,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Programación: {e}")
 
-    elif menu_seleccionado == "📋 Órdenes Compra":
+    elif menu_limpio == "Órdenes Compra":
         st.subheader("📋 Gestión de Órdenes de Compra (OC), Clientes y Alarma de Pendientes")
         try:
             refs_db = ejecutar_consulta("SELECT codigo FROM referencias")
@@ -1072,7 +1110,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en Órdenes de Compra: {e}")
 
-    elif menu_seleccionado == "⚙️ Máquinas" and rol == "admin":
+    elif menu_limpio == "Máquinas" and rol == "admin":
         st.subheader("⚙️ Gestión de Máquinas (Propias y Alquiladas)")
         try:
             df_maqs = ejecutar_consulta("SELECT * FROM maquinas")
@@ -1133,7 +1171,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error: {e}")
 
-    elif menu_seleccionado == "🛠️ Servicios" and rol == "admin":
+    elif menu_limpio == "Servicios" and rol == "admin":
         st.subheader("🛠️ Administración de Servicios Prestados")
         try:
             df_serv = ejecutar_consulta("SELECT * FROM servicios_prestados ORDER BY id DESC")
@@ -1174,7 +1212,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error: {e}")
 
-    elif menu_seleccionado == "📄 Referencias":
+    elif menu_limpio == "Referencias":
         st.subheader("📄 Gestión de Referencias (Catálogo Base)")
         try:
             df_refs = ejecutar_consulta("SELECT * FROM referencias")
@@ -1228,7 +1266,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error: {e}")
 
-    elif menu_seleccionado == "📊 Reportes":
+    elif menu_limpio == "Reportes":
         st.subheader("📊 Centro de Reportes Gerenciales y de Producción")
         tipo_reporte_gerencial = st.radio(
             "Selecciona la vista de reporte:", 
@@ -1359,7 +1397,7 @@ elif rol in ["admin", "produccion"]:
             except Exception as e:
                 st.warning(f"Información: {e}")
 
-    elif menu_seleccionado == "🚀 Entregas":
+    elif menu_limpio == "Entregas":
         st.subheader("🚀 Registrar Salida de Insumo / Material a Operario")
         try:
             ops_df = ejecutar_consulta("SELECT nombre FROM usuarios WHERE rol = 'operario'")
@@ -1382,7 +1420,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error: {e}")
 
-    elif menu_seleccionado == "🔨 Herramientas":
+    elif menu_limpio == "Herramientas":
         st.subheader("🔨 Control y Préstamos de Herramientas")
         try:
             herramientas_db = ejecutar_consulta("SELECT codigo, nombre, cantidad FROM inventario WHERE tipo ILIKE '%HERRAMIENTA%'")
@@ -1448,7 +1486,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error en herramientas: {e}")
 
-    elif menu_seleccionado == "📥 Cargue Ítems":
+    elif menu_limpio == "Cargue Ítems":
         st.subheader("📥 Cargue Único de Ítems al Inventario")
         try:
             clases_df = ejecutar_consulta("SELECT nombre FROM clases_inventario")
@@ -1473,7 +1511,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error: {e}")
 
-    elif menu_seleccionado == "📦 Inventario":
+    elif menu_limpio == "Inventario":
         st.subheader("📦 Inventario General de la Planta")
         try:
             inv_gen = ejecutar_consulta("SELECT codigo, nombre, tipo as clase, cantidad, stock_minimo FROM inventario")
@@ -1497,7 +1535,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error: {e}")
 
-    elif menu_seleccionado == "🏷️ Clases" and rol == "admin":
+    elif menu_limpio == "Clases" and rol == "admin":
         st.subheader("🏷️ Administración de Clases de Inventario")
         try:
             clases_actuales = ejecutar_consulta("SELECT * FROM clases_inventario ORDER BY id DESC")
@@ -1538,7 +1576,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error: {e}")
 
-    elif menu_seleccionado == "👥 Clientes" and rol == "admin":
+    elif menu_limpio == "Clientes" and rol == "admin":
         st.subheader("👥 Administración de Clientes")
         try:
             clientes_df = ejecutar_consulta("SELECT * FROM clientes ORDER BY id DESC")
@@ -1594,7 +1632,7 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             st.error(f"Error: {e}")
 
-    elif menu_seleccionado == "⚙️ Usuarios" and rol == "admin":
+    elif menu_limpio == "Usuarios" and rol == "admin":
         st.subheader("⚙️ Gestión y Seguridad de Usuarios del Sistema")
         try:
             users_df = ejecutar_consulta("SELECT id, username, nombre, rol FROM usuarios ORDER BY id DESC")
@@ -1648,5 +1686,5 @@ elif rol in ["admin", "produccion"]:
                                 ejecutar_comando("UPDATE usuarios SET nombre = %s, rol = %s WHERE username = %s", (nuevo_nombre.strip(), nuevo_rol, edit_user_sel))
                             st.success("¡Usuario actualizado!")
                             st.rerun()
-        except Exception as e:
+        exceptException as e:
             st.error(f"Error: {e}")
