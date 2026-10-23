@@ -23,7 +23,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS generales para la barra lateral estilo dashboard y componentes
+# Estilos CSS avanzados para el menú lateral tipo píldora curva y diseño industrial
 st.markdown("""
     <style>
         .stApp {
@@ -44,7 +44,7 @@ st.markdown("""
             padding-top: 1rem;
         }
 
-        /* Estilo para los botones del menú lateral y acciones */
+        /* Estilo para los botones de acción general */
         .stButton>button {
             width: 100%;
             height: 3rem;
@@ -61,6 +61,39 @@ st.markdown("""
             background: linear-gradient(135deg, #ff9124 0%, #FF7A00 100%);
             box-shadow: 0 6px 20px rgba(255, 122, 0, 0.6);
             transform: translateY(-1px);
+        }
+
+        /* Transformar el radio button de la barra lateral en un menú lateral flotante estilo píldora curva */
+        [data-testid="stSidebar"] .stRadio > div {
+            gap: 6px;
+        }
+        [data-testid="stSidebar"] .stRadio label {
+            background-color: transparent;
+            color: #A0A0A0;
+            padding: 10px 15px;
+            border-radius: 16px 0px 0px 16px;
+            font-weight: 500;
+            width: 100%;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        [data-testid="stSidebar"] .stRadio label:hover {
+            color: #ffffff;
+            background-color: rgba(255, 122, 0, 0.1);
+        }
+        /* Opción seleccionada con el diseño curvo flotante exacto de la referencia */
+        [data-testid="stSidebar"] .stRadio div[checked="true"] label,
+        [data-testid="stSidebar"] .stRadio input:checked + div {
+            background-color: #121212 !important;
+            color: #FF7A00 !important;
+            font-weight: bold !important;
+            border-left: 4px solid #FF7A00;
+            box-shadow: -5px 5px 15px rgba(0,0,0,0.5);
+            border-radius: 20px 0px 0px 20px;
+        }
+        /* Ocultar el círculo nativo del radio button */
+        [data-testid="stSidebar"] .stRadio input[type="radio"] {
+            display: none;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -467,16 +500,16 @@ if not st.session_state["autenticado"]:
                 font-size: 1.1rem;
                 font-weight: bold;
                 border-radius: 12px;
-                background: linear-gradient(135deg, #FF7A00 0%, #d96800 100%);
+                background: linear-gradient(135deg, #FF7A00 0%, #ff5500 100%);
                 color: #ffffff;
                 border: none;
-                box-shadow: 0 4px 15px rgba(255, 122, 0, 0.3);
-                transition: all 0.3s ease;
+                box-shadow: 0 8px 25px rgba(255, 122, 0, 0.5), 0 0 15px rgba(255, 122, 0, 0.2);
+                transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             }}
             .stButton>button:hover {{
                 background: linear-gradient(135deg, #ff9124 0%, #FF7A00 100%);
-                box-shadow: 0 6px 20px rgba(255, 122, 0, 0.5);
-                transform: translateY(-1px);
+                box-shadow: 0 12px 35px rgba(255, 122, 0, 0.8), 0 0 25px rgba(255, 122, 0, 0.4);
+                transform: translateY(-2px);
             }}
         </style>
     """
@@ -524,19 +557,17 @@ if not st.session_state["autenticado"]:
     st.stop()
 
 # ====================================================
-# BARRA LATERAL ESTILO DASHBOARD (FOTO DE PERFIL / AVATAR)
+# BARRA LATERAL ESTILO DASHBOARD (FOTO DE PERFIL + MENÚ CURVO)
 # ====================================================
 with st.sidebar:
     mostrar_logo(ancho=180)
     st.markdown("---")
     
-    # Manejo de Foto de Perfil o Avatar
     avatar_actual = st.session_state.get("avatar_path", None)
     
     if avatar_actual and os.path.exists(avatar_actual):
         st.image(avatar_actual, width=90, caption="Foto de Perfil")
     else:
-        # Avatar por defecto con inicial o icono circular
         st.markdown(
             f"""<div style='display: flex; align-items: center; justify-content: center; width: 80px; height: 80px; background-color: #2a2a2a; border: 2px solid #FF7A00; border-radius: 50%; margin: 0 auto 10px auto;'>
                 <span style='font-size: 2rem; color: #FF7A00; font-weight: bold;'>{st.session_state['nombre_usuario'][0].upper()}</span>
@@ -565,7 +596,6 @@ with st.sidebar:
     
     rol = st.session_state["rol"]
     
-    # Definición de opciones del menú lateral según el rol
     if rol == "operario":
         opciones_menu = ["📋 Mi Programación", "⚙️ Registrar Producción", "➕ Tarea Imprevista"]
     elif rol == "produccion":
@@ -577,7 +607,8 @@ with st.sidebar:
             "📥 Cargue Ítems", "📦 Inventario", "🏷️ Clases", "👥 Clientes", "⚙️ Usuarios"
         ]
     
-    menu_seleccionado = st.radio("Selecciona una sección", opciones_menu, label_visibility="collapsed")
+    # Menú lateral con diseño estilo píldora curva incrustado
+    menu_seleccionado = st.radio("Navegación", opciones_menu, label_visibility="collapsed")
     
     st.markdown("---")
     if st.button("🔄 Actualizar Datos", use_container_width=True):
