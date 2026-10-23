@@ -154,12 +154,11 @@ def generar_reporte_produccion_excel(df_original):
     df['Cantidad Producidad'] = df['unidades_producidas'] if 'unidades_producidas' in df.columns else 0
     df['Cantidad procesadas NC'] = 0
     
-    # 💡 Extracción robusta de unidades defectuosas / No conformes desde el campo observaciones
+    # Extracción robusta de unidades defectuosas / No conformes desde el campo observaciones
     for idx, row in df.iterrows():
         obs = str(row.get('observaciones', ''))
         if 'Defectuosas:' in obs:
             try:
-                # Ejemplo de texto: "Buenas: 99, Defectuosas: 1. ⚠️ ALARMA..."
                 partes = obs.split('Defectuosas:')
                 num_sc = int(partes[1].split(',')[0].split('.')[0].strip())
                 df.at[idx, 'Cantidad procesadas NC'] = num_sc
@@ -567,20 +566,19 @@ if rol == "operario":
                         )
                         
                         if num_oc_asociada and num_oc_asociada != "SIN OC":
-                            oc_db = ejecutar_consulta("SELECT unidades_entregadas, meta_unidades, requiere_unidades FROM ordenes_compra WHERE numero_oc = %s AND referencia = %s", (num_oc_asociada, referencia_pieza))
+                            oc_db = ejecutar_consulta("SELECT unidades_entregadas, meta_unidades FROM ordenes_compra WHERE numero_oc = %s AND referencia = %s", (num_oc_asociada, referencia_pieza))
                             if oc_db.empty:
-                                oc_db = ejecutar_consulta("SELECT unidades_entregadas, meta_unidades, requiere_unidades FROM ordenes_compra WHERE numero_oc = %s", (num_oc_asociada,))
+                                oc_db = ejecutar_consulta("SELECT unidades_entregadas, meta_unidades FROM ordenes_compra WHERE numero_oc = %s", (num_oc_asociada,))
                                 
                             if not oc_db.empty:
                                 ent_actuales = int(oc_db.iloc[0]['unidades_entregadas']) if pd.notna(oc_db.iloc[0]['unidades_entregadas']) else 0
                                 nuevo_entregado = ent_actuales + unidades
-                                # 💡 Cierre definitivo de la Orden de Compra para que no vuelva a salir en la lista de pendientes de programación
+                                # 💡 Cierre definitivo inmediato (Estado 'COMPLETADO') para que no vuelva a salir en programación
                                 ejecutar_comando(
                                     "UPDATE ordenes_compra SET unidades_entregadas = %s, estado = 'COMPLETADO' WHERE numero_oc = %s AND referencia = %s",
                                     (nuevo_entregado, num_oc_asociada, referencia_pieza)
                                 )
 
-                        # 💡 Marcar tarea como FINALIZADA para que desaparezca de la lista de programación activa
                         ejecutar_comando("UPDATE programacion_diaria SET estado = 'FINALIZADO' WHERE id = %s", (id_tarea,))
                         
                         datos_pdf = {
@@ -604,7 +602,7 @@ if rol == "operario":
                         st.session_state["ultimo_pdf_nombre"] = f"F-01-01_OC_{num_oc_asociada}_{referencia_pieza}.pdf"
                         
                         if unidades < meta_asignada_tarea:
-                            st.warning(f"¡Producción registrada! ⚠️ **Atención:** Se reportaron piezas pendientes por completar ({meta_asignada_tarea - unidades} u. faltantes). La orden se ha cerrado para evitar reprogramaciones automáticas.")
+                            st.warning(f"¡Producción registrada! ⚠️ **Atención:** Se reportaron piezas pendientes por completar ({meta_asignada_tarea - unidades} u. faltantes). La orden se ha cerrado definitivamente.")
                         else:
                             st.success("¡Producción registrada y formato F-01-01 generado con éxito!")
 
@@ -721,11 +719,13 @@ elif rol in ["admin", "produccion"]:
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
             maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
             
+            # 💡 Filtro blindado: Solo trae órdenes de compra que NO estén COMPLETADAS en su estado
             ocs_db = ejecutar_consulta("""
                 SELECT id, numero_oc, referencia, servicio, meta_unidades FROM ordenes_compra 
-                WHERE estado != 'COMPLETADO'
+                WHERE estado != 'COMPLETADO' OR estado IS NULL
             """)
             
+            # Consultar adicionalmente todas las programaciones activas (pendiente o en proceso)
             prog_activas = ejecutar_consulta("""
                 SELECT DISTINCT numero_oc, referencia FROM programacion_diaria 
                 WHERE estado NOT IN ('FINALIZADO', 'CANCELADO')
@@ -761,7 +761,7 @@ elif rol in ["admin", "produccion"]:
                     }
 
             if not ops or not maqs or not ocs_activas_validas:
-                st.warning("⚠️ No hay Órdenes de Compra o Referencias disponibles para programar (las activas ya fueron programadas o se completaron).")
+                st.warning("⚠️ No hay Órdenes de Compra o Referencias disponibles para programar (todas están cerradas o completadas).")
             else:
                 with st.expander("Crear Programación Limpia por Referencia", expanded=True):
                     k_sufijo = st.session_state["form_key_counter"]
@@ -1429,4 +1429,3 @@ elif rol in ["admin", "produccion"]:
                                     st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
-
