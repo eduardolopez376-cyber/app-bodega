@@ -402,7 +402,7 @@ if "form_key_counter" not in st.session_state:
     st.session_state["form_key_counter"] = 0
 
 # ====================================================
-# PANTALLA DE LOGIN EXÓTICA Y LLAMATIVA (ESTILO REFERENCIA)
+# PANTALLA DE LOGIN EXÓTICA Y LLAMATIVA (ESTILO REFERENCIA EXACTO)
 # ====================================================
 if not st.session_state["autenticado"]:
     # Carga de la imagen local en Base64 de forma segura
@@ -411,94 +411,101 @@ if not st.session_state["autenticado"]:
     if os.path.exists(ruta_fondo_local):
         with open(ruta_fondo_local, "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
-            img_css_fondo = f"background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.85)), url('data:image/jpeg;base64,{encoded_string}'); background-size: cover; background-position: center; background-attachment: fixed;"
+            img_css_fondo = f"background: linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.6)), url('data:image/jpeg;base64,{encoded_string}'); background-size: cover; background-position: center; background-attachment: fixed;"
 
-    st.markdown("""
+    st.markdown(f"""
         <style>
-            .stApp {
-                """ + img_css_fondo + """
+            .stApp {{
+                {img_css_fondo}
+            }}
+            /* Tarjeta de login flotante a la derecha con borde futurista naranja */
+            .login-card-container {{
+                background: linear-gradient(145deg, rgba(20, 20, 20, 0.92), rgba(10, 10, 10, 0.95));
+                border: 2px solid rgba(255, 122, 0, 0.4);
+                border-radius: 24px;
+                padding: 2.8rem 2.2rem;
+                box-shadow: 0 25px 50px rgba(0, 0, 0, 0.9), inset 0 0 25px rgba(255, 122, 0, 0.15);
+                backdrop-filter: blur(10px);
+                margin-top: 2rem;
             }
-            .login-card {
-                background-color: rgba(26, 26, 26, 0.88);
-                backdrop-filter: blur(12px);
-                border: 1px solid rgba(255, 122, 0, 0.25);
-                border-radius: 20px;
-                padding: 3rem 2.5rem;
-                box-shadow: 0 20px 40px rgba(0,0,0,0.95);
-                max-width: 480px;
-                margin: 0 auto;
-            }
-            .login-title {
-                color: #E0E0E0;
-                font-weight: 700;
-                text-align: center;
-                margin-bottom: 0.3rem;
-                font-size: 2rem;
-            }
-            .login-subtitle {
-                color: #888888;
-                text-align: center;
-                margin-bottom: 2rem;
-                font-size: 0.95rem;
-            }
-            .stButton>button {
+            .stButton>button {{
                 width: 100%;
                 height: 3.2rem;
                 font-size: 1.1rem;
                 font-weight: bold;
                 border-radius: 12px;
-                background: linear-gradient(135deg, #FF7A00 0%, #d96800 100%);
+                background: linear-gradient(135deg, #FF7A00 0%, #cc6200 100%);
                 color: #ffffff;
                 border: none;
-                box-shadow: 0 4px 15px rgba(255, 122, 0, 0.3);
+                box-shadow: 0 4px 20px rgba(255, 122, 0, 0.4);
                 transition: all 0.3s ease;
-            }
-            .stButton>button:hover {
+            }}
+            .stButton>button:hover {{
                 background: linear-gradient(135deg, #ff9124 0%, #FF7A00 100%);
-                box-shadow: 0 6px 20px rgba(255, 122, 0, 0.5);
-                transform: translateY(-1px);
-            }
+                box-shadow: 0 6px 25px rgba(255, 122, 0, 0.6);
+                transform: translateY(-2px);
+            }}
+            /* Estilo limpio para los inputs de texto */
+            .stTextInput input {{
+                background-color: rgba(15, 15, 15, 0.8) !important;
+                color: #E0E0E0 !important;
+                border: 1px solid rgba(255, 122, 0, 0.3) !important;
+                border-radius: 10px !important;
+            }}
+            .stTextInput input:focus {{
+                border-color: #FF7A00 !important;
+                box-shadow: 0 0 10px rgba(255, 122, 0, 0.3) !important;
+            }}
         </style>
     """, unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    
-    col_l1, col_l2, col_l3 = st.columns([1, 1.3, 1])
-    with col_l2:
-        with st.container():
-            col_img1, col_img2, col_img3 = st.columns([0.5, 3, 0.5])
-            with col_img2:
-                mostrar_logo(ancho=260)
+
+    # Distribución en columnas para imitar la posición exacta de la referencia
+    col_izq, col_der = st.columns([1.2, 1])
+
+    with col_izq:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        # Logo grande e impactante arriba a la izquierda como en tu imagen
+        mostrar_logo(ancho=340)
+        st.markdown("""
+            <div style='padding-left: 10px; margin-top: 10px;'>
+                <p style='color: #888; font-size: 1rem; letter-spacing: 1px;'>SISTEMA INTEGRAL DE CONTROL Y PRODUCCIÓN</p>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with col_der:
+        # Contenedor con la tarjeta de login flotante a la derecha
+        st.markdown("<div class='login-card-container'>", unsafe_allow_html=True)
+        
+        with st.form("form_login_ref"):
+            st.markdown("<h3 style='color: #fff; text-align: center; margin-bottom: 1.5rem; font-weight: 600;'>ACCESO AL SISTEMA</h3>", unsafe_allow_html=True)
             
-            st.markdown("<h1 class='login-title'>Welcome Back</h1>", unsafe_allow_html=True)
-            st.markdown("<p class='login-subtitle'>Sign in to continue your production journey</p>", unsafe_allow_html=True)
+            user_input = st.text_input("Usuario", placeholder="Username")
+            pass_input = st.text_input("Contraseña", type="password", placeholder="Password")
             
-            with st.form("form_login"):
-                user_input = st.text_input("Correo o Usuario", placeholder="Ingresa tu usuario")
-                pass_input = st.text_input("Contraseña", type="password", placeholder="••••••••")
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                submit_login = st.form_submit_button("Sign In →", type="primary", use_container_width=True)
-                
-                if submit_login:
-                    try:
-                        res = ejecutar_consulta(
-                            "SELECT username, nombre, rol FROM usuarios WHERE username = %s AND password = %s",
-                            (user_input, pass_input)
-                        )
-                        if not res.empty:
-                            st.session_state["autenticado"] = True
-                            st.session_state["username"] = res.iloc[0]["username"]
-                            st.session_state["nombre_usuario"] = res.iloc[0]["nombre"]
-                            st.session_state["rol"] = res.iloc[0]["rol"]
-                            st.rerun()
-                        else:
-                            st.error("❌ Usuario o contraseña incorrectos")
-                    except Exception as e:
-                        st.error(f"⚠️ Error de conexión: {e}")
+            st.markdown("<br>", unsafe_allow_html=True)
+            submit_login = st.form_submit_button("LOG IN →", type="primary", use_container_width=True)
             
-            current_yr = datetime.now().year
-            st.markdown(f"<p style='text-align: center; color: #666; font-size: 0.8rem; margin-top: 2rem;'>© {current_yr} Industrias Metal&Co. Todos los derechos reservados.</p>", unsafe_allow_html=True)
+            if submit_login:
+                try:
+                    res = ejecutar_consulta(
+                        "SELECT username, nombre, rol FROM usuarios WHERE username = %s AND password = %s",
+                        (user_input, pass_input)
+                    )
+                    if not res.empty:
+                        st.session_state["autenticado"] = True
+                        st.session_state["username"] = res.iloc[0]["username"]
+                        st.session_state["nombre_usuario"] = res.iloc[0]["nombre"]
+                        st.session_state["rol"] = res.iloc[0]["rol"]
+                        st.rerun()
+                    else:
+                        st.error("❌ Usuario o contraseña incorrectos")
+                except Exception as e:
+                    st.error(f"⚠️ Error de conexión: {e}")
+                    
+        st.markdown("</div>", unsafe_allow_html=True)
+
     st.stop()
 
 # ENCABEZADO Y BARRA LATERAL (UNA VEZ AUTENTICADO)
