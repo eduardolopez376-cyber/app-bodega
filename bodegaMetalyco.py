@@ -142,7 +142,9 @@ def calcular_tipo_hora(inicio_str, fin_str):
 def generar_reporte_produccion_excel(df_original):
     df = df_original.copy()
     if 'fecha_registro' in df.columns:
-        df['Fecha'] = pd.to_datetime(df['fecha_registro']).dt.strftime('%Y-%m-%d')
+        # Corregir zona horaria restando 5 horas si viene de UTC crudo
+        df['dt_local'] = pd.to_datetime(df['fecha_registro']) - pd.Timedelta(hours=5)
+        df['Fecha'] = df['dt_local'].dt.strftime('%Y-%m-%d')
     else:
         df['Fecha'] = date.today().strftime('%Y-%m-%d')
         
@@ -542,7 +544,6 @@ if rol == "operario":
                             if str(maq_db.iloc[0]['tipo_propiedad']).upper() == 'ALQUILADA':
                                 es_alq = True
                         
-                        # 💡 CÁLCULO AUTOMÁTICO ESTRICTO: Resta exacta entre hora de inicio y fin ingresada por el operario
                         dt_inicio = datetime.combine(date.today(), h_inicio)
                         dt_fin = datetime.combine(date.today(), h_fin)
                         if dt_fin < dt_inicio: 
@@ -555,7 +556,7 @@ if rol == "operario":
                             faltantes = meta_asignada_tarea - unidades
                             alerta_pendiente_txt = f" ⚠️ ALARMA: Faltaron {faltantes} unidades para cumplir la meta de {meta_asignada_tarea} u."
                         
-                        # 💡 HORA EXACTA LOCAL DE COLOMBIA (Forzando la hora local actual restando 5 horas de zona horaria UTC si el servidor está desfasado)
+                        # 💡 HORA EXACTA LOCAL DE COLOMBIA (Ajustando 5 horas atrás para neutralizar el UTC de Supabase)
                         tiempo_exacto_actual = (datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d %H:%M:%S')
 
                         ejecutar_comando(
@@ -1041,7 +1042,7 @@ elif rol in ["admin", "produccion"]:
                 df_produccion_raw = ejecutar_consulta("SELECT * FROM registro_produccion ORDER BY id DESC")
                 if not df_produccion_raw.empty:
                     if 'fecha_registro' in df_produccion_raw.columns:
-                        df_produccion_raw['dt'] = pd.to_datetime(df_produccion_raw['fecha_registro'])
+                        df_produccion_raw['dt'] = pd.to_datetime(df_produccion_raw['fecha_registro']) - pd.Timedelta(hours=5)
                     else:
                         df_produccion_raw['dt'] = pd.Timestamp.now()
 
@@ -1098,7 +1099,8 @@ elif rol in ["admin", "produccion"]:
                 """
                 df_alq = ejecutar_consulta(query_alq)
                 if not df_alq.empty:
-                    df_alq['dt'] = pd.to_datetime(df_alq['fecha_registro'])
+                    df_alq['dt'] = pd.to_datetime(df_alq['fecha_registro']) - pd.Timedelta(hours=5)
+                    df_alq['fecha_registro'] = df_alq['dt'] # Actualizar columna visual para mostrar la hora correcta de Colombia
                     
                     if filtro_periodo == "Diario":
                         df_alq = df_alq[df_alq['dt'].dt.date == fecha_filtro]
@@ -1161,7 +1163,7 @@ elif rol in ["admin", "produccion"]:
                         row = mats[mats['nombre'] == mat_sel].iloc[0]
                         ejecutar_comando(
                             "INSERT INTO consumos (fecha, operario, codigo_material, cantidad, tipo, estado) VALUES (%s, %s, %s, %s, %s, 'ENTREGADO')",
-                            (datetime.now().strftime("%Y-%m-%d %H:%M"), op_sel, row['codigo'], cant, row['tipo'])
+                            ((datetime.now() - timedelta(hours=5)).strftime("%Y-%m-%d %H:%M"), op_sel, row['codigo'], cant, row['tipo'])
                         )
                         ejecutar_comando("UPDATE inventario SET cantidad = cantidad - %s WHERE codigo = %s", (cant, row['codigo']))
                         st.success("Salida registrada con éxito.")
@@ -1191,7 +1193,7 @@ elif rol in ["admin", "produccion"]:
                             row_h = herramientas_db[herramientas_db['nombre'] == her_sel].iloc[0]
                             ejecutar_comando(
                                 "INSERT INTO consumos (fecha, operario, codigo_material, cantidad, tipo, estado) VALUES (%s, %s, %s, %s, 'HERRAMIENTA', 'PRESTADO')",
-                                (datetime.now().strftime("%Y-%m-%d %H:%M"), op_her, row_h['codigo'], cant_her)
+                                ((datetime.now() - timedelta(hours=5)).strftime("%Y-%m-%d %H:%M"), op_her, row_h['codigo'], cant_her)
                             )
                             st.success("Préstamo registrado.")
                             st.rerun()
@@ -1226,7 +1228,7 @@ elif rol in ["admin", "produccion"]:
                                 ejecutar_comando("UPDATE consumos SET estado = 'DEVUELTO' WHERE id = %s", (id_prestamo_sel,))
                                 ejecutar_comando(
                                     "INSERT INTO consumos (fecha, operario, codigo_material, cantidad, tipo, estado) VALUES (%s, %s, %s, %s, 'HERRAMIENTA', 'PRESTADO')",
-                                    (datetime.now().strftime("%Y-%m-%d %H:%M"), nuevo_operario, reg_actual['codigo_material'], reg_actual['cantidad'])
+                                    ((datetime.now() - timedelta(hours=5)).strftime("%Y-%m-%d %H:%M"), nuevo_operario, reg_actual['codigo_material'], reg_actual['cantidad'])
                                 )
                                 st.success(f"Herramienta reasignada exitosamente a {nuevo_operario}.")
                                 st.rerun()
@@ -1407,7 +1409,7 @@ elif rol in ["admin", "produccion"]:
                     with st.expander("Eliminar"):
                         with st.form("form_del_usuario", clear_on_submit=True):
                             usuario_del = st.selectbox("Selecciona el Usuario a Borrar", users_df["username"].tolist(), key="del_u_key")
-                            if st.form_submit_button("Eliminar Usuario", type="primary", use_command_width=True):
+                            if st.form_submit_button("Eliminar Usuario", type="primary", use_container_width=True):
                                 if usuario_del == st.session_state["username"]:
                                     st.error("No puedes eliminar tu propia cuenta activa.")
                                 else:
@@ -1416,3 +1418,4 @@ elif rol in ["admin", "produccion"]:
                                     st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
+
