@@ -515,8 +515,6 @@ if rol == "operario":
                     h_inicio = st.time_input("Hora de Inicio Real", time(7, 0))
                     h_fin = st.time_input("Hora de Finalización Real", time(17, 0))
                     
-                    forzar_horas = st.number_input("Horas Totales Trabajadas en Máquina (Confirmar o Ajustar)", min_value=0.0, max_value=24.0, step=0.5, value=0.0, help="Si dejas en 0.0, el sistema calculará automáticamente la diferencia entre Hora de Inicio y Hora de Fin.")
-                    
                     unidades = st.number_input("Unidades Producidas Buenas", min_value=0, step=1)
                     defectuosas = st.number_input("Unidades Defectuosas (Scrap)", min_value=0, step=1, value=0)
                     obs_usuario = st.text_area("Observaciones / Novedades")
@@ -544,23 +542,21 @@ if rol == "operario":
                             if str(maq_db.iloc[0]['tipo_propiedad']).upper() == 'ALQUILADA':
                                 es_alq = True
                         
-                        if forzar_horas > 0.0:
-                            horas_calc = float(forzar_horas)
-                        else:
-                            dt_inicio = datetime.combine(date.today(), h_inicio)
-                            dt_fin = datetime.combine(date.today(), h_fin)
-                            if dt_fin < dt_inicio: 
-                                dt_fin += timedelta(days=1)
-                            diff_seg = (dt_fin - dt_inicio).total_seconds()
-                            horas_calc = round(max(0.0, diff_seg / 3600.0), 2)
+                        # 💡 CÁLCULO AUTOMÁTICO ESTRICTO: Resta exacta entre hora de inicio y fin ingresada por el operario
+                        dt_inicio = datetime.combine(date.today(), h_inicio)
+                        dt_fin = datetime.combine(date.today(), h_fin)
+                        if dt_fin < dt_inicio: 
+                            dt_fin += timedelta(days=1)
+                        diff_seg = (dt_fin - dt_inicio).total_seconds()
+                        horas_calc = round(max(0.0, diff_seg / 3600.0), 2)
                         
                         alerta_pendiente_txt = ""
                         if unidades < meta_asignada_tarea:
                             faltantes = meta_asignada_tarea - unidades
                             alerta_pendiente_txt = f" ⚠️ ALARMA: Faltaron {faltantes} unidades para cumplir la meta de {meta_asignada_tarea} u."
                         
-                        # 💡 HORA EXACTA LOCAL DE COLOMBIA (Se toma directamente del sistema en formato string timestamp para evitar desajustes UTC)
-                        tiempo_exacto_actual = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        # 💡 HORA EXACTA LOCAL DE COLOMBIA (Forzando la hora local actual restando 5 horas de zona horaria UTC si el servidor está desfasado)
+                        tiempo_exacto_actual = (datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d %H:%M:%S')
 
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
@@ -670,8 +666,6 @@ if rol == "operario":
                         h_ini_imp = st.time_input("Hora de Inicio", time(8, 0))
                     with c_h2:
                         h_fin_imp = st.time_input("Hora de Finalización", time(17, 0))
-                    
-                    forzar_horas_imp = st.number_input("Horas Totales Trabajadas en Máquina (Confirmar o Ajustar)", min_value=0.0, max_value=24.0, step=0.5, value=0.0, key="forz_imp")
                         
                     uni_imp = st.number_input("Unidades Producidas Buenas", min_value=0, value=1)
                     def_imp = st.number_input("Unidades Defectuosas (Scrap)", min_value=0, value=0)
@@ -685,17 +679,14 @@ if rol == "operario":
                             if str(maq_db.iloc[0]['tipo_propiedad']).upper() == 'ALQUILADA':
                                 es_alq = True
                         
-                        if forzar_horas_imp > 0.0:
-                            horas_calc = float(forzar_horas_imp)
-                        else:
-                            dt_inicio_imp = datetime.combine(date.today(), h_ini_imp)
-                            dt_fin_imp = datetime.combine(date.today(), h_fin_imp)
-                            if dt_fin_imp < dt_inicio_imp:
-                                dt_fin_imp += timedelta(days=1)
-                            diff_seg_imp = (dt_fin_imp - dt_inicio_imp).total_seconds()
-                            horas_calc = round(max(0.0, diff_seg_imp / 3600.0), 2)
+                        dt_inicio_imp = datetime.combine(date.today(), h_ini_imp)
+                        dt_fin_imp = datetime.combine(date.today(), h_fin_imp)
+                        if dt_fin_imp < dt_inicio_imp:
+                            dt_fin_imp += timedelta(days=1)
+                        diff_seg_imp = (dt_fin_imp - dt_inicio_imp).total_seconds()
+                        horas_calc = round(max(0.0, diff_seg_imp / 3600.0), 2)
 
-                        tiempo_exacto_actual_imp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        tiempo_exacto_actual_imp = (datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d %H:%M:%S')
 
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
@@ -1081,7 +1072,7 @@ elif rol in ["admin", "produccion"]:
                     else:
                         st.info(f"No hay registros de producción para el período seleccionado ({filtro_periodo}).")
                         
-                    with st.expander("🧹 Limpiar o Borrar Registros de Producción (Ej: ID 20 y 21)"):
+                    with st.expander("🧹 Limpiar o Borrar Registros de Producción Antiguos"):
                         with st.form("form_limpiar_prod"):
                             reg_produccion_ids = df_produccion_raw['id'].tolist() if 'id' in df_produccion_raw.columns else []
                             id_a_borrar = st.selectbox("Selecciona el ID de Registro de Producción a Borrar", reg_produccion_ids)
@@ -1127,18 +1118,6 @@ elif rol in ["admin", "produccion"]:
                         col_m1.metric("Total Horas Alquiladas", f"{tot_horas:.2f} hrs")
                         col_m2.metric("Costo Total Acumulado", f"${tot_costo:,.2f}")
                         st.dataframe(df_alq, use_container_width=True)
-                        
-                        with st.expander("✏️ Corregir Horas Trabajadas de un Registro Alquilado"):
-                            with st.form("form_editar_horas_maq"):
-                                id_reg_alq = st.selectbox("Selecciona el ID de Registro", df_alq['id'].tolist())
-                                row_sel_alq = df_alq[df_alq['id'] == id_reg_alq].iloc[0]
-                                horas_actuales_reg = float(row_sel_alq['horas_trabajadas'])
-                                
-                                nuevas_horas_fijadas = st.number_input("Horas Reales Correctas", min_value=0.5, max_value=24.0, value=horas_actuales_reg, step=0.5)
-                                if st.form_submit_button("Actualizar Horas de esta Máquina", type="primary", use_container_width=True):
-                                    ejecutar_comando("UPDATE registro_produccion SET horas_trabajadas = %s WHERE id = %s", (nuevas_horas_fijadas, id_reg_alq))
-                                    st.success(f"¡Registro #{id_reg_alq} actualizado a {nuevas_horas_fijadas} horas con éxito!")
-                                    st.rerun()
 
                         buffer_alq = io.BytesIO()
                         with pd.ExcelWriter(buffer_alq, engine='openpyxl') as writer:
@@ -1428,7 +1407,7 @@ elif rol in ["admin", "produccion"]:
                     with st.expander("Eliminar"):
                         with st.form("form_del_usuario", clear_on_submit=True):
                             usuario_del = st.selectbox("Selecciona el Usuario a Borrar", users_df["username"].tolist(), key="del_u_key")
-                            if st.form_submit_button("Eliminar Usuario", type="primary", use_container_width=True):
+                            if st.form_submit_button("Eliminar Usuario", type="primary", use_command_width=True):
                                 if usuario_del == st.session_state["username"]:
                                     st.error("No puedes eliminar tu propia cuenta activa.")
                                 else:
