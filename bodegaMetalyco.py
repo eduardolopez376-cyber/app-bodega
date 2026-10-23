@@ -142,7 +142,6 @@ def calcular_tipo_hora(inicio_str, fin_str):
 def generar_reporte_produccion_excel(df_original):
     df = df_original.copy()
     if 'fecha_registro' in df.columns:
-        # Corregir zona horaria restando 5 horas si viene de UTC crudo
         df['dt_local'] = pd.to_datetime(df['fecha_registro']) - pd.Timedelta(hours=5)
         df['Fecha'] = df['dt_local'].dt.strftime('%Y-%m-%d')
     else:
@@ -556,14 +555,14 @@ if rol == "operario":
                             faltantes = meta_asignada_tarea - unidades
                             alerta_pendiente_txt = f" ⚠️ ALARMA: Faltaron {faltantes} unidades para cumplir la meta de {meta_asignada_tarea} u."
                         
-                        # 💡 HORA EXACTA LOCAL DE COLOMBIA (Ajustando 5 horas atrás para neutralizar el UTC de Supabase)
-                        tiempo_exacto_actual = (datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d %H:%M:%S')
+                        # 💡 GUARDAR FECHA LIMPIA (SOLO FECHA YYYY-MM-DD) DE COLOMBIA
+                        fecha_exacta_actual = (datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d')
 
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
                             (operario_nombre, maquina, referencia, numero_oc, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones, es_maquina_alquilada, horas_trabajadas, presion_trabajo, fecha_registro) 
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::timestamp)""",
-                            (st.session_state['nombre_usuario'], maquina_elegida, referencia_pieza, num_oc_asociada, h_inicio, h_fin, unidades, f"Buenas: {unidades}, Defectuosas: {defectuosas}.{alerta_pendiente_txt} {obs_usuario}", es_alq, horas_calc, presion_input, tiempo_exacto_actual)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::date)""",
+                            (st.session_state['nombre_usuario'], maquina_elegida, referencia_pieza, num_oc_asociada, h_inicio, h_fin, unidades, f"Buenas: {unidades}, Defectuosas: {defectuosas}.{alerta_pendiente_txt} {obs_usuario}", es_alq, horas_calc, presion_input, fecha_exacta_actual)
                         )
                         
                         if num_oc_asociada and num_oc_asociada != "SIN OC":
@@ -687,13 +686,13 @@ if rol == "operario":
                         diff_seg_imp = (dt_fin_imp - dt_inicio_imp).total_seconds()
                         horas_calc = round(max(0.0, diff_seg_imp / 3600.0), 2)
 
-                        tiempo_exacto_actual_imp = (datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d %H:%M:%S')
+                        fecha_exacta_actual_imp = (datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d')
 
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
                             (operario_nombre, maquina, referencia, numero_oc, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones, es_maquina_alquilada, horas_trabajadas, presion_trabajo, fecha_registro) 
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::timestamp)""",
-                            (st.session_state['nombre_usuario'], maq_imp, ref_imp, oc_imp, h_ini_imp, h_fin_imp, uni_imp, obs_final_imp, es_alq, horas_calc, presion_imp, tiempo_exacto_actual_imp)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::date)""",
+                            (st.session_state['nombre_usuario'], maq_imp, ref_imp, oc_imp, h_ini_imp, h_fin_imp, uni_imp, obs_final_imp, es_alq, horas_calc, presion_imp, fecha_exacta_actual_imp)
                         )
                         st.success("¡Tarea imprevista registrada!")
                         st.rerun()
@@ -1042,7 +1041,7 @@ elif rol in ["admin", "produccion"]:
                 df_produccion_raw = ejecutar_consulta("SELECT * FROM registro_produccion ORDER BY id DESC")
                 if not df_produccion_raw.empty:
                     if 'fecha_registro' in df_produccion_raw.columns:
-                        df_produccion_raw['dt'] = pd.to_datetime(df_produccion_raw['fecha_registro']) - pd.Timedelta(hours=5)
+                        df_produccion_raw['dt'] = pd.to_datetime(df_produccion_raw['fecha_registro'])
                     else:
                         df_produccion_raw['dt'] = pd.Timestamp.now()
 
@@ -1099,8 +1098,8 @@ elif rol in ["admin", "produccion"]:
                 """
                 df_alq = ejecutar_consulta(query_alq)
                 if not df_alq.empty:
-                    df_alq['dt'] = pd.to_datetime(df_alq['fecha_registro']) - pd.Timedelta(hours=5)
-                    df_alq['fecha_registro'] = df_alq['dt'] # Actualizar columna visual para mostrar la hora correcta de Colombia
+                    df_alq['dt'] = pd.to_datetime(df_alq['fecha_registro'])
+                    df_alq['fecha_registro'] = df_alq['dt'].dt.strftime('%Y-%m-%d') # Limpiar hora y dejar solo fecha YYYY-MM-DD
                     
                     if filtro_periodo == "Diario":
                         df_alq = df_alq[df_alq['dt'].dt.date == fecha_filtro]
@@ -1119,11 +1118,11 @@ elif rol in ["admin", "produccion"]:
                         col_m1, col_m2 = st.columns(2)
                         col_m1.metric("Total Horas Alquiladas", f"{tot_horas:.2f} hrs")
                         col_m2.metric("Costo Total Acumulado", f"${tot_costo:,.2f}")
-                        st.dataframe(df_alq, use_container_width=True)
+                        st.dataframe(df_alq.drop(columns=['dt']), use_container_width=True)
 
                         buffer_alq = io.BytesIO()
                         with pd.ExcelWriter(buffer_alq, engine='openpyxl') as writer:
-                            df_alq.to_excel(writer, index=False, sheet_name='Costos_Maquinas_Alquiladas')
+                            df_alq.drop(columns=['dt']).to_excel(writer, index=False, sheet_name='Costos_Maquinas_Alquiladas')
                         st.download_button(
                             label="📥 Descargar Costos de Máquinas Filtrado (Excel)",
                             data=buffer_alq.getvalue(),
@@ -1163,7 +1162,7 @@ elif rol in ["admin", "produccion"]:
                         row = mats[mats['nombre'] == mat_sel].iloc[0]
                         ejecutar_comando(
                             "INSERT INTO consumos (fecha, operario, codigo_material, cantidad, tipo, estado) VALUES (%s, %s, %s, %s, %s, 'ENTREGADO')",
-                            ((datetime.now() - timedelta(hours=5)).strftime("%Y-%m-%d %H:%M"), op_sel, row['codigo'], cant, row['tipo'])
+                            ((datetime.now() - timedelta(hours=5)).strftime("%Y-%m-%d"), op_sel, row['codigo'], cant, row['tipo'])
                         )
                         ejecutar_comando("UPDATE inventario SET cantidad = cantidad - %s WHERE codigo = %s", (cant, row['codigo']))
                         st.success("Salida registrada con éxito.")
@@ -1193,7 +1192,7 @@ elif rol in ["admin", "produccion"]:
                             row_h = herramientas_db[herramientas_db['nombre'] == her_sel].iloc[0]
                             ejecutar_comando(
                                 "INSERT INTO consumos (fecha, operario, codigo_material, cantidad, tipo, estado) VALUES (%s, %s, %s, %s, 'HERRAMIENTA', 'PRESTADO')",
-                                ((datetime.now() - timedelta(hours=5)).strftime("%Y-%m-%d %H:%M"), op_her, row_h['codigo'], cant_her)
+                                ((datetime.now() - timedelta(hours=5)).strftime("%Y-%m-%d"), op_her, row_h['codigo'], cant_her)
                             )
                             st.success("Préstamo registrado.")
                             st.rerun()
@@ -1228,7 +1227,7 @@ elif rol in ["admin", "produccion"]:
                                 ejecutar_comando("UPDATE consumos SET estado = 'DEVUELTO' WHERE id = %s", (id_prestamo_sel,))
                                 ejecutar_comando(
                                     "INSERT INTO consumos (fecha, operario, codigo_material, cantidad, tipo, estado) VALUES (%s, %s, %s, %s, 'HERRAMIENTA', 'PRESTADO')",
-                                    ((datetime.now() - timedelta(hours=5)).strftime("%Y-%m-%d %H:%M"), nuevo_operario, reg_actual['codigo_material'], reg_actual['cantidad'])
+                                    ((datetime.now() - timedelta(hours=5)).strftime("%Y-%m-%d"), nuevo_operario, reg_actual['codigo_material'], reg_actual['cantidad'])
                                 )
                                 st.success(f"Herramienta reasignada exitosamente a {nuevo_operario}.")
                                 st.rerun()
@@ -1418,4 +1417,3 @@ elif rol in ["admin", "produccion"]:
                                     st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
-
