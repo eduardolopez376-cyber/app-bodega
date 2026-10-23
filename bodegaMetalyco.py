@@ -154,12 +154,14 @@ def generar_reporte_produccion_excel(df_original):
     df['Cantidad Producidad'] = df['unidades_producidas'] if 'unidades_producidas' in df.columns else 0
     df['Cantidad procesadas NC'] = 0
     
+    # 💡 Extracción robusta de unidades defectuosas / No conformes desde el campo observaciones
     for idx, row in df.iterrows():
         obs = str(row.get('observaciones', ''))
         if 'Defectuosas:' in obs:
             try:
+                # Ejemplo de texto: "Buenas: 99, Defectuosas: 1. ⚠️ ALARMA..."
                 partes = obs.split('Defectuosas:')
-                num_sc = int(partes[1].split(',')[0].strip())
+                num_sc = int(partes[1].split(',')[0].split('.')[0].strip())
                 df.at[idx, 'Cantidad procesadas NC'] = num_sc
             except:
                 pass
@@ -517,7 +519,7 @@ if rol == "operario":
                     h_fin = st.time_input("Hora de Finalización Real", time(17, 0))
                     
                     unidades = st.number_input("Unidades Producidas Buenas", min_value=0, step=1)
-                    defectuosas = st.number_input("Unidades Defectuosas (Scrap)", min_value=0, step=1, value=0)
+                    defectuosas = st.number_input("Unidades Defectuosas (Scrap / NC)", min_value=0, step=1, value=0)
                     obs_usuario = st.text_area("Observaciones / Novedades")
                     
                     submit = st.form_submit_button("Guardar y Generar PDF", type="primary", use_container_width=True)
@@ -571,15 +573,14 @@ if rol == "operario":
                                 
                             if not oc_db.empty:
                                 ent_actuales = int(oc_db.iloc[0]['unidades_entregadas']) if pd.notna(oc_db.iloc[0]['unidades_entregadas']) else 0
-                                meta_oc = int(oc_db.iloc[0]['meta_unidades'])
-                                req_uni = oc_db.iloc[0]['requiere_unidades']
                                 nuevo_entregado = ent_actuales + unidades
-                                nuevo_estado = 'COMPLETADO' if req_uni and nuevo_entregado >= meta_oc else 'EN PROCESO'
+                                # 💡 Cierre definitivo de la Orden de Compra para que no vuelva a salir en la lista de pendientes de programación
                                 ejecutar_comando(
-                                    "UPDATE ordenes_compra SET unidades_entregadas = %s, estado = %s WHERE numero_oc = %s AND referencia = %s",
-                                    (nuevo_entregado, nuevo_estado, num_oc_asociada, referencia_pieza)
+                                    "UPDATE ordenes_compra SET unidades_entregadas = %s, estado = 'COMPLETADO' WHERE numero_oc = %s AND referencia = %s",
+                                    (nuevo_entregado, num_oc_asociada, referencia_pieza)
                                 )
 
+                        # 💡 Marcar tarea como FINALIZADA para que desaparezca de la lista de programación activa
                         ejecutar_comando("UPDATE programacion_diaria SET estado = 'FINALIZADO' WHERE id = %s", (id_tarea,))
                         
                         datos_pdf = {
@@ -603,7 +604,7 @@ if rol == "operario":
                         st.session_state["ultimo_pdf_nombre"] = f"F-01-01_OC_{num_oc_asociada}_{referencia_pieza}.pdf"
                         
                         if unidades < meta_asignada_tarea:
-                            st.warning(f"¡Producción registrada! ⚠️ **Atención:** Se reportaron piezas pendientes por completar ({meta_asignada_tarea - unidades} u. faltantes). La orden quedará en seguimiento.")
+                            st.warning(f"¡Producción registrada! ⚠️ **Atención:** Se reportaron piezas pendientes por completar ({meta_asignada_tarea - unidades} u. faltantes). La orden se ha cerrado para evitar reprogramaciones automáticas.")
                         else:
                             st.success("¡Producción registrada y formato F-01-01 generado con éxito!")
 
@@ -667,7 +668,7 @@ if rol == "operario":
                         h_fin_imp = st.time_input("Hora de Finalización", time(17, 0))
                         
                     uni_imp = st.number_input("Unidades Producidas Buenas", min_value=0, value=1)
-                    def_imp = st.number_input("Unidades Defectuosas (Scrap)", min_value=0, value=0)
+                    def_imp = st.number_input("Unidades Defectuosas (Scrap / NC)", min_value=0, value=0)
                     obs_imp = st.text_area("Observaciones del Imprevisto")
                     
                     if st.form_submit_button("Guardar", type="primary", use_container_width=True):
@@ -725,13 +726,11 @@ elif rol in ["admin", "produccion"]:
                 WHERE estado != 'COMPLETADO'
             """)
             
-            # Consultar todas las programaciones que NO estén finalizadas o canceladas para filtrar con seguridad en Python
             prog_activas = ejecutar_consulta("""
                 SELECT DISTINCT numero_oc, referencia FROM programacion_diaria 
                 WHERE estado NOT IN ('FINALIZADO', 'CANCELADO')
             """)
             
-            # Crear un conjunto (set) con las tuplas (OC, Referencia) ya programadas con limpieza de espacios
             tuplas_ya_programadas = set()
             if not prog_activas.empty:
                 for _, p_row in prog_activas.iterrows():
@@ -749,7 +748,6 @@ elif rol in ["admin", "produccion"]:
                     
                     clave_combinada = f"ID OC #{oc_id} | OC: {oc_num} - Ref: {ref_val}"
                     
-                    # Si ya está programada (activa), la saltamos para que desaparezca de la lista
                     if (oc_num, ref_val) in tuplas_ya_programadas:
                         continue
                         
@@ -1424,10 +1422,11 @@ elif rol in ["admin", "produccion"]:
                             usuario_del = st.selectbox("Selecciona el Usuario a Borrar", users_df["username"].tolist(), key="del_u_key")
                             if st.form_submit_button("Eliminar Usuario", type="primary", use_container_width=True):
                                 if usuario_del == st.session_state["username"]:
-                                 st.error("No puedes eliminar tu propia cuenta activa.")
+                                    st.error("No puedes eliminar tu propia cuenta activa.")
                                 else:
                                     ejecutar_comando("DELETE FROM usuarios WHERE username = %s", (usuario_del,))
                                     st.success("Usuario eliminado.")
                                     st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
+
