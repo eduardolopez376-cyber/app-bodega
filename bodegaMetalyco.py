@@ -154,7 +154,6 @@ def generar_reporte_produccion_excel(df_original):
     df['Cantidad Producidad'] = df['unidades_producidas'] if 'unidades_producidas' in df.columns else 0
     df['Cantidad procesadas NC'] = 0
     
-    # Extracción robusta de unidades defectuosas / No conformes desde el campo observaciones
     for idx, row in df.iterrows():
         obs = str(row.get('observaciones', ''))
         if 'Defectuosas:' in obs:
@@ -573,7 +572,6 @@ if rol == "operario":
                             if not oc_db.empty:
                                 ent_actuales = int(oc_db.iloc[0]['unidades_entregadas']) if pd.notna(oc_db.iloc[0]['unidades_entregadas']) else 0
                                 nuevo_entregado = ent_actuales + unidades
-                                # 💡 Cierre definitivo inmediato (Estado 'COMPLETADO') para que no vuelva a salir en programación
                                 ejecutar_comando(
                                     "UPDATE ordenes_compra SET unidades_entregadas = %s, estado = 'COMPLETADO' WHERE numero_oc = %s AND referencia = %s",
                                     (nuevo_entregado, num_oc_asociada, referencia_pieza)
@@ -719,13 +717,11 @@ elif rol in ["admin", "produccion"]:
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
             maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
             
-            # 💡 Filtro blindado: Solo trae órdenes de compra que NO estén COMPLETADAS en su estado
             ocs_db = ejecutar_consulta("""
                 SELECT id, numero_oc, referencia, servicio, meta_unidades FROM ordenes_compra 
                 WHERE estado != 'COMPLETADO' OR estado IS NULL
             """)
             
-            # Consultar adicionalmente todas las programaciones activas (pendiente o en proceso)
             prog_activas = ejecutar_consulta("""
                 SELECT DISTINCT numero_oc, referencia FROM programacion_diaria 
                 WHERE estado NOT IN ('FINALIZADO', 'CANCELADO')
@@ -803,13 +799,18 @@ elif rol in ["admin", "produccion"]:
             st.write(f"### Actividades Programadas para el: **{fecha_seleccionada}**")
             df_prog_actual = ejecutar_consulta("SELECT * FROM programacion_diaria WHERE fecha = %s ORDER BY id DESC", (fecha_seleccionada,))
             if not df_prog_actual.empty:
-                st.dataframe(df_prog_actual, use_container_width=True)
-                with st.expander("Eliminar Programación"):
-                    id_del = st.selectbox("ID a Eliminar", df_prog_actual["id"].tolist(), key="del_prog_id_c")
-                    if st.button("Confirmar Eliminación", type="primary", use_container_width=True):
-                        ejecutar_comando("DELETE FROM programacion_diaria WHERE id = %s", (id_del,))
-                        st.success(f"ID #{id_del} eliminado.")
+                df_prog_actual.insert(0, "Seleccionar", False)
+                edited_prog = st.data_editor(df_prog_actual, key="editor_prog_mult", use_container_width=True, hide_index=True)
+                ids_a_borrar_prog = edited_prog[edited_prog["Seleccionar"] == True]["id"].tolist()
+                
+                if st.button("🗑️ Eliminar Programaciones Seleccionadas", type="primary"):
+                    if ids_a_borrar_prog:
+                        for id_p in ids_a_borrar_prog:
+                            ejecutar_comando("DELETE FROM programacion_diaria WHERE id = %s", (id_p,))
+                        st.success(f"Se eliminaron {len(ids_a_borrar_prog)} programaciones.")
                         st.rerun()
+                    else:
+                        st.warning("Selecciona al menos una programación para eliminar.")
             else:
                 st.info(f"No hay actividades programadas para la fecha {fecha_seleccionada}.")
         except Exception as e:
@@ -880,18 +881,21 @@ elif rol in ["admin", "produccion"]:
                         return "⏳ SIN INICIAR"
                 
                 df_oc['estado_alarma'] = df_oc.apply(alerta_estado, axis=1)
-                st.dataframe(df_oc[['id', 'numero_oc', 'cliente', 'referencia', 'meta_unidades', 'unidades_entregadas', 'saldo_pendiente', 'estado_alarma']], use_container_width=True)
                 
-                with st.expander("Eliminar una Referencia Específica de la OC (Por ID de Línea)"):
-                    with st.form("form_del_oc_fila", clear_on_submit=True):
-                        id_oc_del = st.selectbox("Selecciona el ID de la línea de OC a borrar", df_oc["id"].tolist())
-                        fila_borrar = df_oc[df_oc['id'] == id_oc_del].iloc[0]
-                        st.warning(f"Vas a eliminar la línea ID #{id_oc_del} | OC: **{fila_borrar['numero_oc']}** | Ref: **{fila_borrar['referencia']}**")
-                        
-                        if st.form_submit_button("Confirmar Eliminación de esta Referencia", type="primary", use_container_width=True):
-                            ejecutar_comando("DELETE FROM ordenes_compra WHERE id = %s", (id_oc_del,))
-                            st.success(f"La referencia de la orden fue eliminada correctamente sin afectar las demás.")
-                            st.rerun()
+                df_oc_view = df_oc[['id', 'numero_oc', 'cliente', 'referencia', 'meta_unidades', 'unidades_entregadas', 'saldo_pendiente', 'estado_alarma']].copy()
+                df_oc_view.insert(0, "Seleccionar", False)
+                
+                edited_oc = st.data_editor(df_oc_view, key="editor_oc_mult", use_container_width=True, hide_index=True)
+                ids_a_borrar_oc = edited_oc[edited_oc["Seleccionar"] == True]["id"].tolist()
+                
+                if st.button("🗑️ Eliminar Órdenes de Compra Seleccionadas", type="primary"):
+                    if ids_a_borrar_oc:
+                        for id_oc in ids_a_borrar_oc:
+                            ejecutar_comando("DELETE FROM ordenes_compra WHERE id = %s", (id_oc,))
+                        st.success(f"Se eliminaron {len(ids_a_borrar_oc)} líneas de Órdenes de Compra.")
+                        st.rerun()
+                    else:
+                        st.warning("Selecciona al menos una orden para eliminar.")
             else:
                 st.info("No hay órdenes de compra registradas.")
         except Exception as e:
@@ -902,8 +906,7 @@ elif rol in ["admin", "produccion"]:
             st.subheader("⚙️ Gestión de Máquinas (Propias y Alquiladas)")
             try:
                 df_maqs = ejecutar_consulta("SELECT * FROM maquinas")
-                st.dataframe(df_maqs, use_container_width=True)
-                with st.expander("Crear"):
+                with st.expander("Crear Máquina", expanded=False):
                     with st.form("form_crear_maquina", clear_on_submit=True):
                         m_nom = st.text_input("Nombre de la Máquina (Ej: Prensa Hidráulica 01)")
                         m_tipo = st.text_input("Tipo (Ej: Conformado, Plegadora)")
@@ -921,7 +924,22 @@ elif rol in ["admin", "produccion"]:
                                 st.error("Escribe el nombre de la máquina.")
 
                 if not df_maqs.empty:
-                    with st.expander("Editar"):
+                    st.write("### Listado y Borrado Masivo de Máquinas")
+                    df_maqs_v = df_maqs.copy()
+                    df_maqs_v.insert(0, "Seleccionar", False)
+                    edited_maq = st.data_editor(df_maqs_v, key="editor_maq_mult", use_container_width=True, hide_index=True)
+                    nombres_a_borrar_maq = edited_maq[edited_maq["Seleccionar"] == True]["nombre"].tolist()
+                    
+                    if st.button("🗑️ Eliminar Máquinas Seleccionadas", type="primary"):
+                        if nombres_a_borrar_maq:
+                            for maq_nom in nombres_a_borrar_maq:
+                                ejecutar_comando("DELETE FROM maquinas WHERE nombre = %s", (maq_nom,))
+                            st.success(f"Se eliminaron {len(nombres_a_borrar_maq)} máquinas.")
+                            st.rerun()
+                        else:
+                            st.warning("Selecciona al menos una máquina.")
+
+                    with st.expander("Editar una Máquina"):
                         with st.form("form_editar_maquina"):
                             maq_edit_sel = st.selectbox("Selecciona la Máquina a Editar", df_maqs["nombre"].tolist())
                             maq_data = ejecutar_consulta("SELECT tipo, tipo_propiedad, costo_hora_alquiler FROM maquinas WHERE nombre = %s", (maq_edit_sel,))
@@ -942,14 +960,6 @@ elif rol in ["admin", "produccion"]:
                                 )
                                 st.success("¡Máquina actualizada con éxito!")
                                 st.rerun()
-
-                    with st.expander("Eliminar"):
-                        with st.form("form_del_maquina", clear_on_submit=True):
-                            m_del = st.selectbox("Máquina a Borrar", df_maqs["nombre"].tolist())
-                            if st.form_submit_button("Eliminar Máquina", type="primary", use_container_width=True):
-                                ejecutar_comando("DELETE FROM maquinas WHERE nombre = %s", (m_del,))
-                                st.success("Máquina eliminada.")
-                                st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
 
@@ -957,9 +967,7 @@ elif rol in ["admin", "produccion"]:
             st.subheader("🛠️ Administración de Servicios Prestados")
             try:
                 df_serv = ejecutar_consulta("SELECT * FROM servicios_prestados ORDER BY id DESC")
-                if not df_serv.empty:
-                    st.dataframe(df_serv, use_container_width=True)
-                with st.expander("Crear"):
+                with st.expander("Crear Servicio", expanded=False):
                     with st.form("form_crear_serv", clear_on_submit=True):
                         nom_serv = st.text_input("Nombre del Servicio (Ej: PLEGADO, CORTE)")
                         if st.form_submit_button("Guardar Servicio", type="primary", use_container_width=True):
@@ -969,7 +977,22 @@ elif rol in ["admin", "produccion"]:
                                 st.rerun()
 
                 if not df_serv.empty:
-                    with st.expander("Editar"):
+                    st.write("### Listado y Borrado Masivo de Servicios")
+                    df_serv_v = df_serv.copy()
+                    df_serv_v.insert(0, "Seleccionar", False)
+                    edited_serv = st.data_editor(df_serv_v, key="editor_serv_mult", use_container_width=True, hide_index=True)
+                    nombres_a_borrar_serv = edited_serv[edited_serv["Seleccionar"] == True]["nombre"].tolist()
+                    
+                    if st.button("🗑️ Eliminar Servicios Seleccionados", type="primary"):
+                        if nombres_a_borrar_serv:
+                            for s_nom in nombres_a_borrar_serv:
+                                ejecutar_comando("DELETE FROM servicios_prestados WHERE nombre = %s", (s_nom,))
+                            st.success(f"Se eliminaron {len(nombres_a_borrar_serv)} servicios.")
+                            st.rerun()
+                        else:
+                            st.warning("Selecciona al menos un servicio.")
+
+                    with st.expander("Editar un Servicio"):
                         with st.form("form_editar_serv"):
                             serv_edit_sel = st.selectbox("Selecciona el Servicio a Editar", df_serv["nombre"].tolist())
                             nuevo_nom_serv = st.text_input("Nuevo Nombre de Servicio", value=serv_edit_sel)
@@ -978,14 +1001,6 @@ elif rol in ["admin", "produccion"]:
                                     ejecutar_comando("UPDATE servicios_prestados SET nombre = %s WHERE nombre = %s", (nuevo_nom_serv.upper().strip(), serv_edit_sel))
                                     st.success("¡Servicio actualizado!")
                                     st.rerun()
-
-                    with st.expander("Eliminar"):
-                        with st.form("form_del_serv", clear_on_submit=True):
-                            serv_del = st.selectbox("Servicio a Borrar", df_serv["nombre"].tolist())
-                            if st.form_submit_button("Eliminar Servicio", type="primary", use_container_width=True):
-                                ejecutar_comando("DELETE FROM servicios_prestados WHERE nombre = %s", (serv_del,))
-                                st.success("Servicio eliminado.")
-                                st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
 
@@ -995,9 +1010,8 @@ elif rol in ["admin", "produccion"]:
             df_refs = ejecutar_consulta("SELECT * FROM referencias")
             clientes_db = ejecutar_consulta("SELECT nombre FROM clientes")
             lista_clientes = clientes_db['nombre'].tolist() if not clientes_db.empty else []
-            if not df_refs.empty:
-                st.dataframe(df_refs, use_container_width=True)
-            with st.expander("Crear"):
+            
+            with st.expander("Crear Referencia", expanded=False):
                 with st.form("form_crear_ref", clear_on_submit=True):
                     r_cod = st.text_input("Código Referencia (Ej: REF-001)")
                     r_desc = st.text_input("Descripción del Producto")
@@ -1008,31 +1022,39 @@ elif rol in ["admin", "produccion"]:
                             st.success("Referencia guardada.")
                             st.rerun()
 
-            if not df_refs.empty and rol == "admin":
-                with st.expander("Editar"):
-                    with st.form("form_editar_ref"):
-                        ref_edit_sel = st.selectbox("Selecciona la Referencia a Editar", df_refs["codigo"].tolist())
-                        ref_data = ejecutar_consulta("SELECT descripcion, cliente FROM referencias WHERE codigo = %s", (ref_edit_sel,))
-                        d_act = ref_data.iloc[0]['descripcion'] if not ref_data.empty else ""
-                        cli_act = ref_data.iloc[0]['cliente'] if not ref_data.empty else ""
-                        
-                        idx_c = lista_clientes.index(cli_act) if cli_act in lista_clientes else 0
-                        nuevo_cod_ref = st.text_input("Nuevo Código de Referencia", value=ref_edit_sel)
-                        nuevo_desc_ref = st.text_input("Nueva Descripción", value=d_act)
-                        nuevo_cli_ref = st.selectbox("Nuevo Cliente Asociado", lista_clientes if lista_clientes else ["SIN CLIENTE"], index=idx_c)
-                        
-                        if st.form_submit_button("Actualizar Referencia", type="primary", use_container_width=True):
-                            ejecutar_comando("UPDATE referencias SET codigo = %s, descripcion = %s, cliente = %s WHERE codigo = %s", (nuevo_cod_ref.upper().strip(), nuevo_desc_ref, nuevo_cli_ref, ref_edit_sel))
-                            st.success("¡Referencia actualizada!")
-                            st.rerun()
+            if not df_refs.empty:
+                st.write("### Listado y Borrado Masivo de Referencias")
+                df_refs_v = df_refs.copy()
+                df_refs_v.insert(0, "Seleccionar", False)
+                edited_refs = st.data_editor(df_refs_v, key="editor_refs_mult", use_container_width=True, hide_index=True)
+                codigos_a_borrar_ref = edited_refs[edited_refs["Seleccionar"] == True]["codigo"].tolist()
+                
+                if st.button("🗑️ Eliminar Referencias Seleccionadas", type="primary"):
+                    if codigos_a_borrar_ref:
+                        for r_cod_item in codigos_a_borrar_ref:
+                            ejecutar_comando("DELETE FROM referencias WHERE codigo = %s", (r_cod_item,))
+                        st.success(f"Se eliminaron {len(codigos_a_borrar_ref)} referencias.")
+                        st.rerun()
+                    else:
+                        st.warning("Selecciona al menos una referencia.")
 
-                with st.expander("Eliminar"):
-                    with st.form("form_del_ref", clear_on_submit=True):
-                        r_del = st.selectbox("Referencia a Borrar", df_refs["codigo"].tolist())
-                        if st.form_submit_button("Eliminar Referencia", type="primary", use_container_width=True):
-                            ejecutar_comando("DELETE FROM referencias WHERE codigo = %s", (r_del,))
-                            st.success("Referencia eliminada.")
-                            st.rerun()
+                if rol == "admin":
+                    with st.expander("Editar una Referencia"):
+                        with st.form("form_editar_ref"):
+                            ref_edit_sel = st.selectbox("Selecciona la Referencia a Editar", df_refs["codigo"].tolist())
+                            ref_data = ejecutar_consulta("SELECT descripcion, cliente FROM referencias WHERE codigo = %s", (ref_edit_sel,))
+                            d_act = ref_data.iloc[0]['descripcion'] if not ref_data.empty else ""
+                            cli_act = ref_data.iloc[0]['cliente'] if not ref_data.empty else ""
+                            
+                            idx_c = lista_clientes.index(cli_act) if cli_act in lista_clientes else 0
+                            nuevo_cod_ref = st.text_input("Nuevo Código de Referencia", value=ref_edit_sel)
+                            nuevo_desc_ref = st.text_input("Nueva Descripción", value=d_act)
+                            nuevo_cli_ref = st.selectbox("Nuevo Cliente Asociado", lista_clientes if lista_clientes else ["SIN CLIENTE"], index=idx_c)
+                            
+                            if st.form_submit_button("Actualizar Referencia", type="primary", use_container_width=True):
+                                ejecutar_comando("UPDATE referencias SET codigo = %s, descripcion = %s, cliente = %s WHERE codigo = %s", (nuevo_cod_ref.upper().strip(), nuevo_desc_ref, nuevo_cli_ref, ref_edit_sel))
+                                st.success("¡Referencia actualizada!")
+                                st.rerun()
         except Exception as e:
             st.error(f"Error: {e}")
 
@@ -1062,24 +1084,25 @@ elif rol in ["admin", "produccion"]:
             try:
                 df_produccion_raw = ejecutar_consulta("SELECT * FROM registro_produccion ORDER BY id DESC")
                 if not df_produccion_raw.empty:
-                    if 'fecha_registro' in df_produccion_raw.columns:
-                        df_produccion_raw['dt'] = pd.to_datetime(df_produccion_raw['fecha_registro']).dt.date
+                    df_produccion_raw_copy = df_produccion_raw.copy()
+                    if 'fecha_registro' in df_produccion_raw_copy.columns:
+                        df_produccion_raw_copy['dt'] = pd.to_datetime(df_produccion_raw_copy['fecha_registro']).dt.date
                     else:
-                        df_produccion_raw['dt'] = (datetime.now() - timedelta(hours=5)).date()
+                        df_produccion_raw_copy['dt'] = (datetime.now() - timedelta(hours=5)).date()
 
                     if filtro_periodo == "Diario":
-                        df_produccion_raw = df_produccion_raw[df_produccion_raw['dt'] == fecha_filtro]
+                        df_produccion_raw_copy = df_produccion_raw_copy[df_produccion_raw_copy['dt'] == fecha_filtro]
                     elif filtro_periodo == "Semanal":
                         inicio_sem = pd.to_datetime(fecha_filtro) - timedelta(days=pd.to_datetime(fecha_filtro).weekday())
                         fin_sem = inicio_sem + timedelta(days=6)
-                        df_produccion_raw = df_produccion_raw[(df_produccion_raw['dt'] >= inicio_sem.date()) & (df_produccion_raw['dt'] <= fin_sem.date())]
+                        df_produccion_raw_copy = df_produccion_raw_copy[(df_produccion_raw_copy['dt'] >= inicio_sem.date()) & (df_produccion_raw_copy['dt'] <= fin_sem.date())]
                     elif filtro_periodo == "Mensual":
                         meses_dict = {"Enero": 1, "Febrero": 2, "Marzo": 3, "Abril": 4, "Mayo": 5, "Junio": 6, "Julio": 7, "Agosto": 8, "Septiembre": 9, "Octubre": 10, "Noviembre": 11, "Diciembre": 12}
                         m_num = meses_dict[mes_opcion]
-                        df_produccion_raw = df_produccion_raw[(pd.to_datetime(df_produccion_raw['dt']).dt.month == m_num) & (pd.to_datetime(df_produccion_raw['dt']).dt.year == anio_opcion)]
+                        df_produccion_raw_copy = df_produccion_raw_copy[(pd.to_datetime(df_produccion_raw_copy['dt']).dt.month == m_num) & (pd.to_datetime(df_produccion_raw_copy['dt']).dt.year == anio_opcion)]
 
-                    if not df_produccion_raw.empty:
-                        df_final = generar_reporte_produccion_excel(df_produccion_raw)
+                    if not df_produccion_raw_copy.empty:
+                        df_final = generar_reporte_produccion_excel(df_produccion_raw_copy)
                         st.dataframe(df_final, use_container_width=True)
                         buffer_prod = io.BytesIO()
                         with pd.ExcelWriter(buffer_prod, engine='openpyxl') as writer:
@@ -1094,14 +1117,21 @@ elif rol in ["admin", "produccion"]:
                     else:
                         st.info(f"No hay registros de producción para el período seleccionado ({filtro_periodo}).")
                         
-                    with st.expander("🧹 Limpiar o Borrar Registros de Producción Antiguos"):
-                        with st.form("form_limpiar_prod"):
-                            reg_produccion_ids = df_produccion_raw['id'].tolist() if 'id' in df_produccion_raw.columns else []
-                            id_a_borrar = st.selectbox("Selecciona el ID de Registro de Producción a Borrar", reg_produccion_ids)
-                            if st.form_submit_button("Eliminar este Registro Antiguo", type="primary", use_container_width=True):
-                                ejecutar_comando("DELETE FROM registro_produccion WHERE id = %s", (id_a_borrar,))
-                                st.success(f"Registro de producción #{id_a_borrar} eliminado con éxito.")
-                                st.rerun()
+                    st.write("---")
+                    st.markdown("### 🧹 Borrado Masivo de Registros de Producción Antiguos")
+                    df_prod_del = df_produccion_raw.copy()
+                    df_prod_del.insert(0, "Seleccionar", False)
+                    edited_prod = st.data_editor(df_prod_del, key="editor_prod_mult", use_container_width=True, hide_index=True)
+                    ids_a_borrar_prod = edited_prod[edited_prod["Seleccionar"] == True]["id"].tolist()
+                    
+                    if st.button("🗑️ Eliminar Registros de Producción Seleccionados", type="primary"):
+                        if ids_a_borrar_prod:
+                            for id_rp in ids_a_borrar_prod:
+                                ejecutar_comando("DELETE FROM registro_produccion WHERE id = %s", (id_rp,))
+                            st.success(f"Se eliminaron {len(ids_a_borrar_prod)} registros de producción.")
+                            st.rerun()
+                        else:
+                            st.warning("Selecciona al menos un registro para borrar.")
                 else:
                     st.info("No hay registros de producción disponibles.")
             except Exception as e:
@@ -1278,15 +1308,22 @@ elif rol in ["admin", "produccion"]:
         try:
             inv_gen = ejecutar_consulta("SELECT codigo, nombre, tipo as clase, cantidad, stock_minimo FROM inventario")
             if not inv_gen.empty:
-                st.dataframe(inv_gen, use_container_width=True)
-                if rol == "admin":
-                    with st.expander("Eliminar"):
-                        with st.form("form_del_inv", clear_on_submit=True):
-                            del_cod_gen = st.selectbox("Código a Eliminar", inv_gen["codigo"].tolist())
-                            if st.form_submit_button("Confirmar Eliminación de Ítem", type="primary", use_container_width=True):
-                                ejecutar_comando("DELETE FROM inventario WHERE codigo = %s", (del_cod_gen,))
-                                st.success("Ítem eliminado del inventario.")
-                                st.rerun()
+                st.write("### Listado y Borrado Masivo de Ítems de Inventario")
+                inv_gen_v = inv_gen.copy()
+                inv_gen_v.insert(0, "Seleccionar", False)
+                edited_inv = st.data_editor(inv_gen_v, key="editor_inv_mult", use_container_width=True, hide_index=True)
+                codigos_a_borrar_inv = edited_inv[edited_inv["Seleccionar"] == True]["codigo"].tolist()
+                
+                if st.button("🗑️ Eliminar Ítems Seleccionados", type="primary"):
+                    if codigos_a_borrar_inv:
+                        for c_item in codigos_a_borrar_inv:
+                            ejecutar_comando("DELETE FROM inventario WHERE codigo = %s", (c_item,))
+                        st.success(f"Se eliminaron {len(codigos_a_borrar_inv)} ítems del inventario.")
+                        st.rerun()
+                    else:
+                        st.warning("Selecciona al menos un ítem.")
+            else:
+                st.info("El inventario está vacío.")
         except Exception as e:
             st.error(f"Error: {e}")
 
@@ -1295,9 +1332,7 @@ elif rol in ["admin", "produccion"]:
             st.subheader("🏷️ Administración de Clases de Inventario")
             try:
                 clases_actuales = ejecutar_consulta("SELECT * FROM clases_inventario ORDER BY id DESC")
-                if not clases_actuales.empty:
-                    st.dataframe(clases_actuales, use_container_width=True)
-                with st.expander("Crear"):
+                with st.expander("Crear Clase", expanded=False):
                     with st.form("form_crear_clase", clear_on_submit=True):
                         nueva_clase = st.text_input("Nombre de la Clase (Ej: HERRAMIENTA, MATERIA PRIMA)")
                         if st.form_submit_button("Guardar Clase", type="primary", use_container_width=True):
@@ -1307,7 +1342,22 @@ elif rol in ["admin", "produccion"]:
                                 st.rerun()
 
                 if not clases_actuales.empty:
-                    with st.expander("Editar"):
+                    st.write("### Listado y Borrado Masivo de Clases")
+                    clases_v = clases_actuales.copy()
+                    clases_v.insert(0, "Seleccionar", False)
+                    edited_clases = st.data_editor(clases_v, key="editor_clases_mult", use_container_width=True, hide_index=True)
+                    nombres_a_borrar_clases = edited_clases[edited_clases["Seleccionar"] == True]["nombre"].tolist()
+                    
+                    if st.button("🗑️ Eliminar Clases Seleccionadas", type="primary"):
+                        if nombres_a_borrar_clases:
+                            for c_nom in nombres_a_borrar_clases:
+                                ejecutar_comando("DELETE FROM clases_inventario WHERE nombre = %s", (c_nom,))
+                            st.success(f"Se eliminaron {len(nombres_a_borrar_clases)} clases.")
+                            st.rerun()
+                        else:
+                            st.warning("Selecciona al menos una clase.")
+
+                    with st.expander("Editar una Clase"):
                         with st.form("form_editar_clase"):
                             clase_edit_sel = st.selectbox("Selecciona la Clase a Editar", clases_actuales["nombre"].tolist())
                             nueva_nombre_clase = st.text_input("Nuevo Nombre de Clase", value=clase_edit_sel)
@@ -1316,14 +1366,6 @@ elif rol in ["admin", "produccion"]:
                                     ejecutar_comando("UPDATE clases_inventario SET nombre = %s WHERE nombre = %s", (nueva_nombre_clase.upper().strip(), clase_edit_sel))
                                     st.success("¡Clase actualizada!")
                                     st.rerun()
-
-                    with st.expander("Eliminar"):
-                        with st.form("form_del_clase", clear_on_submit=True):
-                            clase_del = st.selectbox("Selecciona la Clase a Borrar", clases_actuales["nombre"].tolist())
-                            if st.form_submit_button("Eliminar Clase", type="primary", use_container_width=True):
-                                ejecutar_comando("DELETE FROM clases_inventario WHERE nombre = %s", (clase_del,))
-                                st.success("Clase eliminada.")
-                                st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
 
@@ -1331,9 +1373,7 @@ elif rol in ["admin", "produccion"]:
             st.subheader("👥 Administración de Clientes")
             try:
                 clientes_df = ejecutar_consulta("SELECT * FROM clientes ORDER BY id DESC")
-                if not clientes_df.empty:
-                    st.dataframe(clientes_df, use_container_width=True)
-                with st.expander("Crear"):
+                with st.expander("Crear Cliente", expanded=False):
                     with st.form("form_crear_cliente", clear_on_submit=True):
                         nom_cliente = st.text_input("Razón Social / Nombre de la Empresa")
                         nit_cliente = st.text_input("NIT (Opcional)")
@@ -1348,7 +1388,22 @@ elif rol in ["admin", "produccion"]:
                                 st.rerun()
 
                 if not clientes_df.empty:
-                    with st.expander("Editar"):
+                    st.write("### Listado y Borrado Masivo de Clientes")
+                    clientes_v = clientes_df.copy()
+                    clientes_v.insert(0, "Seleccionar", False)
+                    edited_cli = st.data_editor(clientes_v, key="editor_cli_mult", use_container_width=True, hide_index=True)
+                    nombres_a_borrar_cli = edited_cli[edited_cli["Seleccionar"] == True]["nombre"].tolist()
+                    
+                    if st.button("🗑️ Eliminar Clientes Seleccionados", type="primary"):
+                        if nombres_a_borrar_cli:
+                            for cli_nom in nombres_a_borrar_cli:
+                                ejecutar_comando("DELETE FROM clientes WHERE nombre = %s", (cli_nom,))
+                            st.success(f"Se eliminaron {len(nombres_a_borrar_cli)} clientes.")
+                            st.rerun()
+                        else:
+                            st.warning("Selecciona al menos un cliente.")
+
+                    with st.expander("Editar un Cliente"):
                         with st.form("form_editar_cliente"):
                             cliente_edit_sel = st.selectbox("Selecciona el Cliente a Editar", clientes_df["nombre"].tolist())
                             datos_cli = ejecutar_consulta("SELECT nit, telefono FROM clientes WHERE nombre = %s", (cliente_edit_sel,))
@@ -1367,14 +1422,6 @@ elif rol in ["admin", "produccion"]:
                                     )
                                     st.success("¡Cliente actualizado!")
                                     st.rerun()
-
-                    with st.expander("Eliminar"):
-                        with st.form("form_del_cliente", clear_on_submit=True):
-                            cliente_del = st.selectbox("Selecciona el Cliente a Borrar", clientes_df["nombre"].tolist(), key="del_cli_key")
-                            if st.form_submit_button("Eliminar Cliente", type="primary", use_container_width=True):
-                                ejecutar_comando("DELETE FROM clientes WHERE nombre = %s", (cliente_del,))
-                                st.success("Cliente eliminado.")
-                                st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
 
@@ -1382,9 +1429,7 @@ elif rol in ["admin", "produccion"]:
             st.subheader("⚙️ Gestión y Seguridad de Usuarios del Sistema")
             try:
                 users_df = ejecutar_consulta("SELECT id, username, nombre, rol FROM usuarios ORDER BY id DESC")
-                if not users_df.empty:
-                    st.dataframe(users_df, use_container_width=True)
-                with st.expander("Crear"):
+                with st.expander("Crear Usuario", expanded=False):
                     with st.form("form_crear_usuario", clear_on_submit=True):
                         u_user = st.text_input("Usuario (Login)")
                         u_pass = st.text_input("Contraseña", type="password")
@@ -1397,7 +1442,25 @@ elif rol in ["admin", "produccion"]:
                                 st.rerun()
 
                 if not users_df.empty:
-                    with st.expander("Editar"):
+                    st.write("### Listado y Borrado Masivo de Usuarios")
+                    users_v = users_df.copy()
+                    users_v.insert(0, "Seleccionar", False)
+                    edited_users = st.data_editor(users_v, key="editor_users_mult", use_container_width=True, hide_index=True)
+                    usernames_a_borrar = edited_users[edited_users["Seleccionar"] == True]["username"].tolist()
+                    
+                    if st.button("🗑️ Eliminar Usuarios Seleccionados", type="primary"):
+                        if usernames_a_borrar:
+                            if st.session_state["username"] in usernames_a_borrar:
+                                st.error("No puedes eliminar tu propia cuenta activa.")
+                            else:
+                                for u_usr in usernames_a_borrar:
+                                    ejecutar_comando("DELETE FROM usuarios WHERE username = %s", (u_usr,))
+                                st.success(f"Se eliminaron {len(usernames_a_borrar)} usuarios.")
+                                st.rerun()
+                        else:
+                            st.warning("Selecciona al menos un usuario.")
+
+                    with st.expander("Editar un Usuario"):
                         with st.form("form_editar_usuario"):
                             edit_user_sel = st.selectbox("Selecciona el Usuario a Editar", users_df["username"].tolist())
                             user_actual = ejecutar_consulta("SELECT nombre, rol FROM usuarios WHERE username = %s", (edit_user_sel,))
@@ -1414,18 +1477,7 @@ elif rol in ["admin", "produccion"]:
                                     ejecutar_comando("UPDATE usuarios SET nombre = %s, password = %s, rol = %s WHERE username = %s", (nuevo_nombre.strip(), nueva_pass, nuevo_rol, edit_user_sel))
                                 else:
                                     ejecutar_comando("UPDATE usuarios SET nombre = %s, rol = %s WHERE username = %s", (nuevo_nombre.strip(), nuevo_rol, edit_user_sel))
-                                st.success("¡Usuario actualizada!")
+                                st.success("¡Usuario actualizado!")
                                 st.rerun()
-
-                    with st.expander("Eliminar"):
-                        with st.form("form_del_usuario", clear_on_submit=True):
-                            usuario_del = st.selectbox("Selecciona el Usuario a Borrar", users_df["username"].tolist(), key="del_u_key")
-                            if st.form_submit_button("Eliminar Usuario", type="primary", use_container_width=True):
-                                if usuario_del == st.session_state["username"]:
-                                    st.error("No puedes eliminar tu propia cuenta activa.")
-                                else:
-                                    ejecutar_comando("DELETE FROM usuarios WHERE username = %s", (usuario_del,))
-                                    st.success("Usuario eliminado.")
-                                    st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
