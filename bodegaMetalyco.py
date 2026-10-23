@@ -23,7 +23,7 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# Estilos CSS avanzados para unificar tamaños y estilos visuales idénticos a tu referencia
+# Estilos CSS avanzados para eliminar la etiqueta de navegación y unificar tamaños
 st.markdown("""
     <style>
         .stApp {
@@ -44,7 +44,12 @@ st.markdown("""
             padding-top: 1rem;
         }
 
-        /* Unificar el tamaño y ancho de TODOS los botones de acción inferior (Actualizar y Cerrar Sesión) */
+        /* Ocultar la etiqueta superior de texto o label que genera el radio por defecto ("Navegación") */
+        [data-testid="stSidebar"] .stRadio > label {
+            display: none !important;
+        }
+
+        /* Unificar el tamaño y ancho de TODOS los botones de acción inferior */
         .stButton>button {
             width: 100% !important;
             height: 3.2rem !important;
@@ -103,7 +108,7 @@ st.markdown("""
             align-items: center;
         }
         
-        /* Ocultar por completo los selectores nativos de radio */
+        /* Ocultar por completo los círculos selectores nativos de radio */
         [data-testid="stSidebar"] .stRadio input[type="radio"] {
             display: none !important;
         }
