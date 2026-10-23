@@ -23,7 +23,7 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# Estilos CSS avanzados para las tarjetas del menú lateral idénticas a tu requerimiento
+# Estilos CSS avanzados para unificar tamaños y estilos visuales idénticos a tu referencia
 st.markdown("""
     <style>
         .stApp {
@@ -44,23 +44,23 @@ st.markdown("""
             padding-top: 1rem;
         }
 
-        /* Estilo para los botones de acción general */
+        /* Unificar el tamaño y ancho de TODOS los botones de acción inferior (Actualizar y Cerrar Sesión) */
         .stButton>button {
-            width: 100%;
-            height: 3rem;
-            font-size: 1rem;
-            font-weight: bold;
-            border-radius: 10px;
-            background: linear-gradient(135deg, #FF7A00 0%, #cc6200 100%);
-            color: #ffffff;
-            border: none;
-            box-shadow: 0 4px 15px rgba(255, 122, 0, 0.4);
-            transition: all 0.3s ease;
+            width: 100% !important;
+            height: 3.2rem !important;
+            font-size: 1rem !important;
+            font-weight: bold !important;
+            border-radius: 12px !important;
+            background: linear-gradient(135deg, #FF7A00 0%, #cc6200 100%) !important;
+            color: #ffffff !important;
+            border: 1px solid rgba(255, 122, 0, 0.5) !important;
+            box-shadow: 0 4px 15px rgba(255, 122, 0, 0.4) !important;
+            transition: all 0.3s ease !important;
         }
         .stButton>button:hover {
-            background: linear-gradient(135deg, #ff9124 0%, #FF7A00 100%);
-            box-shadow: 0 6px 20px rgba(255, 122, 0, 0.6);
-            transform: translateY(-1px);
+            background: linear-gradient(135deg, #ff9124 0%, #FF7A00 100%) !important;
+            box-shadow: 0 6px 20px rgba(255, 122, 0, 0.6) !important;
+            transform: translateY(-1px) !important;
         }
 
         /* Contenedor central para la foto de perfil en la barra lateral */
@@ -81,7 +81,7 @@ st.markdown("""
             box-shadow: 0 4px 15px rgba(255, 122, 0, 0.3);
         }
 
-        /* Transformar las opciones del menú lateral en tarjetas uniformes tipo botón */
+        /* Transformar las opciones del menú lateral en tarjetas uniformes del mismo tamaño */
         [data-testid="stSidebar"] .stRadio > div {
             gap: 8px;
             width: 100%;
@@ -94,6 +94,7 @@ st.markdown("""
             font-weight: 500;
             font-size: 0.95rem;
             width: 100% !important;
+            height: 3.2rem !important;
             box-sizing: border-box;
             border: 1px solid rgba(255, 255, 255, 0.08);
             transition: all 0.3s ease;
@@ -102,7 +103,7 @@ st.markdown("""
             align-items: center;
         }
         
-        /* Ocultar por completo los círculos nativos de selección al lado */
+        /* Ocultar por completo los selectores nativos de radio */
         [data-testid="stSidebar"] .stRadio input[type="radio"] {
             display: none !important;
         }
@@ -118,7 +119,7 @@ st.markdown("""
             box-shadow: 0 4px 12px rgba(255, 122, 0, 0.2);
         }
 
-        /* Estilo fijo para la opción seleccionada (activa) */
+        /* Estilo fijo para la opción seleccionada (activa en naranja con borde brillante) */
         [data-testid="stSidebar"] .stRadio div[checked="true"] label,
         [data-testid="stSidebar"] .stRadio input:checked + div,
         [data-testid="stSidebar"] .stRadio label:has(input:checked) {
@@ -126,7 +127,7 @@ st.markdown("""
             color: #FF7A00 !important;
             font-weight: bold !important;
             border: 1px solid #FF7A00 !important;
-            box-shadow: 0 4px 15px rgba(255, 122, 0, 0.3);
+            box-shadow: 0 0 15px rgba(255, 122, 0, 0.4);
             border-radius: 12px !important;
         }
     </style>
@@ -635,7 +636,7 @@ with st.sidebar:
             st.rerun()
             
         if avatar_actual and os.path.exists(avatar_actual):
-            if st.button("🗑️ Eliminar Foto", use_container_width=True):
+            if st.button("Eliminar Foto", use_container_width=True):
                 ejecutar_comando("UPDATE usuarios SET avatar_path = NULL WHERE username = %s", (st.session_state['username'],))
                 st.session_state["avatar_path"] = None
                 st.success("¡Foto eliminada!")
@@ -661,9 +662,9 @@ with st.sidebar:
     menu_seleccionado = st.radio("Navegación", opciones_menu, label_visibility="collapsed")
     
     st.markdown("---")
-    if st.button("🔄 Actualizar Datos", use_container_width=True):
+    if st.button("Actualizar Datos", use_container_width=True):
         st.rerun()
-    if st.button("🔒 Cerrar Sesión", use_container_width=True):
+    if st.button("Cerrar Sesión", use_container_width=True):
         st.session_state["autenticado"] = False
         st.session_state["rol"] = None
         st.session_state["nombre_usuario"] = None
