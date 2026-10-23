@@ -8,7 +8,15 @@ from datetime import datetime, time, date, timedelta
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
-# Configuración de página con diseño ajustado a móviles
+# =====================================================
+# PALETA DE COLORES Y ESTILOS (INDUSTRIAL EXÓTICO)
+# =====================================================
+COLOR_FONDO_OSCURO = "#121212"  # Negro profundo
+COLOR_TARJETA_OSCURA = "#1a1a1a" # Gris ultra oscuro para tarjetas/login
+COLOR_TEXTO_CLARO = "#E0E0E0"    # Blanco suave
+COLOR_ACENTO_NARANJA = "#FF7A00" # Naranja vibrante
+COLOR_GRIS_BORDE = "#2a2a2a"     # Gris para sutiles bordes
+
 st.set_page_config(
     page_title="Control de Producción - Industrias Metal&Co",
     page_icon="⚙️",
@@ -16,41 +24,60 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Estilos CSS optimizados
-st.markdown("""
+# Estilos CSS generales para toda la app y la tarjeta de login exótica
+st.markdown(f"""
     <style>
-        .block-container {
-            padding-top: 1.5rem;
+        .stApp {{
+            background-color: {COLOR_FONDO_OSCURO};
+            color: {COLOR_TEXTO_CLARO};
+        }}
+        
+        /* Contenedor principal de la app */
+        .block-container {{
+            padding-top: 1rem;
             padding-bottom: 2rem;
             padding-left: 1rem;
             padding-right: 1rem;
-        }
-        .stButton>button {
+        }}
+        
+        /* Estilos generales de inputs y botones */
+        .stButton>button {{
             width: 100%;
-            height: 3rem;
+            height: 3.2rem;
             font-size: 1.1rem;
             font-weight: bold;
-            border-radius: 8px;
-        }
-        input {
-            font-size: 1rem !important;
-        }
+            border-radius: 10px;
+            background-color: {COLOR_ACENTO_NARANJA};
+            color: #000000;
+            border: none;
+            transition: all 0.3s ease;
+        }}
+        .stButton>button:hover {{
+            background-color: #ff9124;
+            box-shadow: 0 0 15px rgba(255,122,0,0.4);
+        }}
+        
+        /* Sidebar personalizado */
+        [data-testid="stSidebar"] {{
+            background-color: {COLOR_TARJETA_OSCURA};
+            border-right: 1px solid {COLOR_ACENTO_NARANJA};
+        }}
     </style>
 """, unsafe_allow_html=True)
 
-# Buscar imagen disponible en el directorio
-NOMBRES_LOGO = ["WhatsApp Image 2026-10-06 at 6.50.00 PM.jpeg", "logo.jpeg", "logo.png", "logo.jpg"]
+# Buscar imagen del logo con el nuevo nombre
+NOMBRES_LOGO = ["logometalyco.jpg", "logo.jpeg", "logo.png", "logo.jpg"]
 LOGO_PATH = None
 for nombre in NOMBRES_LOGO:
     if os.path.exists(nombre):
         LOGO_PATH = nombre
         break
 
-def mostrar_logo(ancho=100):
+def mostrar_logo(ancho=160):
     if LOGO_PATH:
         st.image(LOGO_PATH, width=ancho)
     else:
-        st.write("📦 **Industrias Metal&Co**")
+        st.markdown(f"<h3 style='color: {COLOR_ACENTO_NARANJA};'>METAL&CO</h3>", unsafe_allow_html=True)
 
 # Parámetros de Conexión a Supabase
 DB_PARAMS = {
@@ -394,42 +421,80 @@ if "username" not in st.session_state:
 if "form_key_counter" not in st.session_state:
     st.session_state["form_key_counter"] = 0
 
-# PANTALLA DE LOGIN
+# ====================================================
+# PANTALLA DE LOGIN EXÓTICA Y LLAMATIVA
+# ====================================================
 if not st.session_state["autenticado"]:
-    st.title("🔑 Sistema Industrias Metal&Co")
-    st.subheader("Inicio de Sesión")
+    st.markdown(f"""
+        <style>
+            .login-card {{
+                background-color: {COLOR_TARJETA_OSCURA};
+                border: 1px solid {COLOR_GRIS_BORDE};
+                border-radius: 20px;
+                padding: 3rem 2.5rem;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+                max-width: 480px;
+                margin: 0 auto;
+            }
+            .login-title {{
+                color: {COLOR_TEXTO_CLARO};
+                font-weight: 700;
+                text-align: center;
+                margin-bottom: 0.3rem;
+                font-size: 2rem;
+            }}
+            .login-subtitle {{
+                color: #888888;
+                text-align: center;
+                margin-bottom: 2rem;
+                font-size: 0.95rem;
+            }}
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
     
-    c_logo, c_form = st.columns([1, 1], vertical_alignment="center")
-    with c_logo:
-        mostrar_logo(ancho=250)
-    with c_form:
-        with st.form("form_login"):
-            user_input = st.text_input("Usuario")
-            pass_input = st.text_input("Contraseña", type="password")
-            submit_login = st.form_submit_button("Ingresar", type="primary", use_container_width=True)
+    col_l1, col_l2, col_l3 = st.columns([1, 1.2, 1])
+    with col_l2:
+        with st.container():
+            col_img1, col_img2, col_img3 = st.columns([1, 2, 1])
+            with col_img2:
+                mostrar_logo(ancho=180)
             
-            if submit_login:
-                try:
-                    res = ejecutar_consulta(
-                        "SELECT username, nombre, rol FROM usuarios WHERE username = %s AND password = %s",
-                        (user_input, pass_input)
-                    )
-                    if not res.empty:
-                        st.session_state["autenticado"] = True
-                        st.session_state["username"] = res.iloc[0]["username"]
-                        st.session_state["nombre_usuario"] = res.iloc[0]["nombre"]
-                        st.session_state["rol"] = res.iloc[0]["rol"]
-                        st.rerun()
-                    else:
-                        st.error("Usuario o contraseña incorrectos")
-                except Exception as e:
-                    st.error(f"Error de conexión: {e}")
+            st.markdown("<h1 class='login-title'>Iniciar Sesión</h1>", unsafe_allow_html=True)
+            st.markdown("<p class='login-subtitle'>Accede a tu cuenta de control de producción</p>", unsafe_allow_html=True)
+            
+            with st.form("form_login"):
+                user_input = st.text_input("Correo o Usuario", placeholder="Ingresa tu usuario")
+                pass_input = st.text_input("Contraseña", type="password", placeholder="••••••••")
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                submit_login = st.form_submit_button("Ingresar", type="primary", use_container_width=True)
+                
+                if submit_login:
+                    try:
+                        res = ejecutar_consulta(
+                            "SELECT username, nombre, rol FROM usuarios WHERE username = %s AND password = %s",
+                            (user_input, pass_input)
+                        )
+                        if not res.empty:
+                            st.session_state["autenticado"] = True
+                            st.session_state["username"] = res.iloc[0]["username"]
+                            st.session_state["nombre_usuario"] = res.iloc[0]["nombre"]
+                            st.session_state["rol"] = res.iloc[0]["rol"]
+                            st.rerun()
+                        else:
+                            st.error("❌ Usuario o contraseña incorrectos")
+                    except Exception as e:
+                        st.error(f"⚠️ Error de conexión: {e}")
+            
+            st.markdown(f"<p style='text-align: center; color: #666; font-size: 0.8rem; margin-top: 2rem;'>© {datetime.now().year} Industrias Metal&Co. Todos los derechos reservados.</p>", unsafe_allow_html=True)
     st.stop()
 
-# ENCABEZADO Y BARRA LATERAL
+# ENCABEZADO Y BARRA LATERAL (UNA VEZ AUTENTICADO)
 col_logo, col_titulo = st.columns([1, 4], vertical_alignment="center")
 with col_logo:
-    mostrar_logo(ancho=100)
+    mostrar_logo(ancho=130)
 with col_titulo:
     st.title("Industrias Metal&Co")
 
