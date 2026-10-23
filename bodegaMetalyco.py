@@ -725,6 +725,20 @@ elif rol in ["admin", "produccion"]:
                 WHERE estado != 'COMPLETADO'
             """)
             
+            # Consultar todas las programaciones que NO estén finalizadas o canceladas para filtrar con seguridad en Python
+            prog_activas = ejecutar_consulta("""
+                SELECT DISTINCT numero_oc, referencia FROM programacion_diaria 
+                WHERE estado NOT IN ('FINALIZADO', 'CANCELADO')
+            """)
+            
+            # Crear un conjunto (set) con las tuplas (OC, Referencia) ya programadas con limpieza de espacios
+            tuplas_ya_programadas = set()
+            if not prog_activas.empty:
+                for _, p_row in prog_activas.iterrows():
+                    oc_Clean = str(p_row['numero_oc']).strip()
+                    ref_Clean = str(p_row['referencia']).strip()
+                    tuplas_ya_programadas.add((oc_Clean, ref_Clean))
+
             ocs_activas_validas = []
             info_ocs_dict = {}
             if not ocs_db.empty:
@@ -732,23 +746,21 @@ elif rol in ["admin", "produccion"]:
                     oc_id = int(r['id'])
                     oc_num = str(r['numero_oc']).strip()
                     ref_val = str(r['referencia']).strip()
+                    
                     clave_combinada = f"ID OC #{oc_id} | OC: {oc_num} - Ref: {ref_val}"
                     
-                    # 💡 Filtro estricto: Si ya existe en programacion_diaria con estado activo/pendiente, NO se muestra
-                    ya_prog = ejecutar_consulta(
-                        "SELECT id FROM programacion_diaria WHERE TRIM(numero_oc) = %s AND TRIM(referencia) = %s AND estado NOT IN ('FINALIZADO', 'CANCELADO')",
-                        (oc_num, ref_val)
-                    )
-                    
-                    if ya_prog.empty:
-                        ocs_activas_validas.append(clave_combinada)
-                        info_ocs_dict[clave_combinada] = {
-                            "id_oc": oc_id,
-                            "numero_oc": oc_num,
-                            "referencia": ref_val,
-                            "servicio": str(r['servicio']).strip(),
-                            "meta": int(r['meta_unidades'])
-                        }
+                    # Si ya está programada (activa), la saltamos para que desaparezca de la lista
+                    if (oc_num, ref_val) in tuplas_ya_programadas:
+                        continue
+                        
+                    ocs_activas_validas.append(clave_combinada)
+                    info_ocs_dict[clave_combinada] = {
+                        "id_oc": oc_id,
+                        "numero_oc": oc_num,
+                        "referencia": ref_val,
+                        "servicio": str(r['servicio']).strip(),
+                        "meta": int(r['meta_unidades'])
+                    }
 
             if not ops or not maqs or not ocs_activas_validas:
                 st.warning("⚠️ No hay Órdenes de Compra o Referencias disponibles para programar (las activas ya fueron programadas o se completaron).")
@@ -837,7 +849,6 @@ elif rol in ["admin", "produccion"]:
                                         (num_oc.upper().strip(), cliente_oc, ref_oc, servicio_oc, meta_oc, ej_fecha)
                                     )
                                 except:
-                                    # Fallback por si la columna fecha_registro aún no existe en Supabase
                                     ejecutar_comando(
                                         """INSERT INTO ordenes_compra 
                                         (numero_oc, cliente, referencia, servicio, requiere_unidades, meta_unidades, unidades_entregadas, estado) 
@@ -1413,7 +1424,7 @@ elif rol in ["admin", "produccion"]:
                             usuario_del = st.selectbox("Selecciona el Usuario a Borrar", users_df["username"].tolist(), key="del_u_key")
                             if st.form_submit_button("Eliminar Usuario", type="primary", use_container_width=True):
                                 if usuario_del == st.session_state["username"]:
-                                    st.error("No puedes eliminar tu propia cuenta activa.")
+                                 st.error("No puedes eliminar tu propia cuenta activa.")
                                 else:
                                     ejecutar_comando("DELETE FROM usuarios WHERE username = %s", (usuario_del,))
                                     st.success("Usuario eliminado.")
