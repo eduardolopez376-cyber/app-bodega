@@ -359,11 +359,9 @@ def generar_pdf_f01_01(datos):
     p.drawString(x_margen + 8, y_actual - 23, "DIMENSIONES")
     p.drawString(x_margen + 252, y_actual - 23, "X")
     
-    p.setFont("Helvetica", 8)
     p.drawString(x_margen + 8, y_actual - 32, "ACABADO SUPERFICIAL")
     p.drawString(x_margen + 252, y_actual - 32, "X")
     
-    p.setFont("Helvetica", 8)
     p.drawString(x_margen + 8, y_actual - 41, "SOLDADURA / PINTURA")
     p.drawString(x_margen + 252, y_actual - 41, "X")
     
@@ -528,6 +526,7 @@ if rol == "operario":
                         maquina_elegida = row_t['maquina']
                         referencia_pieza = row_t['referencia']
                         actividad_tarea = row_t['actividad']
+                        meta_asignada_tarea = int(row_t['meta_unidades'])
                         
                         cli_db = ejecutar_consulta("SELECT cliente FROM ordenes_compra WHERE numero_oc = %s", (num_oc_asociada,))
                         cliente_nombre = cli_db.iloc[0]['cliente'] if not cli_db.empty else "N/A"
@@ -543,11 +542,17 @@ if rol == "operario":
                                 diff = (dt_fin - dt_inicio).total_seconds() / 3600.0
                                 horas_calc = round(max(0.0, diff), 2)
                         
+                        # Alarma si no se cumplió la meta de la tarea
+                        alerta_pendiente_txt = ""
+                        if unidades < meta_asignada_tarea:
+                            faltantes = meta_asignada_tarea - unidades
+                            alerta_pendiente_txt = f" ⚠️ ALARMA: Faltaron {faltantes} unidades para cumplir la meta de {meta_asignada_tarea} u."
+                        
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
                             (operario_nombre, maquina, referencia, numero_oc, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones, es_maquina_alquilada, horas_trabajadas, presion_trabajo, fecha_registro) 
                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())""",
-                            (st.session_state['nombre_usuario'], maquina_elegida, referencia_pieza, num_oc_asociada, h_inicio, h_fin, unidades, f"Buenas: {unidades}, Defectuosas: {defectuosas}. {obs_usuario}", es_alq, horas_calc, presion_input)
+                            (st.session_state['nombre_usuario'], maquina_elegida, referencia_pieza, num_oc_asociada, h_inicio, h_fin, unidades, f"Buenas: {unidades}, Defectuosas: {defectuosas}.{alerta_pendiente_txt} {obs_usuario}", es_alq, horas_calc, presion_input)
                         )
                         
                         if num_oc_asociada and num_oc_asociada != "SIN OC":
@@ -577,7 +582,7 @@ if rol == "operario":
                             "hora_fin": str(h_fin),
                             "producidas": unidades,
                             "defectuosas": defectuosas,
-                            "observaciones": obs_usuario,
+                            "observaciones": obs_usuario + alerta_pendiente_txt,
                             "operario": st.session_state['nombre_usuario']
                         }
                         
@@ -585,7 +590,10 @@ if rol == "operario":
                         st.session_state["ultimo_pdf_buffer"] = pdf_buffer.getvalue()
                         st.session_state["ultimo_pdf_nombre"] = f"F-01-01_OC_{num_oc_asociada}.pdf"
                         
-                        st.success("¡Producción registrada y formato F-01-01 generado con éxito!")
+                        if unidades < meta_asignada_tarea:
+                            st.warning(f"¡Producción registrada! ⚠️ **Atención:** Se reportaron piezas pendientes por completar ({meta_asignada_tarea - unidades} u. faltantes).")
+                        else:
+                            st.success("¡Producción registrada y formato F-01-01 generado con éxito!")
 
             if "ultimo_pdf_buffer" in st.session_state:
                 st.markdown("---")
@@ -689,54 +697,46 @@ elif rol in ["admin", "produccion"]:
         ])
     
     with tab_prog:
-        st.subheader("📅 Programación de Planta por Fecha y Orden de Compra")
+        st.subheader("📅 Programación Directa por Orden de Compra")
         fecha_seleccionada = st.date_input("Selecciona el día a consultar/programar", value=datetime.now().date(), key="cal_admin_dia")
         try:
             ops_df = ejecutar_consulta("SELECT nombre FROM usuarios WHERE rol = 'operario'")
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
             maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
             
-            ocs_db = ejecutar_consulta("SELECT numero_oc, referencia, servicio, meta_unidades, unidades_entregadas, requiere_unidades FROM ordenes_compra WHERE estado != 'COMPLETADO'")
+            # Consultar OCs activas
+            ocs_db = ejecutar_consulta("SELECT numero_oc, referencia, servicio, meta_unidades FROM ordenes_compra WHERE estado != 'COMPLETADO'")
             
             ocs_activas_validas = []
             info_ocs_dict = {}
             if not ocs_db.empty:
                 for _, r in ocs_db.iterrows():
-                    meta = int(r['meta_unidades'])
-                    entregado = int(r['unidades_entregadas']) if pd.notna(r['unidades_entregadas']) else 0
-                    req = r['requiere_unidades']
-                    
-                    if req and entregado >= meta:
-                        continue
-                        
                     oc_num = str(r['numero_oc']).strip()
                     ocs_activas_validas.append(oc_num)
-                    
-                    # CÁLCULO AISLADO Y LIMPIO: Únicamente Meta menos Unidades Entregadas en producción
-                    saldo_calc = max(1, meta - entregado) if req else meta
                     
                     info_ocs_dict[oc_num] = {
                         "referencia": str(r['referencia']).strip(),
                         "servicio": str(r['servicio']).strip(),
-                        "saldo": saldo_calc
+                        "meta": int(r['meta_unidades'])
                     }
 
             if not ops or not maqs or not ocs_activas_validas:
-                st.warning("⚠️ Asegúrate de tener operarios, máquinas y al menos una **Orden de Compra activa con saldo pendiente** creada.")
+                st.warning("⚠️ Asegúrate de tener operarios, máquinas y al menos una **Orden de Compra activa** creada.")
             else:
-                with st.expander("Crear Programación", expanded=True):
+                with st.expander("Crear Programación Limpia", expanded=True):
                     k_sufijo = st.session_state["form_key_counter"]
                     
-                    oc_prog = st.selectbox("Orden de Compra a Ejecutar", ocs_activas_validas, key=f"select_oc_dinamica_{k_sufijo}")
+                    # Al cambiar la OC, Streamlit limpia y arrastra exactamente los datos de esa OC sin mezclar
+                    oc_prog = st.selectbox("Seleccionar Orden de Compra", ocs_activas_validas, key=f"select_oc_limpia_{k_sufijo}")
                     
                     datos_oc_sel = info_ocs_dict.get(oc_prog, {})
                     ref_arrastrada = datos_oc_sel.get("referencia", "")
                     servicio_arrastrado = datos_oc_sel.get("servicio", "SIN SERVICIO")
-                    saldo_sugerido = datos_oc_sel.get("saldo", 100)
+                    meta_arrastrada = datos_oc_sel.get("meta", 100)
                     
-                    st.info(f"🔒 **Datos arrastrados de la OC #{oc_prog}:** \n- **Referencia:** `{ref_arrastrada}` \n- **Servicio/Actividad:** `{servicio_arrastrado}` \n- **Saldo Pendiente Real (Meta Sugerida):** `{saldo_sugerido} u.`")
+                    st.info(f"🔒 **Datos limpios arrastrados de la OC #{oc_prog}:** \n- **Referencia:** `{ref_arrastrada}` \n- **Servicio/Actividad:** `{servicio_arrastrado}` \n- **Meta Total de la OC:** `{meta_arrastrada} u.`")
                     
-                    with st.form(f"form_programacion_{fecha_seleccionada}_{k_sufijo}", clear_on_submit=True):
+                    with st.form(f"form_programacion_limpia_{fecha_seleccionada}_{k_sufijo}", clear_on_submit=True):
                         op_p = st.selectbox("Operario", ops, key=f"op_prog_{k_sufijo}")
                         maq_p = st.selectbox("Máquina", maqs, key=f"maq_prog_{k_sufijo}")
                         
@@ -746,23 +746,18 @@ elif rol in ["admin", "produccion"]:
                         with col_h2:
                             h_fin_p = st.time_input("Fin Turno", time(17, 0), key=f"hfin_{k_sufijo}")
                         
-                        meta_p = st.number_input(
-                            "Meta de Unidades para esta Tarea", 
-                            min_value=1, 
-                            max_value=int(saldo_sugerido), 
-                            value=int(saldo_sugerido), 
-                            key=f"meta_{k_sufijo}"
-                        )
+                        # Meta fija e inalterable tomada directo de la OC seleccionada
+                        st.markdown(f"📌 **Meta asignada para esta tarea (Fija de la OC):** `{meta_arrastrada} u.`")
                         
                         if st.form_submit_button("Guardar Programación de Tarea", type="primary", use_container_width=True):
                             ejecutar_comando(
                                 """INSERT INTO programacion_diaria 
                                 (fecha, numero_oc, operario_nombre, maquina, referencia, actividad, hora_inicio, hora_fin, meta_unidades, estado) 
                                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE')""",
-                                (fecha_seleccionada, oc_prog, op_p, maq_p, ref_arrastrada, servicio_arrastrado, h_ini_p, h_fin_p, meta_p)
+                                (fecha_seleccionada, oc_prog, op_p, maq_p, ref_arrastrada, servicio_arrastrado, h_ini_p, h_fin_p, meta_arrastrada)
                             )
                             st.session_state["form_key_counter"] += 1
-                            st.success(f"¡Tarea asignada a {op_p} con éxito para la OC #{oc_prog} (Meta: {meta_p} u.)!")
+                            st.success(f"¡Tarea asignada a {op_p} para la OC #{oc_prog} con meta de {meta_arrastrada} u.!")
                             st.rerun()
             
             st.write("---")
@@ -782,7 +777,7 @@ elif rol in ["admin", "produccion"]:
             st.error(f"Error en Programación: {e}")
 
     with tab_oc:
-        st.subheader("📋 Gestión de Órdenes de Compra (OC), Clientes y Saldos")
+        st.subheader("📋 Gestión de Órdenes de Compra (OC), Clientes y Alarma de Pendientes")
         try:
             refs_db = ejecutar_consulta("SELECT codigo FROM referencias")
             lista_refs = refs_db['codigo'].tolist() if not refs_db.empty else []
@@ -800,17 +795,15 @@ elif rol in ["admin", "produccion"]:
                         cliente_oc = st.selectbox("Cliente Asociado", lista_clientes if lista_clientes else ["SIN CLIENTE REGISTRADO"])
                         ref_oc = st.selectbox("Referencia Base", lista_refs)
                         servicio_oc = st.selectbox("Servicio Prestado", lista_servicios if lista_servicios else ["NINGUNO"])
-                        requiere_uni = st.checkbox("¿Este servicio requiere control por unidades?", value=True)
-                        meta_oc = st.number_input("Cantidad Total Pedida (Meta)", min_value=0, value=1000)
+                        meta_oc = st.number_input("Cantidad Total Pedida (Meta de la OC)", min_value=1, value=100)
                         
                         if st.form_submit_button("Guardar Orden de Compra", type="primary", use_container_width=True):
                             if num_oc.strip() and cliente_oc != "SIN CLIENTE REGISTRADO":
-                                meta_final = meta_oc if requiere_uni else 0
                                 ejecutar_comando(
                                     """INSERT INTO ordenes_compra 
                                     (numero_oc, cliente, referencia, servicio, requiere_unidades, meta_unidades, unidades_entregadas, estado) 
-                                    VALUES (%s, %s, %s, %s, %s, %s, 0, 'PENDIENTE')""",
-                                    (num_oc.upper().strip(), cliente_oc, ref_oc, servicio_oc, requiere_uni, meta_final)
+                                    VALUES (%s, %s, %s, %s, TRUE, %s, 0, 'PENDIENTE')""",
+                                    (num_oc.upper().strip(), cliente_oc, ref_oc, servicio_oc, meta_oc)
                                 )
                                 st.success(f"Orden de Compra #{num_oc} registrada con éxito.")
                                 st.rerun()
@@ -818,13 +811,27 @@ elif rol in ["admin", "produccion"]:
                                 st.error("Por favor completa el número de OC y selecciona un cliente válido.")
 
             st.write("---")
-            st.write("### 📊 Estado y Saldos Pendientes de Órdenes de Compra")
+            st.write("### 📊 Estado y Reporte de Alarma de Piezas Pendientes por OC")
             df_oc = ejecutar_consulta("SELECT * FROM ordenes_compra ORDER BY id DESC")
             if not df_oc.empty:
                 df_oc['saldo_pendiente'] = df_oc.apply(
-                    lambda row: row['meta_unidades'] - (row['unidades_entregadas'] if pd.notna(row['unidades_entregadas']) else 0) if row['requiere_unidades'] else 'N/A', axis=1
+                    lambda row: row['meta_unidades'] - (row['unidades_entregadas'] if pd.notna(row['unidades_entregadas']) else 0), axis=1
                 )
-                st.dataframe(df_oc, use_container_width=True)
+                
+                # Alarma visual integrada en la tabla
+                def alerta_estado(row):
+                    entregado = row['unidades_entregadas'] if pd.notna(row['unidades_entregadas']) else 0
+                    meta = row['meta_unidades']
+                    if entregado >= meta:
+                        return "✅ COMPLETADO"
+                    elif entregado > 0:
+                        return f"⚠️ PENDIENTE ({meta - entregado} u. faltantes)"
+                    else:
+                        return "⏳ SIN INICIAR"
+                
+                df_oc['estado_alarma'] = df_oc.apply(alerta_estado, axis=1)
+                st.dataframe(df_oc[['numero_oc', 'cliente', 'referencia', 'meta_unidades', 'unidades_entregadas', 'saldo_pendiente', 'estado_alarma']], use_container_width=True)
+                
                 with st.expander("Eliminar"):
                     with st.form("form_del_oc", clear_on_submit=True):
                         oc_del = st.selectbox("Selecciona la OC a Borrar", df_oc["numero_oc"].tolist())
@@ -832,7 +839,7 @@ elif rol in ["admin", "produccion"]:
                             ejecutar_comando("DELETE FROM registro_produccion WHERE numero_oc = %s", (oc_del,))
                             ejecutar_comando("DELETE FROM programacion_diaria WHERE numero_oc = %s", (oc_del,))
                             ejecutar_comando("DELETE FROM ordenes_compra WHERE numero_oc = %s", (oc_del,))
-                            st.success(f"Orden de Compra #{oc_del} y sus registros de producción asociados fueron eliminados por completo.")
+                            st.success(f"Orden de Compra #{oc_del} y sus registros asociados fueron eliminados.")
                             st.rerun()
             else:
                 st.info("No hay órdenes de compra registradas.")
@@ -1102,10 +1109,10 @@ elif rol in ["admin", "produccion"]:
 
         else:
             try:
-                st.write("#### Saldos de Órdenes de Compra")
+                st.write("#### Saldos y Alarmas de Órdenes de Compra")
                 df_oc_rep = ejecutar_consulta("SELECT * FROM ordenes_compra ORDER BY id DESC")
                 if not df_oc_rep.empty:
-                    df_oc_rep['saldo_pendiente'] = df_oc_rep.apply(lambda r: r['meta_unidades'] - (r['unidades_entregadas'] if pd.notna(r['unidades_entregadas']) else 0) if r['requiere_unidades'] else 'N/A', axis=1)
+                    df_oc_rep['saldo_pendiente'] = df_oc_rep.apply(lambda r: r['meta_unidades'] - (r['unidades_entregadas'] if pd.notna(r['unidades_entregadas']) else 0), axis=1)
                     st.dataframe(df_oc_rep, use_container_width=True)
             except Exception as e:
                 st.error(f"Error: {e}")
