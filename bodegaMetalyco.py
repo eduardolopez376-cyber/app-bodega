@@ -62,8 +62,8 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# Buscar imagen del logo con el nombre logometalyco.jpg
-NOMBRES_LOGO = ["logometalyco.jpg", "logo.jpeg", "logo.png", "logo.jpg"]
+# Buscar imagen del logo con el nombre logometalyco.png
+NOMBRES_LOGO = ["logometalyco.png", "logometalyco.jpg", "logo.jpeg", "logo.png"]
 LOGO_PATH = None
 for nombre in NOMBRES_LOGO:
     if os.path.exists(nombre):
