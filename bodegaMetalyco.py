@@ -359,9 +359,11 @@ def generar_pdf_f01_01(datos):
     p.drawString(x_margen + 8, y_actual - 23, "DIMENSIONES")
     p.drawString(x_margen + 252, y_actual - 23, "X")
     
+    p.setFont("Helvetica", 8)
     p.drawString(x_margen + 8, y_actual - 32, "ACABADO SUPERFICIAL")
     p.drawString(x_margen + 252, y_actual - 32, "X")
     
+    p.setFont("Helvetica", 8)
     p.drawString(x_margen + 8, y_actual - 41, "SOLDADURA / PINTURA")
     p.drawString(x_margen + 252, y_actual - 41, "X")
     
@@ -561,7 +563,6 @@ if rol == "operario":
                                 meta_oc = int(oc_db.iloc[0]['meta_unidades'])
                                 req_uni = oc_db.iloc[0]['requiere_unidades']
                                 nuevo_entregado = ent_actuales + unidades
-                                # La OC se marca como completada solo si se cumple o supera la meta total
                                 nuevo_estado = 'COMPLETADO' if req_uni and nuevo_entregado >= meta_oc else 'EN PROCESO'
                                 ejecutar_comando(
                                     "UPDATE ordenes_compra SET unidades_entregadas = %s, estado = %s WHERE numero_oc = %s",
@@ -697,18 +698,19 @@ elif rol in ["admin", "produccion"]:
         ])
     
     with tab_prog:
-        st.subheader("📅 Programación Directa por Orden de Compra")
+        st.subheader("📅 Programación Directa por Orden de Compra y Referencia")
         fecha_seleccionada = st.date_input("Selecciona el día a consultar/programar", value=datetime.now().date(), key="cal_admin_dia")
         try:
             ops_df = ejecutar_consulta("SELECT nombre FROM usuarios WHERE rol = 'operario'")
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
             maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
             
-            # FILTRO ESTRICTO: Solo mostrar OCs que NO hayan sido programadas previamente (excluyendo las que ya tienen registros en programacion_diaria)
+            # FILTRO FLEXIBLE PARA MÚLTIPLES REFERENCIAS: 
+            # Permitimos listar las OCs activas, pero distinguimos por combinación de OC y Referencia
+            # para que una misma OC con otra referencia diferente pueda ser programada sin conflicto.
             ocs_db = ejecutar_consulta("""
                 SELECT numero_oc, referencia, servicio, meta_unidades FROM ordenes_compra 
-                WHERE estado != 'COMPLETADO' 
-                AND numero_oc NOT IN (SELECT DISTINCT numero_oc FROM programacion_diaria WHERE numero_oc IS NOT NULL AND numero_oc != '')
+                WHERE estado != 'COMPLETADO'
             """)
             
             ocs_activas_validas = []
@@ -716,28 +718,40 @@ elif rol in ["admin", "produccion"]:
             if not ocs_db.empty:
                 for _, r in ocs_db.iterrows():
                     oc_num = str(r['numero_oc']).strip()
-                    ocs_activas_validas.append(oc_num)
+                    ref_val = str(r['referencia']).strip()
+                    # Identificador único combinando OC y Referencia para permitir múltiples referencias por OC
+                    clave_combinada = f"{oc_num} (Ref: {ref_val})"
                     
-                    info_ocs_dict[oc_num] = {
-                        "referencia": str(r['referencia']).strip(),
-                        "servicio": str(r['servicio']).strip(),
-                        "meta": int(r['meta_unidades'])
-                    }
+                    # Verificamos si esta combinación exacta ya fue programada
+                    ya_prog = ejecutar_consulta(
+                        "SELECT id FROM programacion_diaria WHERE numero_oc = %s AND referencia = %s",
+                        (oc_num, ref_val)
+                    )
+                    
+                    if ya_prog.empty:
+                        ocs_activas_validas.append(clave_combinada)
+                        info_ocs_dict[clave_combinada] = {
+                            "numero_oc": oc_num,
+                            "referencia": ref_val,
+                            "servicio": str(r['servicio']).strip(),
+                            "meta": int(r['meta_unidades'])
+                        }
 
             if not ops or not maqs or not ocs_activas_validas:
-                st.warning("⚠️ No hay Órdenes de Compra disponibles para programar (las activas ya fueron programadas o se completaron). Crea una nueva Orden de Compra si deseas programar más lotes.")
+                st.warning("⚠️ No hay Órdenes de Compra o Referencias disponibles para programar (las activas ya fueron programadas o se completaron).")
             else:
-                with st.expander("Crear Programación Limpia", expanded=True):
+                with st.expander("Crear Programación Limpia por Referencia", expanded=True):
                     k_sufijo = st.session_state["form_key_counter"]
                     
-                    oc_prog = st.selectbox("Seleccionar Orden de Compra", ocs_activas_validas, key=f"select_oc_limpia_{k_sufijo}")
+                    oc_prog_sel = st.selectbox("Seleccionar Orden de Compra y Referencia", ocs_activas_validas, key=f"select_oc_limpia_{k_sufijo}")
                     
-                    datos_oc_sel = info_ocs_dict.get(oc_prog, {})
+                    datos_oc_sel = info_ocs_dict.get(oc_prog_sel, {})
+                    oc_real = datos_oc_sel.get("numero_oc", "")
                     ref_arrastrada = datos_oc_sel.get("referencia", "")
                     servicio_arrastrado = datos_oc_sel.get("servicio", "SIN SERVICIO")
                     meta_arrastrada = datos_oc_sel.get("meta", 100)
                     
-                    st.info(f"🔒 **Datos limpios arrastrados de la OC #{oc_prog}:** \n- **Referencia:** `{ref_arrastrada}` \n- **Servicio/Actividad:** `{servicio_arrastrado}` \n- **Meta Total de la OC:** `{meta_arrastrada} u.`")
+                    st.info(f"🔒 **Datos limpios arrastrados:** \n- **OC:** `{oc_real}` \n- **Referencia:** `{ref_arrastrada}` \n- **Servicio:** `{servicio_arrastrado}` \n- **Meta Total:** `{meta_arrastrada} u.`")
                     
                     with st.form(f"form_programacion_limpia_{fecha_seleccionada}_{k_sufijo}", clear_on_submit=True):
                         op_p = st.selectbox("Operario", ops, key=f"op_prog_{k_sufijo}")
@@ -749,17 +763,17 @@ elif rol in ["admin", "produccion"]:
                         with col_h2:
                             h_fin_p = st.time_input("Fin Turno", time(17, 0), key=f"hfin_{k_sufijo}")
                         
-                        st.markdown(f"📌 **Meta asignada para esta tarea (Fija de la OC):** `{meta_arrastrada} u.`")
+                        st.markdown(f"📌 **Meta asignada para esta tarea:** `{meta_arrastrada} u.`")
                         
                         if st.form_submit_button("Guardar Programación de Tarea", type="primary", use_container_width=True):
                             ejecutar_comando(
                                 """INSERT INTO programacion_diaria 
                                 (fecha, numero_oc, operario_nombre, maquina, referencia, actividad, hora_inicio, hora_fin, meta_unidades, estado) 
                                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE')""",
-                                (fecha_seleccionada, oc_prog, op_p, maq_p, ref_arrastrada, servicio_arrastrado, h_ini_p, h_fin_p, meta_arrastrada)
+                                (fecha_seleccionada, oc_real, op_p, maq_p, ref_arrastrada, servicio_arrastrado, h_ini_p, h_fin_p, meta_arrastrada)
                             )
                             st.session_state["form_key_counter"] += 1
-                            st.success(f"¡Tarea asignada a {op_p} para la OC #{oc_prog} con meta de {meta_arrastrada} u.!")
+                            st.success(f"¡Tarea asignada a {op_p} para la OC #{oc_real} (Ref: {ref_arrastrada}) con meta de {meta_arrastrada} u.!")
                             st.rerun()
             
             st.write("---")
