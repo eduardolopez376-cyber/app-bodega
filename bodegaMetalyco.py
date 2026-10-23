@@ -23,7 +23,7 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# Estilos CSS avanzados para las tarjetas del menú lateral
+# Estilos CSS avanzados para las tarjetas del menú lateral idénticas a tu requerimiento
 st.markdown("""
     <style>
         .stApp {
@@ -81,41 +81,53 @@ st.markdown("""
             box-shadow: 0 4px 15px rgba(255, 122, 0, 0.3);
         }
 
-        /* Transformar las opciones del menú lateral en tarjetas individuales con borde */
+        /* Transformar las opciones del menú lateral en tarjetas uniformes tipo botón */
         [data-testid="stSidebar"] .stRadio > div {
             gap: 8px;
+            width: 100%;
         }
         [data-testid="stSidebar"] .stRadio label {
             background-color: #212121;
             color: #C0C0C0;
-            padding: 10px 14px;
+            padding: 12px 16px;
             border-radius: 12px;
             font-weight: 500;
             font-size: 0.95rem;
-            width: 100%;
+            width: 100% !important;
+            box-sizing: border-box;
             border: 1px solid rgba(255, 255, 255, 0.08);
             transition: all 0.3s ease;
             cursor: pointer;
+            display: flex;
+            align-items: center;
         }
-        /* Efecto al pasar el cursor (hover) */
+        
+        /* Ocultar por completo los círculos nativos de selección al lado */
+        [data-testid="stSidebar"] .stRadio input[type="radio"] {
+            display: none !important;
+        }
+        [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label div:first-child {
+            display: none !important;
+        }
+
+        /* Efecto hover (al pasar el cursor por encima) */
         [data-testid="stSidebar"] .stRadio label:hover {
-            color: #ffffff;
-            border-color: #FF7A00;
-            background-color: rgba(255, 122, 0, 0.08);
+            color: #FF7A00 !important;
+            border-color: #FF7A00 !important;
+            background-color: rgba(255, 122, 0, 0.08) !important;
             box-shadow: 0 4px 12px rgba(255, 122, 0, 0.2);
         }
-        /* Estilo para la opción seleccionada */
+
+        /* Estilo fijo para la opción seleccionada (activa) */
         [data-testid="stSidebar"] .stRadio div[checked="true"] label,
-        [data-testid="stSidebar"] .stRadio input:checked + div {
-            background-color: rgba(255, 122, 0, 0.12) !important;
+        [data-testid="stSidebar"] .stRadio input:checked + div,
+        [data-testid="stSidebar"] .stRadio label:has(input:checked) {
+            background-color: rgba(255, 122, 0, 0.15) !important;
             color: #FF7A00 !important;
             font-weight: bold !important;
             border: 1px solid #FF7A00 !important;
             box-shadow: 0 4px 15px rgba(255, 122, 0, 0.3);
             border-radius: 12px !important;
-        }
-        [data-testid="stSidebar"] .stRadio input[type="radio"] {
-            display: none;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -609,7 +621,7 @@ with st.sidebar:
     st.markdown(f"<h4 style='text-align: center; color: #fff; margin-bottom: 0; font-size: 1.1rem;'>{st.session_state['nombre_usuario']}</h4>", unsafe_allow_html=True)
     st.markdown(f"<p style='text-align: center; color: #FF7A00; font-size: 0.8rem; font-weight: bold; margin-top: 2px;'>🟢 ONLINE ({str(st.session_state['rol']).upper()})</p>", unsafe_allow_html=True)
     
-    with st.expander("🖼️ Configurar Perfil"):
+    with st.expander("Configurar Perfil"):
         subir_foto = st.file_uploader("Subir nueva foto", type=["jpg", "png", "jpeg"], key="uploader_avatar")
         if subir_foto is not None:
             os.makedirs("avatars", exist_ok=True)
@@ -630,7 +642,7 @@ with st.sidebar:
                 st.rerun()
 
     st.markdown("---")
-    st.write("### 🧭 Menú Principal")
+    st.write("### Menú Principal")
     
     rol = st.session_state["rol"]
     
