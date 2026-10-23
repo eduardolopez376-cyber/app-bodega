@@ -22,7 +22,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Estilos CSS generales para toda la app (sin 'f' para evitar conflictos con llaves CSS)
+# Estilos CSS generales para toda la app
 st.markdown("""
     <style>
         .stApp {
@@ -404,25 +404,30 @@ if "form_key_counter" not in st.session_state:
 # PANTALLA DE LOGIN EXÓTICA Y LLAMATIVA (ESTILO REFERENCIA)
 # ====================================================
 if not st.session_state["autenticado"]:
-    # Verificamos si existe la imagen de fondo 'fondo_login.jpg'
+    # Imagen de fondo industrial texturizada de alta calidad por defecto (o local si existe)
+    url_fondo = "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?q=80&w=1920&auto=format&fit=crop"
     if os.path.exists("fondo_login.jpg"):
-        estilo_fondo = "background: linear-gradient(rgba(0,0,0,0.75), rgba(0,0,0,0.85)), url('fondo_login.jpg'); background-size: cover; background-position: center;"
-    else:
-        estilo_fondo = "background-color: #121212;"
+        url_fondo = "fondo_login.jpg"
 
-    # Estilo CSS general de la pantalla de login (sin f-string para evitar errores con llaves)
+    estilo_fondo = f"""
+        background: linear-gradient(rgba(0,0,0,0.75), rgba(0,0,0,0.85)), url('{url_fondo}');
+        background-size: cover;
+        background-position: center;
+        background-attachment: fixed;
+    """
+
     st.markdown("""
         <style>
             .stApp {
                 """ + estilo_fondo + """
             }
             .login-card {
-                background-color: rgba(26, 26, 26, 0.90);
-                backdrop-filter: blur(10px);
-                border: 1px solid rgba(255, 122, 0, 0.2);
+                background-color: rgba(26, 26, 26, 0.88);
+                backdrop-filter: blur(12px);
+                border: 1px solid rgba(255, 122, 0, 0.25);
                 border-radius: 20px;
                 padding: 3rem 2.5rem;
-                box-shadow: 0 15px 35px rgba(0,0,0,0.9);
+                box-shadow: 0 20px 40px rgba(0,0,0,0.95);
                 max-width: 480px;
                 margin: 0 auto;
             }
@@ -466,7 +471,7 @@ if not st.session_state["autenticado"]:
         with st.container():
             col_img1, col_img2, col_img3 = st.columns([0.5, 3, 0.5])
             with col_img2:
-                mostrar_logo(ancho=240)
+                mostrar_logo(ancho=260)
             
             st.markdown("<h1 class='login-title'>Welcome Back</h1>", unsafe_allow_html=True)
             st.markdown("<p class='login-subtitle'>Sign in to continue your production journey</p>", unsafe_allow_html=True)
