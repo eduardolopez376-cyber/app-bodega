@@ -405,22 +405,20 @@ if "form_key_counter" not in st.session_state:
 # PANTALLA DE LOGIN EXÓTICA Y LLAMATIVA (ESTILO REFERENCIA)
 # ====================================================
 if not st.session_state["autenticado"]:
-    # Conversión en Base64 de 'fondo_login.jpg' para garantizar su renderizado web inmediato
-    img_css_fondo = ""
+    # Carga de la imagen local en Base64 de forma segura
+    img_css_fondo = "background-color: #121212;"
     ruta_fondo_local = "fondo_login.jpg"
     if os.path.exists(ruta_fondo_local):
         with open(ruta_fondo_local, "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
             img_css_fondo = f"background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.85)), url('data:image/jpeg;base64,{encoded_string}'); background-size: cover; background-position: center; background-attachment: fixed;"
-    else:
-        img_css_fondo = "background-color: #121212;"
 
-    st.markdown(f"""
+    st.markdown("""
         <style>
-            .stApp {{
-                {img_css_fondo}
-            }}
-            .login-card {{
+            .stApp {
+                """ + img_css_fondo + """
+            }
+            .login-card {
                 background-color: rgba(26, 26, 26, 0.88);
                 backdrop-filter: blur(12px);
                 border: 1px solid rgba(255, 122, 0, 0.25);
@@ -430,20 +428,20 @@ if not st.session_state["autenticado"]:
                 max-width: 480px;
                 margin: 0 auto;
             }
-            .login-title {{
+            .login-title {
                 color: #E0E0E0;
                 font-weight: 700;
                 text-align: center;
                 margin-bottom: 0.3rem;
                 font-size: 2rem;
-            }}
-            .login-subtitle {{
+            }
+            .login-subtitle {
                 color: #888888;
                 text-align: center;
                 margin-bottom: 2rem;
                 font-size: 0.95rem;
-            }}
-            .stButton>button {{
+            }
+            .stButton>button {
                 width: 100%;
                 height: 3.2rem;
                 font-size: 1.1rem;
@@ -454,12 +452,12 @@ if not st.session_state["autenticado"]:
                 border: none;
                 box-shadow: 0 4px 15px rgba(255, 122, 0, 0.3);
                 transition: all 0.3s ease;
-            }}
-            .stButton>button:hover {{
+            }
+            .stButton>button:hover {
                 background: linear-gradient(135deg, #ff9124 0%, #FF7A00 100%);
                 box-shadow: 0 6px 20px rgba(255, 122, 0, 0.5);
                 transform: translateY(-1px);
-            }}
+            }
         </style>
     """, unsafe_allow_html=True)
 
