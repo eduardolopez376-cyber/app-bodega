@@ -413,13 +413,12 @@ if not st.session_state["autenticado"]:
             encoded_string = base64.b64encode(image_file.read()).decode()
             img_css_fondo = f"background: linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.6)), url('data:image/jpeg;base64,{encoded_string}'); background-size: cover; background-position: center; background-attachment: fixed;"
 
-    st.markdown(f"""
+    estilos_login_css = """
         <style>
-            .stApp {{
-                {img_css_fondo}
-            }}
-            /* Tarjeta de login flotante a la derecha con borde futurista naranja */
-            .login-card-container {{
+            .stApp {
+                """ + img_css_fondo + """
+            }
+            .login-card-container {
                 background: linear-gradient(145deg, rgba(20, 20, 20, 0.92), rgba(10, 10, 10, 0.95));
                 border: 2px solid rgba(255, 122, 0, 0.4);
                 border-radius: 24px;
@@ -428,7 +427,7 @@ if not st.session_state["autenticado"]:
                 backdrop-filter: blur(10px);
                 margin-top: 2rem;
             }
-            .stButton>button {{
+            .stButton>button {
                 width: 100%;
                 height: 3.2rem;
                 font-size: 1.1rem;
@@ -439,34 +438,32 @@ if not st.session_state["autenticado"]:
                 border: none;
                 box-shadow: 0 4px 20px rgba(255, 122, 0, 0.4);
                 transition: all 0.3s ease;
-            }}
-            .stButton>button:hover {{
+            }
+            .stButton>button:hover {
                 background: linear-gradient(135deg, #ff9124 0%, #FF7A00 100%);
                 box-shadow: 0 6px 25px rgba(255, 122, 0, 0.6);
                 transform: translateY(-2px);
-            }}
-            /* Estilo limpio para los inputs de texto */
-            .stTextInput input {{
+            }
+            .stTextInput input {
                 background-color: rgba(15, 15, 15, 0.8) !important;
                 color: #E0E0E0 !important;
                 border: 1px solid rgba(255, 122, 0, 0.3) !important;
                 border-radius: 10px !important;
-            }}
-            .stTextInput input:focus {{
+            }
+            .stTextInput input:focus {
                 border-color: #FF7A00 !important;
                 box-shadow: 0 0 10px rgba(255, 122, 0, 0.3) !important;
-            }}
+            }
         </style>
-    """, unsafe_allow_html=True)
+    """
+    st.markdown(estilos_login_css, unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Distribución en columnas para imitar la posición exacta de la referencia
     col_izq, col_der = st.columns([1.2, 1])
 
     with col_izq:
         st.markdown("<br><br>", unsafe_allow_html=True)
-        # Logo grande e impactante arriba a la izquierda como en tu imagen
         mostrar_logo(ancho=340)
         st.markdown("""
             <div style='padding-left: 10px; margin-top: 10px;'>
@@ -475,7 +472,6 @@ if not st.session_state["autenticado"]:
         """, unsafe_allow_html=True)
 
     with col_der:
-        # Contenedor con la tarjeta de login flotante a la derecha
         st.markdown("<div class='login-card-container'>", unsafe_allow_html=True)
         
         with st.form("form_login_ref"):
@@ -1519,7 +1515,7 @@ elif rol in ["admin", "produccion"]:
                         u_rol = st.selectbox("Rol en Planta", ["operario", "produccion", "admin"])
                         if st.form_submit_button("Guardar Usuario", type="primary", use_container_width=True):
                             if u_user.strip() and u_pass.strip() and u_nom.strip():
-                                ejecutar_comando("INSERT INTO usuarios (username, password, nombre, rol) VALUES (%s, %s, %s, %s)", (u_user.strip(), u_pass, u_nom.script() if hasattr(u_nom, 'script') else u_nom.strip(), u_rol))
+                                ejecutar_comando("INSERT INTO usuarios (username, password, nombre, rol) VALUES (%s, %s, %s, %s)", (u_user.strip(), u_pass, u_nom.strip(), u_rol))
                                 st.success("Usuario creado.")
                                 st.rerun()
 
