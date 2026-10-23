@@ -23,7 +23,7 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# Estilos CSS avanzados para el menú lateral minimalista y píldoras curvas
+# Estilos CSS avanzados para el menú lateral minimalista y iconos automáticos
 st.markdown("""
     <style>
         .stApp {
@@ -629,16 +629,16 @@ with st.sidebar:
     
     rol = st.session_state["rol"]
     
-    # Opciones con iconos minimalistas profesionales
+    # Nombres exactos originales para que la lógica interna funcione al 100%
     if rol == "operario":
-        opciones_menu = ["📋  Mi Programación", "⚙️  Registrar Producción", "➕  Tarea Imprevista"]
+        opciones_menu = ["Mi Programación", "Registrar Producción", "Tarea Imprevista"]
     elif rol == "produccion":
-        opciones_menu = ["📅  Programar", "📋  Órdenes Compra", "📄  Referencias", "📊  Reportes", "🚀  Entregas", "🔨  Herramientas", "📥  Cargue Ítems", "📦  Inventario"]
+        opciones_menu = ["Programar", "Órdenes Compra", "Referencias", "Reportes", "Entregas", "Herramientas", "Cargue Ítems", "Inventario"]
     else:  # Admin
         opciones_menu = [
-            "📅  Programar", "📋  Órdenes Compra", "⚙️  Máquinas", "🛠️  Servicios", 
-            "📄  Referencias", "📊  Reportes", "🚀  Entregas", "🔨  Herramientas", 
-            "📥  Cargue Ítems", "📦  Inventario", "🏷️  Clases", "👥  Clientes", "⚙️  Usuarios"
+            "Programar", "Órdenes Compra", "Máquinas", "Servicios", 
+            "Referencias", "Reportes", "Entregas", "Herramientas", 
+            "Cargue Ítems", "Inventario", "Clases", "Clientes", "Usuarios"
         ]
     
     menu_seleccionado = st.radio("Navegación", opciones_menu, label_visibility="collapsed")
@@ -654,10 +654,8 @@ with st.sidebar:
         st.session_state["avatar_path"] = None
         st.rerun()
 
-# Limpiar texto del menú seleccionado para que coincida con la lógica interna
-menu_limpio = menu_seleccionado.replace("  ", "").strip() if menu_seleccionado else ""
-if " " in menu_limpio:
-    menu_limpio = menu_limpio.split(" ", 1)[1].strip()
+# menu_limpio queda con el valor exacto original sin alteraciones
+menu_limpio = menu_seleccionado
 
 # ====================================================
 # ENCABEZADO PRINCIPAL DE LA PÁGINA
@@ -1675,6 +1673,7 @@ elif rol in ["admin", "produccion"]:
                         rol_actual = user_actual.iloc[0]['rol'] if not user_actual.empty else "operario"
                         idx_rol = ["operario", "produccion", "admin"].index(rol_actual) if rol_actual in ["operario", "produccion", "admin"] else 0
                         
+                        now = datetime.now()
                         nuevo_nombre = st.text_input("Nombre Completo", value=nombre_actual)
                         nueva_pass = st.text_input("Nueva Contraseña (Dejar en blanco si no cambia)", type="password")
                         nuevo_rol = st.selectbox("Nuevo Rol en Planta", ["operario", "produccion", "admin"], index=idx_rol)
