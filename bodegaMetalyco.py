@@ -110,6 +110,7 @@ def inicializar_tablas_sistema():
         ejecutar_comando("ALTER TABLE referencias ADD COLUMN IF NOT EXISTS cliente VARCHAR(150);")
         ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS nit VARCHAR(50);")
         ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS telefono VARCHAR(50);")
+        ejecutar_comando("ALTER TABLE ordenes_compra ADD COLUMN IF NOT EXISTS fecha_registro DATE;")
     except Exception as e:
         print(f"Nota en inicialización: {e}")
 
@@ -733,8 +734,9 @@ elif rol in ["admin", "produccion"]:
                     ref_val = str(r['referencia']).strip()
                     clave_combinada = f"ID OC #{oc_id} | OC: {oc_num} - Ref: {ref_val}"
                     
+                    # 💡 Filtro estricto: Si ya existe en programacion_diaria con estado activo/pendiente, NO se muestra
                     ya_prog = ejecutar_consulta(
-                        "SELECT id FROM programacion_diaria WHERE numero_oc = %s AND referencia = %s AND estado NOT IN ('FINALIZADO', 'CANCELADO')",
+                        "SELECT id FROM programacion_diaria WHERE TRIM(numero_oc) = %s AND TRIM(referencia) = %s AND estado NOT IN ('FINALIZADO', 'CANCELADO')",
                         (oc_num, ref_val)
                     )
                     
@@ -827,12 +829,21 @@ elif rol in ["admin", "produccion"]:
                         if st.form_submit_button("Guardar Orden de Compra", type="primary", use_container_width=True):
                             if num_oc.strip() and cliente_oc != "SIN CLIENTE REGISTRADO":
                                 ej_fecha = (datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d')
-                                ejecutar_comando(
-                                    """INSERT INTO ordenes_compra 
-                                    (numero_oc, cliente, referencia, servicio, requiere_unidades, meta_unidades, unidades_entregadas, estado, fecha_registro) 
-                                    VALUES (%s, %s, %s, %s, TRUE, %s, 0, 'PENDIENTE', %s::date)""",
-                                    (num_oc.upper().strip(), cliente_oc, ref_oc, servicio_oc, meta_oc, ej_fecha)
-                                )
+                                try:
+                                    ejecutar_comando(
+                                        """INSERT INTO ordenes_compra 
+                                        (numero_oc, cliente, referencia, servicio, requiere_unidades, meta_unidades, unidades_entregadas, estado, fecha_registro) 
+                                        VALUES (%s, %s, %s, %s, TRUE, %s, 0, 'PENDIENTE', %s::date)""",
+                                        (num_oc.upper().strip(), cliente_oc, ref_oc, servicio_oc, meta_oc, ej_fecha)
+                                    )
+                                except:
+                                    # Fallback por si la columna fecha_registro aún no existe en Supabase
+                                    ejecutar_comando(
+                                        """INSERT INTO ordenes_compra 
+                                        (numero_oc, cliente, referencia, servicio, requiere_unidades, meta_unidades, unidades_entregadas, estado) 
+                                        VALUES (%s, %s, %s, %s, TRUE, %s, 0, 'PENDIENTE')""",
+                                        (num_oc.upper().strip(), cliente_oc, ref_oc, servicio_oc, meta_oc)
+                                    )
                                 st.success(f"Orden de Compra #{num_oc} (Ref: {ref_oc}) registrada con éxito.")
                                 st.rerun()
                             else:
@@ -1018,7 +1029,6 @@ elif rol in ["admin", "produccion"]:
 
     with tab_rep:
         st.subheader("📊 Centro de Reportes Gerenciales y de Producción")
-        # Vistas reducidas a las dos que realmente utilizas
         tipo_reporte_gerencial = st.radio(
             "Selecciona la vista de reporte:", 
             ["Reporte de Producción", "Costos Máquinas Alquiladas"], 
