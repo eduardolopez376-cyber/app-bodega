@@ -1686,5 +1686,5 @@ elif rol in ["admin", "produccion"]:
                                 ejecutar_comando("UPDATE usuarios SET nombre = %s, rol = %s WHERE username = %s", (nuevo_nombre.strip(), nuevo_rol, edit_user_sel))
                             st.success("¡Usuario actualizado!")
                             st.rerun()
-        exceptException as e:
+        except Exception as e:
             st.error(f"Error: {e}")
