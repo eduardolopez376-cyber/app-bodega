@@ -530,7 +530,11 @@ if rol == "operario":
                         actividad_tarea = row_t['actividad']
                         meta_asignada_tarea = int(row_t['meta_unidades'])
                         
-                        cli_db = ejecutar_consulta("SELECT cliente FROM ordenes_compra WHERE numero_oc = %s", (num_oc_asociada,))
+                        cli_db = ejecutar_consulta("SELECT cliente FROM ordenes_compra WHERE id = %s", (id_tarea,)) # o buscar por numero_oc
+                        # Buscamos de forma segura por numero_oc y referencia para atinarle a la línea exacta
+                        cli_db = ejecutar_consulta("SELECT cliente FROM ordenes_compra WHERE numero_oc = %s AND referencia = %s", (num_oc_asociada, referencia_pieza))
+                        if cli_db.empty:
+                            cli_db = ejecutar_consulta("SELECT cliente FROM ordenes_compra WHERE numero_oc = %s", (num_oc_asociada,))
                         cliente_nombre = cli_db.iloc[0]['cliente'] if not cli_db.empty else "N/A"
                         
                         maq_db = ejecutar_consulta("SELECT tipo_propiedad FROM maquinas WHERE nombre = %s", (maquina_elegida,))
@@ -557,7 +561,10 @@ if rol == "operario":
                         )
                         
                         if num_oc_asociada and num_oc_asociada != "SIN OC":
-                            oc_db = ejecutar_consulta("SELECT unidades_entregadas, meta_unidades, requiere_unidades FROM ordenes_compra WHERE numero_oc = %s", (num_oc_asociada,))
+                            oc_db = ejecutar_consulta("SELECT unidades_entregadas, meta_unidades, requiere_unidades FROM ordenes_compra WHERE numero_oc = %s AND referencia = %s", (num_oc_asociada, referencia_pieza))
+                            if oc_db.empty:
+                                oc_db = ejecutar_consulta("SELECT unidades_entregadas, meta_unidades, requiere_unidades FROM ordenes_compra WHERE numero_oc = %s", (num_oc_asociada,))
+                                
                             if not oc_db.empty:
                                 ent_actuales = int(oc_db.iloc[0]['unidades_entregadas']) if pd.notna(oc_db.iloc[0]['unidades_entregadas']) else 0
                                 meta_oc = int(oc_db.iloc[0]['meta_unidades'])
@@ -565,8 +572,8 @@ if rol == "operario":
                                 nuevo_entregado = ent_actuales + unidades
                                 nuevo_estado = 'COMPLETADO' if req_uni and nuevo_entregado >= meta_oc else 'EN PROCESO'
                                 ejecutar_comando(
-                                    "UPDATE ordenes_compra SET unidades_entregadas = %s, estado = %s WHERE numero_oc = %s",
-                                    (nuevo_entregado, nuevo_estado, num_oc_asociada)
+                                    "UPDATE ordenes_compra SET unidades_entregadas = %s, estado = %s WHERE numero_oc = %s AND referencia = %s",
+                                    (nuevo_entregado, nuevo_estado, num_oc_asociada, referencia_pieza)
                                 )
 
                         ejecutar_comando("UPDATE programacion_diaria SET estado = 'FINALIZADO' WHERE id = %s", (id_tarea,))
@@ -589,7 +596,7 @@ if rol == "operario":
                         
                         pdf_buffer = generar_pdf_f01_01(datos_pdf)
                         st.session_state["ultimo_pdf_buffer"] = pdf_buffer.getvalue()
-                        st.session_state["ultimo_pdf_nombre"] = f"F-01-01_OC_{num_oc_asociada}.pdf"
+                        st.session_state["ultimo_pdf_nombre"] = f"F-01-01_OC_{num_oc_asociada}_{referencia_pieza}.pdf"
                         
                         if unidades < meta_asignada_tarea:
                             st.warning(f"¡Producción registrada! ⚠️ **Atención:** Se reportaron piezas pendientes por completar ({meta_asignada_tarea - unidades} u. faltantes). La orden quedará en seguimiento.")
@@ -705,11 +712,10 @@ elif rol in ["admin", "produccion"]:
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
             maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
             
-            # FILTRO FLEXIBLE PARA MÚLTIPLES REFERENCIAS: 
-            # Permitimos listar las OCs activas, pero distinguimos por combinación de OC y Referencia
-            # para que una misma OC con otra referencia diferente pueda ser programada sin conflicto.
+            # FILTRO CORREGIDO: Verificamos línea por línea (OC + Referencia) en la tabla ordenes_compra 
+            # para permitir programar varias referencias de la misma OC sin bloquearse entre ellas.
             ocs_db = ejecutar_consulta("""
-                SELECT numero_oc, referencia, servicio, meta_unidades FROM ordenes_compra 
+                SELECT id, numero_oc, referencia, servicio, meta_unidades FROM ordenes_compra 
                 WHERE estado != 'COMPLETADO'
             """)
             
@@ -717,20 +723,21 @@ elif rol in ["admin", "produccion"]:
             info_ocs_dict = {}
             if not ocs_db.empty:
                 for _, r in ocs_db.iterrows():
+                    oc_id = int(r['id'])
                     oc_num = str(r['numero_oc']).strip()
                     ref_val = str(r['referencia']).strip()
-                    # Identificador único combinando OC y Referencia para permitir múltiples referencias por OC
-                    clave_combinada = f"{oc_num} (Ref: {ref_val})"
+                    clave_combinada = f"ID OC #{oc_id} | OC: {oc_num} - Ref: {ref_val}"
                     
-                    # Verificamos si esta combinación exacta ya fue programada
+                    # Verificamos si esta línea exacta ya tiene una programación activa o pendiente
                     ya_prog = ejecutar_consulta(
-                        "SELECT id FROM programacion_diaria WHERE numero_oc = %s AND referencia = %s",
+                        "SELECT id FROM programacion_diaria WHERE numero_oc = %s AND referencia = %s AND estado NOT IN ('FINALIZADO', 'CANCELADO')",
                         (oc_num, ref_val)
                     )
                     
                     if ya_prog.empty:
                         ocs_activas_validas.append(clave_combinada)
                         info_ocs_dict[clave_combinada] = {
+                            "id_oc": oc_id,
                             "numero_oc": oc_num,
                             "referencia": ref_val,
                             "servicio": str(r['servicio']).strip(),
@@ -751,7 +758,7 @@ elif rol in ["admin", "produccion"]:
                     servicio_arrastrado = datos_oc_sel.get("servicio", "SIN SERVICIO")
                     meta_arrastrada = datos_oc_sel.get("meta", 100)
                     
-                    st.info(f"🔒 **Datos limpios arrastrados:** \n- **OC:** `{oc_real}` \n- **Referencia:** `{ref_arrastrada}` \n- **Servicio:** `{servicio_arrastrado}` \n- **Meta Total:** `{meta_arrastrada} u.`")
+                    st.info(f"🔒 **Datos limpios arrastrados:** \n- **OC:** `{oc_real}` \n- **Referencia:** `{ref_arrastrada}` \n- **Servicio:** `{servicio_arrastrado}` \n- **Meta de esta Referencia:** `{meta_arrastrada} u.`")
                     
                     with st.form(f"form_programacion_limpia_{fecha_seleccionada}_{k_sufijo}", clear_on_submit=True):
                         op_p = st.selectbox("Operario", ops, key=f"op_prog_{k_sufijo}")
@@ -811,7 +818,7 @@ elif rol in ["admin", "produccion"]:
                         cliente_oc = st.selectbox("Cliente Asociado", lista_clientes if lista_clientes else ["SIN CLIENTE REGISTRADO"])
                         ref_oc = st.selectbox("Referencia Base", lista_refs)
                         servicio_oc = st.selectbox("Servicio Prestado", lista_servicios if lista_servicios else ["NINGUNO"])
-                        meta_oc = st.number_input("Cantidad Total Pedida (Meta de la OC)", min_value=1, value=100)
+                        meta_oc = st.number_input("Cantidad Total Pedida (Meta de este Ítems/Referencia)", min_value=1, value=100)
                         
                         if st.form_submit_button("Guardar Orden de Compra", type="primary", use_container_width=True):
                             if num_oc.strip() and cliente_oc != "SIN CLIENTE REGISTRADO":
@@ -821,7 +828,7 @@ elif rol in ["admin", "produccion"]:
                                     VALUES (%s, %s, %s, %s, TRUE, %s, 0, 'PENDIENTE')""",
                                     (num_oc.upper().strip(), cliente_oc, ref_oc, servicio_oc, meta_oc)
                                 )
-                                st.success(f"Orden de Compra #{num_oc} registrada con éxito.")
+                                st.success(f"Orden de Compra #{num_oc} (Ref: {ref_oc}) registrada con éxito.")
                                 st.rerun()
                             else:
                                 st.error("Por favor completa el número de OC y selecciona un cliente válido.")
@@ -845,16 +852,18 @@ elif rol in ["admin", "produccion"]:
                         return "⏳ SIN INICIAR"
                 
                 df_oc['estado_alarma'] = df_oc.apply(alerta_estado, axis=1)
-                st.dataframe(df_oc[['numero_oc', 'cliente', 'referencia', 'meta_unidades', 'unidades_entregadas', 'saldo_pendiente', 'estado_alarma']], use_container_width=True)
+                st.dataframe(df_oc[['id', 'numero_oc', 'cliente', 'referencia', 'meta_unidades', 'unidades_entregadas', 'saldo_pendiente', 'estado_alarma']], use_container_width=True)
                 
-                with st.expander("Eliminar"):
-                    with st.form("form_del_oc", clear_on_submit=True):
-                        oc_del = st.selectbox("Selecciona la OC a Borrar", df_oc["numero_oc"].tolist())
-                        if st.form_submit_button("Confirmar Eliminación de OC y sus Registros", type="primary", use_container_width=True):
-                            ejecutar_comando("DELETE FROM registro_produccion WHERE numero_oc = %s", (oc_del,))
-                            ejecutar_comando("DELETE FROM programacion_diaria WHERE numero_oc = %s", (oc_del,))
-                            ejecutar_comando("DELETE FROM ordenes_compra WHERE numero_oc = %s", (oc_del,))
-                            st.success(f"Orden de Compra #{oc_del} y sus registros asociados fueron eliminados.")
+                # CORRECCIÓN: Ahora puedes eliminar por ID específico de línea de OC (sin tumbar toda la orden si tiene varias referencias)
+                with st.expander("Eliminar una Referencia Específica de la OC (Por ID de Línea)"):
+                    with st.form("form_del_oc_fila", clear_on_submit=True):
+                        id_oc_del = st.selectbox("Selecciona el ID de la línea de OC a borrar", df_oc["id"].tolist())
+                        fila_borrar = df_oc[df_oc['id'] == id_oc_del].iloc[0]
+                        st.warning(f"Vas a eliminar la línea ID #{id_oc_del} | OC: **{fila_borrar['numero_oc']}** | Ref: **{fila_borrar['referencia']}**")
+                        
+                        if st.form_submit_button("Confirmar Eliminación de esta Referencia", type="primary", use_container_width=True):
+                            ejecutar_comando("DELETE FROM ordenes_compra WHERE id = %s", (id_oc_del,))
+                            st.success(f"La referencia de la orden fue eliminada correctamente sin afectar las demás.")
                             st.rerun()
             else:
                 st.info("No hay órdenes de compra registradas.")
@@ -1387,7 +1396,7 @@ elif rol in ["admin", "produccion"]:
                                     ejecutar_comando("UPDATE usuarios SET nombre = %s, password = %s, rol = %s WHERE username = %s", (nuevo_nombre.strip(), nueva_pass, nuevo_rol, edit_user_sel))
                                 else:
                                     ejecutar_comando("UPDATE usuarios SET nombre = %s, rol = %s WHERE username = %s", (nuevo_nombre.strip(), nuevo_rol, edit_user_sel))
-                                st.success("¡Usuario actualizada!")
+                                st.success("¡Usuario actualizado!")
                                 st.rerun()
 
                     with st.expander("Eliminar"):
