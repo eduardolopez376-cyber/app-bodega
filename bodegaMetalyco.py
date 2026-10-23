@@ -434,8 +434,7 @@ if not st.session_state["autenticado"]:
                 padding: 3rem 2.5rem;
                 box-shadow: 0 10px 30px rgba(0,0,0,0.8);
                 max-width: 480px;
-                margin: 0 auto;
-            }
+                margin: 0 auto; }
             .login-title {{
                 color: {COLOR_TEXTO_CLARO};
                 font-weight: 700;
