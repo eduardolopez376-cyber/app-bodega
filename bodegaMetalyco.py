@@ -440,22 +440,24 @@ if not st.session_state["autenticado"]:
                 margin-bottom: 2rem;
                 font-size: 0.95rem;
             }
-            .stButton>button {
+     .stButton>button {
                 width: 100%;
                 height: 3.2rem;
                 font-size: 1.1rem;
                 font-weight: bold;
                 border-radius: 12px;
-                background: linear-gradient(135deg, #FF7A00 0%, #d96800 100%);
+                background: linear-gradient(135deg, #FF7A00 0%, #ff5500 100%);
                 color: #ffffff;
                 border: none;
-                box-shadow: 0 4px 15px rgba(255, 122, 0, 0.3);
-                transition: all 0.3s ease;
+                /* Aquí está el truco del difuminado y brillo amplio */
+                box-shadow: 0 8px 25px rgba(255, 122, 0, 0.5), 0 0 15px rgba(255, 122, 0, 0.2);
+                transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             }
             .stButton>button:hover {
                 background: linear-gradient(135deg, #ff9124 0%, #FF7A00 100%);
-                box-shadow: 0 6px 20px rgba(255, 122, 0, 0.5);
-                transform: translateY(-1px);
+                /* Difuminado más intenso al pasar el cursor */
+                box-shadow: 0 12px 35px rgba(255, 122, 0, 0.8), 0 0 25px rgba(255, 122, 0, 0.4);
+                transform: translateY(-2px);
             }
         </style>
     """
