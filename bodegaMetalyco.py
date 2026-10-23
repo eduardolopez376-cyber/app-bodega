@@ -554,7 +554,6 @@ if rol == "operario":
                             faltantes = meta_asignada_tarea - unidades
                             alerta_pendiente_txt = f" ⚠️ ALARMA: Faltaron {faltantes} unidades para cumplir la meta de {meta_asignada_tarea} u."
                         
-                        # 💡 FECHA PURA LOCAL DE COLOMBIA (YYYY-MM-DD)
                         fecha_exacta_actual = (datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d')
 
                         ejecutar_comando(
@@ -843,7 +842,6 @@ elif rol in ["admin", "produccion"]:
             st.write("### 📊 Estado y Reporte de Alarma de Piezas Pendientes por OC")
             df_oc = ejecutar_consulta("SELECT * FROM ordenes_compra ORDER BY id DESC")
             if not df_oc.empty:
-                # Normalizar fechas para evitar desfases visuales en saldos
                 if 'fecha_registro' in df_oc.columns:
                     df_oc['fecha_registro'] = pd.to_datetime(df_oc['fecha_registro']).dt.strftime('%Y-%m-%d')
                 
@@ -862,7 +860,7 @@ elif rol in ["admin", "produccion"]:
                         return "⏳ SIN INICIAR"
                 
                 df_oc['estado_alarma'] = df_oc.apply(alerta_estado, axis=1)
-                st.dataframe(df_oc, use_container_width=True)
+                st.dataframe(df_oc[['id', 'numero_oc', 'cliente', 'referencia', 'meta_unidades', 'unidades_entregadas', 'saldo_pendiente', 'estado_alarma']], use_container_width=True)
                 
                 with st.expander("Eliminar una Referencia Específica de la OC (Por ID de Línea)"):
                     with st.form("form_del_oc_fila", clear_on_submit=True):
@@ -1020,9 +1018,10 @@ elif rol in ["admin", "produccion"]:
 
     with tab_rep:
         st.subheader("📊 Centro de Reportes Gerenciales y de Producción")
+        # Vistas reducidas a las dos que realmente utilizas
         tipo_reporte_gerencial = st.radio(
             "Selecciona la vista de reporte:", 
-            ["Reporte de Producción", "Costos Máquinas Alquiladas", "Saldos de Órdenes de Compra e Inventario"], 
+            ["Reporte de Producción", "Costos Máquinas Alquiladas"], 
             horizontal=True
         )
         
@@ -1045,7 +1044,6 @@ elif rol in ["admin", "produccion"]:
                 df_produccion_raw = ejecutar_consulta("SELECT * FROM registro_produccion ORDER BY id DESC")
                 if not df_produccion_raw.empty:
                     if 'fecha_registro' in df_produccion_raw.columns:
-                        # Convertir limpio a fecha sin desfases
                         df_produccion_raw['dt'] = pd.to_datetime(df_produccion_raw['fecha_registro']).dt.date
                     else:
                         df_produccion_raw['dt'] = (datetime.now() - timedelta(hours=5)).date()
@@ -1090,7 +1088,7 @@ elif rol in ["admin", "produccion"]:
             except Exception as e:
                 st.error(f"Error: {e}")
 
-        elif tipo_reporte_gerencial == "Costos Máquinas Alquiladas":
+        else:
             st.markdown("### 💰 Control de Uso y Costos de Máquinas Alquiladas")
             try:
                 query_alq = """
@@ -1141,18 +1139,6 @@ elif rol in ["admin", "produccion"]:
                     st.info("No hay registros de máquinas alquiladas.")
             except Exception as e:
                 st.warning(f"Información: {e}")
-
-        else:
-            try:
-                st.write("#### Saldos y Alarmas de Órdenes de Compra")
-                df_oc_rep = ejecutar_consulta("SELECT * FROM ordenes_compra ORDER BY id DESC")
-                if not df_oc_rep.empty:
-                    if 'fecha_registro' in df_oc_rep.columns:
-                        df_oc_rep['fecha_registro'] = pd.to_datetime(df_oc_rep['fecha_registro']).dt.strftime('%Y-%m-%d')
-                    df_oc_rep['saldo_pendiente'] = df_oc_rep.apply(lambda r: r['meta_unidades'] - (r['unidades_entregadas'] if pd.notna(r['unidades_entregadas']) else 0), axis=1)
-                    st.dataframe(df_oc_rep, use_container_width=True)
-            except Exception as e:
-                st.error(f"Error: {e}")
 
     with tab_ent:
         st.subheader("🚀 Registrar Salida de Insumo / Material a Operario")
