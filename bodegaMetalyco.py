@@ -23,7 +23,7 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# Estilos CSS avanzados: Barra lateral de medida fija y bloqueada
+# Estilos CSS avanzados limpios y estables
 st.markdown("""
     <style>
         .stApp {
@@ -38,22 +38,10 @@ st.markdown("""
             padding-right: 1.5rem;
         }
         
-        /* Fijar el ancho de la barra lateral y bloquear su redimensionamiento manual */
         [data-testid="stSidebar"] {
             background-color: #1a1a1a;
             border-right: 2px solid rgba(255, 122, 0, 0.2);
             padding-top: 1rem;
-            min-width: 300px !important;
-            max-width: 300px !important;
-            width: 300px !important;
-        }
-
-        /* Desactivar el controlador de arrastre para que no se pueda estirar ni encoger */
-        [data-testid="stSidebar"] + div {
-            display: none !important;
-        }
-        [data-testid="stSidebarNav"] {
-            display: none;
         }
 
         /* Ocultar la etiqueta superior de texto o label que genera el radio por defecto ("Navegación") */
