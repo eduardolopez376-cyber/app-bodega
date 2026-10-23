@@ -23,7 +23,7 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# Estilos CSS avanzados para el menú lateral minimalista y iconos automáticos
+# Estilos CSS avanzados para las tarjetas del menú lateral
 st.markdown("""
     <style>
         .stApp {
@@ -81,33 +81,38 @@ st.markdown("""
             box-shadow: 0 4px 15px rgba(255, 122, 0, 0.3);
         }
 
-        /* Transformar el radio button en menú lateral flotante minimalista tipo píldora */
+        /* Transformar las opciones del menú lateral en tarjetas individuales con borde */
         [data-testid="stSidebar"] .stRadio > div {
-            gap: 5px;
+            gap: 8px;
         }
         [data-testid="stSidebar"] .stRadio label {
-            background-color: transparent;
-            color: #B0B0B0;
-            padding: 9px 14px;
-            border-radius: 14px 0px 0px 14px;
+            background-color: #212121;
+            color: #C0C0C0;
+            padding: 10px 14px;
+            border-radius: 12px;
             font-weight: 500;
             font-size: 0.95rem;
             width: 100%;
+            border: 1px solid rgba(255, 255, 255, 0.08);
             transition: all 0.3s ease;
             cursor: pointer;
         }
+        /* Efecto al pasar el cursor (hover) */
         [data-testid="stSidebar"] .stRadio label:hover {
             color: #ffffff;
-            background-color: rgba(255, 122, 0, 0.1);
+            border-color: #FF7A00;
+            background-color: rgba(255, 122, 0, 0.08);
+            box-shadow: 0 4px 12px rgba(255, 122, 0, 0.2);
         }
+        /* Estilo para la opción seleccionada */
         [data-testid="stSidebar"] .stRadio div[checked="true"] label,
         [data-testid="stSidebar"] .stRadio input:checked + div {
-            background-color: #121212 !important;
+            background-color: rgba(255, 122, 0, 0.12) !important;
             color: #FF7A00 !important;
             font-weight: bold !important;
-            border-left: 4px solid #FF7A00;
-            box-shadow: -5px 5px 15px rgba(0,0,0,0.5);
-            border-radius: 16px 0px 0px 16px;
+            border: 1px solid #FF7A00 !important;
+            box-shadow: 0 4px 15px rgba(255, 122, 0, 0.3);
+            border-radius: 12px !important;
         }
         [data-testid="stSidebar"] .stRadio input[type="radio"] {
             display: none;
@@ -1673,7 +1678,6 @@ elif rol in ["admin", "produccion"]:
                         rol_actual = user_actual.iloc[0]['rol'] if not user_actual.empty else "operario"
                         idx_rol = ["operario", "produccion", "admin"].index(rol_actual) if rol_actual in ["operario", "produccion", "admin"] else 0
                         
-                        now = datetime.now()
                         nuevo_nombre = st.text_input("Nombre Completo", value=nombre_actual)
                         nueva_pass = st.text_input("Nueva Contraseña (Dejar en blanco si no cambia)", type="password")
                         nuevo_rol = st.selectbox("Nuevo Rol en Planta", ["operario", "produccion", "admin"], index=idx_rol)
