@@ -8,7 +8,6 @@ import base64
 from datetime import datetime, time, date, timedelta
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
-import pytz
 
 # =====================================================
 # PALETA DE COLORES Y ESTILOS (INDUSTRIAL EXÓTICO)
@@ -247,7 +246,7 @@ def generar_reporte_produccion_excel(df_original):
     if 'fecha_registro' in df.columns:
         df['Fecha'] = pd.to_datetime(df['fecha_registro']).dt.strftime('%Y-%m-%d')
     else:
-        df['Fecha'] = (datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d')
+        df['Fecha'] = (datetime.utcnow() - timedelta(hours=5)).strftime('%Y-%m-%d')
         
     df['Orden'] = df['numero_oc'] if 'numero_oc' in df.columns else 'SIN OC'
     df['Area'] = 'Producción'
@@ -328,7 +327,7 @@ def generar_pdf_f01_01(datos):
     p.setFont("Helvetica-Bold", 8)
     p.drawString(x_margen + 8, y_actual - 12, "FECHA:")
     p.setFont("Helvetica", 8)
-    p.drawString(x_margen + 50, y_actual - 12, f"{datos.get('fecha', (datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d'))}")
+    p.drawString(x_margen + 50, y_actual - 12, f"{datos.get('fecha', (datetime.utcnow() - timedelta(hours=5)).strftime('%Y-%m-%d'))}")
     
     p.setFont("Helvetica-Bold", 8)
     p.drawString(x_margen + 260, y_actual - 12, "OP (ORDEN DE PRODUCCIÓN):")
@@ -680,17 +679,15 @@ with st.sidebar:
 menu_limpio = menu_seleccionado
 
 # ====================================================
-# ENCABEZADO PRINCIPAL DE LA PÁGINA (CENTRADO Y FECHA/HORA COLOMBIA)
+# ENCABEZADO PRINCIPAL DE LA PÁGINA (CENTRADO Y FECHA DE COLOMBIA)
 # ====================================================
-tz_colombia = pytz.timezone('America/Bogota')
-tiempo_colombia = datetime.now(tz_colombia)
-fecha_hora_col_str = tiempo_colombia.strftime('%Y-%m-%d | %I:%M:%S %p')
+fecha_colombia_str = (datetime.utcnow() - timedelta(hours=5)).strftime('%Y-%m-%d')
 
 col_h_izq, col_h_centro, col_h_der = st.columns([0.1, 0.8, 0.1])
 with col_h_centro:
     st.markdown("<h1 style='text-align: center; font-size: 2.2rem; margin-bottom: 0;'>Industrias Metal&Co</h1>", unsafe_allow_html=True)
 with col_h_der:
-    st.markdown(f"<div style='text-align: right; color: #888; font-size: 0.85rem; padding-top: 15px;'>🇨🇴 Colombia<br><b>{fecha_hora_col_str}</b></div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align: right; color: #888; font-size: 0.85rem; padding-top: 15px;'>🇨🇴 Colombia<br><b>{fecha_colombia_str}</b></div>", unsafe_allow_html=True)
 
 st.markdown("---")
 
@@ -703,7 +700,7 @@ if rol == "operario":
         filtro_fecha = st.radio("Ver tareas de:", ["Todas mis tareas pendientes", "Filtrar por fecha específica"], horizontal=True)
         try:
             if filtro_fecha == "Filtrar por fecha específica":
-                fecha_operario = st.date_input("Selecciona el día a consultar", value=(datetime.now() - timedelta(hours=5)).date(), key="cal_op_dia")
+                fecha_operario = st.date_input("Selecciona el día a consultar", value=(datetime.utcnow() - timedelta(hours=5)).date(), key="cal_op_dia")
                 tareas = ejecutar_consulta(
                     """SELECT id, fecha, numero_oc, hora_inicio, hora_fin, maquina, referencia, actividad, meta_unidades, estado 
                        FROM programacion_diaria 
@@ -785,8 +782,8 @@ if rol == "operario":
                             if str(maq_db.iloc[0]['tipo_propiedad']).upper() == 'ALQUILADA':
                                 es_alq = True
                         
-                        dt_inicio = datetime.combine((datetime.now() - timedelta(hours=5)).date(), h_inicio)
-                        dt_fin = datetime.combine((datetime.now() - timedelta(hours=5)).date(), h_fin)
+                        dt_inicio = datetime.combine((datetime.utcnow() - timedelta(hours=5)).date(), h_inicio)
+                        dt_fin = datetime.combine((datetime.utcnow() - timedelta(hours=5)).date(), h_fin)
                         if dt_fin < dt_inicio: 
                             dt_fin += timedelta(days=1)
                         diff_seg = (dt_fin - dt_inicio).total_seconds()
@@ -797,7 +794,7 @@ if rol == "operario":
                             faltantes = meta_asignada_tarea - unidades
                             alerta_pendiente_txt = f" ALARMA: Faltaron {faltantes} unidades para cumplir la meta de {meta_asignada_tarea} u."
                         
-                        fecha_exacta_actual = (datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d')
+                        fecha_exacta_actual = (datetime.utcnow() - timedelta(hours=5)).strftime('%Y-%m-%d')
 
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
@@ -917,14 +914,14 @@ if rol == "operario":
                             if str(maq_db.iloc[0]['tipo_propiedad']).upper() == 'ALQUILADA':
                                 es_alq = True
                         
-                        dt_inicio_imp = datetime.combine((datetime.now() - timedelta(hours=5)).date(), h_ini_imp)
-                        dt_fin_imp = datetime.combine((datetime.now() - timedelta(hours=5)).date(), h_fin_imp)
+                        dt_inicio_imp = datetime.combine((datetime.utcnow() - timedelta(hours=5)).date(), h_ini_imp)
+                        dt_fin_imp = datetime.combine((datetime.utcnow() - timedelta(hours=5)).date(), h_fin_imp)
                         if dt_fin_imp < dt_inicio_imp:
                             dt_fin_imp += timedelta(days=1)
                         diff_seg_imp = (dt_fin_imp - dt_inicio_imp).total_seconds()
                         horas_calc = round(max(0.0, diff_seg_imp / 3600.0), 2)
 
-                        fecha_exacta_actual_imp = (datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d')
+                        fecha_exacta_actual_imp = (datetime.utcnow() - timedelta(hours=5)).strftime('%Y-%m-%d')
 
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
@@ -944,7 +941,7 @@ elif rol in ["admin", "produccion"]:
     
     if menu_limpio == "Programar":
         st.subheader("Programación Directa por Orden de Compra y Referencia")
-        fecha_seleccionada = st.date_input("Selecciona el día a consultar/programar", value=(datetime.now() - timedelta(hours=5)).date(), key="cal_admin_dia")
+        fecha_seleccionada = st.date_input("Selecciona el día a consultar/programar", value=(datetime.utcnow() - timedelta(hours=5)).date(), key="cal_admin_dia")
         try:
             ops_df = ejecutar_consulta("SELECT nombre FROM usuarios WHERE rol = 'operario'")
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
@@ -1072,7 +1069,7 @@ elif rol in ["admin", "produccion"]:
                         
                         if st.form_submit_button("Guardar", type="primary", use_container_width=True):
                             if num_oc.strip() and cliente_oc != "SIN CLIENTE REGISTRADO":
-                                ej_fecha = (datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d')
+                                ej_fecha = (datetime.utcnow() - timedelta(hours=5)).strftime('%Y-%m-%d')
                                 try:
                                     ejecutar_comando(
                                         """INSERT INTO ordenes_compra 
@@ -1304,12 +1301,12 @@ elif rol in ["admin", "produccion"]:
             filtro_periodo = st.selectbox("Filtrar Período:", ["Histórico (Todo)", "Diario", "Semanal", "Mensual"])
         with c_p2:
             if filtro_periodo == "Diario":
-                fecha_filtro = st.date_input("Selecciona el Día", value=(datetime.now() - timedelta(hours=5)).date())
+                fecha_filtro = st.date_input("Selecciona el Día", value=(datetime.utcnow() - timedelta(hours=5)).date())
             elif filtro_periodo == "Semanal":
-                fecha_filtro = st.date_input("Selecciona una fecha de la Semana", value=(datetime.now() - timedelta(hours=5)).date())
+                fecha_filtro = st.date_input("Selecciona una fecha de la Semana", value=(datetime.utcnow() - timedelta(hours=5)).date())
             elif filtro_periodo == "Mensual":
-                mes_opcion = st.selectbox("Selecciona el Mes", ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"], index=(datetime.now() - timedelta(hours=5)).month - 1)
-                anio_opcion = st.number_input("Año", min_value=2024, max_value=2030, value=(datetime.now() - timedelta(hours=5)).year)
+                mes_opcion = st.selectbox("Selecciona el Mes", ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"], index=(datetime.utcnow() - timedelta(hours=5)).month - 1)
+                anio_opcion = st.number_input("Año", min_value=2024, max_value=2030, value=(datetime.utcnow() - timedelta(hours=5)).year)
 
         if tipo_reporte_gerencial == "Reporte de Producción":
             st.markdown("### Reporte de Producción en Columnas Separadas para Excel")
@@ -1320,7 +1317,7 @@ elif rol in ["admin", "produccion"]:
                     if 'fecha_registro' in df_produccion_raw_copy.columns:
                         df_produccion_raw_copy['dt'] = pd.to_datetime(df_produccion_raw_copy['fecha_registro']).dt.date
                     else:
-                        df_produccion_raw_copy['dt'] = (datetime.now() - timedelta(hours=5)).date()
+                        df_produccion_raw_copy['dt'] = (datetime.utcnow() - timedelta(hours=5)).date()
 
                     if filtro_periodo == "Diario":
                         df_produccion_raw_copy = df_produccion_raw_copy[df_produccion_raw_copy['dt'] == fecha_filtro]
@@ -1342,7 +1339,7 @@ elif rol in ["admin", "produccion"]:
                         st.download_button(
                             label="📥 Descargar Reporte de Producción Filtrado (Excel)",
                             data=buffer_prod.getvalue(),
-                            file_name=f"reporte_produccion_{filtro_periodo.lower()}_{(datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d')}.xlsx",
+                            file_name=f"reporte_produccion_{filtro_periodo.lower()}_{(datetime.utcnow() - timedelta(hours=5)).strftime('%Y-%m-%d')}.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             use_container_width=True
                         )
@@ -1410,7 +1407,7 @@ elif rol in ["admin", "produccion"]:
                         st.download_button(
                             label="📥 Descargar Costos de Máquinas Filtrado (Excel)",
                             data=buffer_alq.getvalue(),
-                            file_name=f"costos_maquinas_{filtro_periodo.lower()}_{(datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d')}.xlsx",
+                            file_name=f"costos_maquinas_{filtro_periodo.lower()}_{(datetime.utcnow() - timedelta(hours=5)).strftime('%Y-%m-%d')}.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             use_container_width=True
                         )
@@ -1436,7 +1433,7 @@ elif rol in ["admin", "produccion"]:
                         row = mats[mats['nombre'] == mat_sel].iloc[0]
                         ejecutar_comando(
                             "INSERT INTO consumos (fecha, operario, codigo_material, cantidad, tipo, estado) VALUES (%s, %s, %s, %s, %s, 'ENTREGADO')",
-                            ((datetime.now() - timedelta(hours=5)).strftime("%Y-%m-%d"), op_sel, row['codigo'], cant, row['tipo'])
+                            ((datetime.utcnow() - timedelta(hours=5)).strftime("%Y-%m-%d"), op_sel, row['codigo'], cant, row['tipo'])
                         )
                         ejecutar_comando("UPDATE inventario SET cantidad = cantidad - %s WHERE codigo = %s", (cant, row['codigo']))
                         st.success("Salida registrada con éxito.")
@@ -1466,7 +1463,7 @@ elif rol in ["admin", "produccion"]:
                             row_h = herramientas_db[herramientas_db['nombre'] == her_sel].iloc[0]
                             ejecutar_comando(
                                 "INSERT INTO consumos (fecha, operario, codigo_material, cantidad, tipo, estado) VALUES (%s, %s, %s, %s, 'HERRAMIENTA', 'PRESTADO')",
-                                ((datetime.now() - timedelta(hours=5)).strftime("%Y-%m-%d"), op_her, row_h['codigo'], cant_her)
+                                ((datetime.utcnow() - timedelta(hours=5)).strftime("%Y-%m-%d"), op_her, row_h['codigo'], cant_her)
                             )
                             st.success("Préstamo registrado.")
                             st.rerun()
@@ -1501,7 +1498,7 @@ elif rol in ["admin", "produccion"]:
                                 ejecutar_comando("UPDATE consumos SET estado = 'DEVUELTO' WHERE id = %s", (id_prestamo_sel,))
                                 ejecutar_comando(
                                     "INSERT INTO consumos (fecha, operario, codigo_material, cantidad, tipo, estado) VALUES (%s, %s, %s, %s, 'HERRAMIENTA', 'PRESTADO')",
-                                    ((datetime.now() - timedelta(hours=5)).strftime("%Y-%m-%d"), nuevo_operario, reg_actual['codigo_material'], reg_actual['cantidad'])
+                                    ((datetime.utcnow() - timedelta(hours=5)).strftime("%Y-%m-%d"), nuevo_operario, reg_actual['codigo_material'], reg_actual['cantidad'])
                                 )
                                 st.success(f"Herramienta reasignada exitosamente a {nuevo_operario}.")
                                 st.rerun()
@@ -1674,7 +1671,7 @@ elif rol in ["admin", "produccion"]:
 
             if not users_df.empty:
                 st.write("### Listado y Borrado Masivo de Usuarios")
-                users_v = users_users_df = users_df.copy()
+                users_v = users_df.copy()
                 users_v.insert(0, "Seleccionar", False)
                 edited_users = st.data_editor(users_v, key="editor_users_mult", use_container_width=True, hide_index=True)
                 usernames_a_borrar = edited_users[edited_users["Seleccionar"] == True]["username"].tolist()
