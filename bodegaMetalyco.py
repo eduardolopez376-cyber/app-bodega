@@ -542,7 +542,6 @@ if rol == "operario":
                                 diff = (dt_fin - dt_inicio).total_seconds() / 3600.0
                                 horas_calc = round(max(0.0, diff), 2)
                         
-                        # Alarma si no se cumplió la meta de la tarea
                         alerta_pendiente_txt = ""
                         if unidades < meta_asignada_tarea:
                             faltantes = meta_asignada_tarea - unidades
@@ -562,6 +561,7 @@ if rol == "operario":
                                 meta_oc = int(oc_db.iloc[0]['meta_unidades'])
                                 req_uni = oc_db.iloc[0]['requiere_unidades']
                                 nuevo_entregado = ent_actuales + unidades
+                                # La OC se marca como completada solo si se cumple o supera la meta total
                                 nuevo_estado = 'COMPLETADO' if req_uni and nuevo_entregado >= meta_oc else 'EN PROCESO'
                                 ejecutar_comando(
                                     "UPDATE ordenes_compra SET unidades_entregadas = %s, estado = %s WHERE numero_oc = %s",
@@ -591,7 +591,7 @@ if rol == "operario":
                         st.session_state["ultimo_pdf_nombre"] = f"F-01-01_OC_{num_oc_asociada}.pdf"
                         
                         if unidades < meta_asignada_tarea:
-                            st.warning(f"¡Producción registrada! ⚠️ **Atención:** Se reportaron piezas pendientes por completar ({meta_asignada_tarea - unidades} u. faltantes).")
+                            st.warning(f"¡Producción registrada! ⚠️ **Atención:** Se reportaron piezas pendientes por completar ({meta_asignada_tarea - unidades} u. faltantes). La orden quedará en seguimiento.")
                         else:
                             st.success("¡Producción registrada y formato F-01-01 generado con éxito!")
 
@@ -704,8 +704,12 @@ elif rol in ["admin", "produccion"]:
             ops = ops_df['nombre'].tolist() if not ops_df.empty else []
             maqs = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
             
-            # Consultar OCs activas
-            ocs_db = ejecutar_consulta("SELECT numero_oc, referencia, servicio, meta_unidades FROM ordenes_compra WHERE estado != 'COMPLETADO'")
+            # FILTRO ESTRICTO: Solo mostrar OCs que NO hayan sido programadas previamente (excluyendo las que ya tienen registros en programacion_diaria)
+            ocs_db = ejecutar_consulta("""
+                SELECT numero_oc, referencia, servicio, meta_unidades FROM ordenes_compra 
+                WHERE estado != 'COMPLETADO' 
+                AND numero_oc NOT IN (SELECT DISTINCT numero_oc FROM programacion_diaria WHERE numero_oc IS NOT NULL AND numero_oc != '')
+            """)
             
             ocs_activas_validas = []
             info_ocs_dict = {}
@@ -721,12 +725,11 @@ elif rol in ["admin", "produccion"]:
                     }
 
             if not ops or not maqs or not ocs_activas_validas:
-                st.warning("⚠️ Asegúrate de tener operarios, máquinas y al menos una **Orden de Compra activa** creada.")
+                st.warning("⚠️ No hay Órdenes de Compra disponibles para programar (las activas ya fueron programadas o se completaron). Crea una nueva Orden de Compra si deseas programar más lotes.")
             else:
                 with st.expander("Crear Programación Limpia", expanded=True):
                     k_sufijo = st.session_state["form_key_counter"]
                     
-                    # Al cambiar la OC, Streamlit limpia y arrastra exactamente los datos de esa OC sin mezclar
                     oc_prog = st.selectbox("Seleccionar Orden de Compra", ocs_activas_validas, key=f"select_oc_limpia_{k_sufijo}")
                     
                     datos_oc_sel = info_ocs_dict.get(oc_prog, {})
@@ -746,7 +749,6 @@ elif rol in ["admin", "produccion"]:
                         with col_h2:
                             h_fin_p = st.time_input("Fin Turno", time(17, 0), key=f"hfin_{k_sufijo}")
                         
-                        # Meta fija e inalterable tomada directo de la OC seleccionada
                         st.markdown(f"📌 **Meta asignada para esta tarea (Fija de la OC):** `{meta_arrastrada} u.`")
                         
                         if st.form_submit_button("Guardar Programación de Tarea", type="primary", use_container_width=True):
@@ -818,7 +820,6 @@ elif rol in ["admin", "produccion"]:
                     lambda row: row['meta_unidades'] - (row['unidades_entregadas'] if pd.notna(row['unidades_entregadas']) else 0), axis=1
                 )
                 
-                # Alarma visual integrada en la tabla
                 def alerta_estado(row):
                     entregado = row['unidades_entregadas'] if pd.notna(row['unidades_entregadas']) else 0
                     meta = row['meta_unidades']
@@ -1372,7 +1373,7 @@ elif rol in ["admin", "produccion"]:
                                     ejecutar_comando("UPDATE usuarios SET nombre = %s, password = %s, rol = %s WHERE username = %s", (nuevo_nombre.strip(), nueva_pass, nuevo_rol, edit_user_sel))
                                 else:
                                     ejecutar_comando("UPDATE usuarios SET nombre = %s, rol = %s WHERE username = %s", (nuevo_nombre.strip(), nuevo_rol, edit_user_sel))
-                                st.success("¡Usuario actualizado!")
+                                st.success("¡Usuario actualizada!")
                                 st.rerun()
 
                     with st.expander("Eliminar"):
