@@ -514,6 +514,9 @@ if rol == "operario":
                     
                     h_inicio = st.time_input("Hora de Inicio Real", time(7, 0))
                     h_fin = st.time_input("Hora de Finalización Real", time(17, 0))
+                    
+                    forzar_horas = st.number_input("Horas Totales Trabajadas en Máquina (Confirmar o Ajustar)", min_value=0.0, max_value=24.0, step=0.5, value=0.0, help="Si dejas en 0.0, el sistema calculará automáticamente la diferencia entre Hora de Inicio y Hora de Fin.")
+                    
                     unidades = st.number_input("Unidades Producidas Buenas", min_value=0, step=1)
                     defectuosas = st.number_input("Unidades Defectuosas (Scrap)", min_value=0, step=1, value=0)
                     obs_usuario = st.text_area("Observaciones / Novedades")
@@ -535,34 +538,34 @@ if rol == "operario":
                             cli_db = ejecutar_consulta("SELECT cliente FROM ordenes_compra WHERE numero_oc = %s", (num_oc_asociada,))
                         cliente_nombre = cli_db.iloc[0]['cliente'] if not cli_db.empty else "N/A"
                         
-                        # CORRECCIÓN DE CÁLCULO DE HORAS TRABAJADAS (Basado estrictamente en hora de inicio y fin)
                         maq_db = ejecutar_consulta("SELECT tipo_propiedad FROM maquinas WHERE nombre = %s", (maquina_elegida,))
                         es_alq = False
-                        horas_calc = 0.0
                         if not maq_db.empty:
                             if str(maq_db.iloc[0]['tipo_propiedad']).upper() == 'ALQUILADA':
                                 es_alq = True
                         
-                        # Cálculo exacto de horas entre h_inicio y h_fin
-                        dt_inicio = datetime.combine(date.today(), h_inicio)
-                        dt_fin = datetime.combine(date.today(), h_fin)
-                        if dt_fin < dt_inicio: # Si pasa la medianoche
-                            dt_fin += timedelta(days=1)
-                        diff_seg = (dt_fin - dt_inicio).total_seconds()
-                        horas_calc = round(max(0.0, diff_seg / 3600.0), 2)
+                        if forzar_horas > 0.0:
+                            horas_calc = float(forzar_horas)
+                        else:
+                            dt_inicio = datetime.combine(date.today(), h_inicio)
+                            dt_fin = datetime.combine(date.today(), h_fin)
+                            if dt_fin < dt_inicio: 
+                                dt_fin += timedelta(days=1)
+                            diff_seg = (dt_fin - dt_inicio).total_seconds()
+                            horas_calc = round(max(0.0, diff_seg / 3600.0), 2)
                         
                         alerta_pendiente_txt = ""
                         if unidades < meta_asignada_tarea:
                             faltantes = meta_asignada_tarea - unidades
                             alerta_pendiente_txt = f" ⚠️ ALARMA: Faltaron {faltantes} unidades para cumplir la meta de {meta_asignada_tarea} u."
                         
-                        # CORRECCIÓN DE FECHA Y HORA DEL MOMENTO (Usando la hora exacta local del sistema en lugar de NOW de servidor UTC)
-                        tiempo_exacto_actual = datetime.now()
+                        # 💡 HORA EXACTA LOCAL DE COLOMBIA (Se toma directamente del sistema en formato string timestamp para evitar desajustes UTC)
+                        tiempo_exacto_actual = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
                             (operario_nombre, maquina, referencia, numero_oc, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones, es_maquina_alquilada, horas_trabajadas, presion_trabajo, fecha_registro) 
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::timestamp)""",
                             (st.session_state['nombre_usuario'], maquina_elegida, referencia_pieza, num_oc_asociada, h_inicio, h_fin, unidades, f"Buenas: {unidades}, Defectuosas: {defectuosas}.{alerta_pendiente_txt} {obs_usuario}", es_alq, horas_calc, presion_input, tiempo_exacto_actual)
                         )
                         
@@ -667,6 +670,8 @@ if rol == "operario":
                         h_ini_imp = st.time_input("Hora de Inicio", time(8, 0))
                     with c_h2:
                         h_fin_imp = st.time_input("Hora de Finalización", time(17, 0))
+                    
+                    forzar_horas_imp = st.number_input("Horas Totales Trabajadas en Máquina (Confirmar o Ajustar)", min_value=0.0, max_value=24.0, step=0.5, value=0.0, key="forz_imp")
                         
                     uni_imp = st.number_input("Unidades Producidas Buenas", min_value=0, value=1)
                     def_imp = st.number_input("Unidades Defectuosas (Scrap)", min_value=0, value=0)
@@ -676,24 +681,26 @@ if rol == "operario":
                         obs_final_imp = f"⚡ TAREA IMPREVISTA (Cliente: {cliente_asociado_oc}): {act_imp} | Buenas: {uni_imp}, Defectuosas: {def_imp}. Nota: {obs_imp}"
                         maq_db = ejecutar_consulta("SELECT tipo_propiedad FROM maquinas WHERE nombre = %s", (maq_imp,))
                         es_alq = False
-                        horas_calc = 0.0
                         if not maq_db.empty:
                             if str(maq_db.iloc[0]['tipo_propiedad']).upper() == 'ALQUILADA':
                                 es_alq = True
                         
-                        dt_inicio_imp = datetime.combine(date.today(), h_ini_imp)
-                        dt_fin_imp = datetime.combine(date.today(), h_fin_imp)
-                        if dt_fin_imp < dt_inicio_imp:
-                            dt_fin_imp += timedelta(days=1)
-                        diff_seg_imp = (dt_fin_imp - dt_inicio_imp).total_seconds()
-                        horas_calc = round(max(0.0, diff_seg_imp / 3600.0), 2)
+                        if forzar_horas_imp > 0.0:
+                            horas_calc = float(forzar_horas_imp)
+                        else:
+                            dt_inicio_imp = datetime.combine(date.today(), h_ini_imp)
+                            dt_fin_imp = datetime.combine(date.today(), h_fin_imp)
+                            if dt_fin_imp < dt_inicio_imp:
+                                dt_fin_imp += timedelta(days=1)
+                            diff_seg_imp = (dt_fin_imp - dt_inicio_imp).total_seconds()
+                            horas_calc = round(max(0.0, diff_seg_imp / 3600.0), 2)
 
-                        tiempo_exacto_actual_imp = datetime.now()
+                        tiempo_exacto_actual_imp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
                         ejecutar_comando(
                             """INSERT INTO registro_produccion 
                             (operario_nombre, maquina, referencia, numero_oc, hora_inicio_real, hora_fin_real, unidades_producidas, observaciones, es_maquina_alquilada, horas_trabajadas, presion_trabajo, fecha_registro) 
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::timestamp)""",
                             (st.session_state['nombre_usuario'], maq_imp, ref_imp, oc_imp, h_ini_imp, h_fin_imp, uni_imp, obs_final_imp, es_alq, horas_calc, presion_imp, tiempo_exacto_actual_imp)
                         )
                         st.success("¡Tarea imprevista registrada!")
@@ -1074,7 +1081,7 @@ elif rol in ["admin", "produccion"]:
                     else:
                         st.info(f"No hay registros de producción para el período seleccionado ({filtro_periodo}).")
                         
-                    with st.expander("🧹 Limpiar Registros de Producción Antiguos"):
+                    with st.expander("🧹 Limpiar o Borrar Registros de Producción (Ej: ID 20 y 21)"):
                         with st.form("form_limpiar_prod"):
                             reg_produccion_ids = df_produccion_raw['id'].tolist() if 'id' in df_produccion_raw.columns else []
                             id_a_borrar = st.selectbox("Selecciona el ID de Registro de Producción a Borrar", reg_produccion_ids)
@@ -1121,6 +1128,18 @@ elif rol in ["admin", "produccion"]:
                         col_m2.metric("Costo Total Acumulado", f"${tot_costo:,.2f}")
                         st.dataframe(df_alq, use_container_width=True)
                         
+                        with st.expander("✏️ Corregir Horas Trabajadas de un Registro Alquilado"):
+                            with st.form("form_editar_horas_maq"):
+                                id_reg_alq = st.selectbox("Selecciona el ID de Registro", df_alq['id'].tolist())
+                                row_sel_alq = df_alq[df_alq['id'] == id_reg_alq].iloc[0]
+                                horas_actuales_reg = float(row_sel_alq['horas_trabajadas'])
+                                
+                                nuevas_horas_fijadas = st.number_input("Horas Reales Correctas", min_value=0.5, max_value=24.0, value=horas_actuales_reg, step=0.5)
+                                if st.form_submit_button("Actualizar Horas de esta Máquina", type="primary", use_container_width=True):
+                                    ejecutar_comando("UPDATE registro_produccion SET horas_trabajadas = %s WHERE id = %s", (nuevas_horas_fijadas, id_reg_alq))
+                                    st.success(f"¡Registro #{id_reg_alq} actualizado a {nuevas_horas_fijadas} horas con éxito!")
+                                    st.rerun()
+
                         buffer_alq = io.BytesIO()
                         with pd.ExcelWriter(buffer_alq, engine='openpyxl') as writer:
                             df_alq.to_excel(writer, index=False, sheet_name='Costos_Maquinas_Alquiladas')
