@@ -12,6 +12,13 @@ from reportlab.pdfgen import canvas
 import plotly.express as px
 import plotly.graph_objects as go
 
+st.set_page_config(
+    page_title="Control de Producción - Industrias Metal&Co",
+    page_icon="⚙️",
+    layout="wide",
+    initial_sidebar_state="auto"
+)
+
 # =====================================================
 # CONFIGURACIÓN DE FONDO GENERAL DE LA APLICACIÓN
 # =====================================================
@@ -23,15 +30,8 @@ if os.path.exists(ruta_fondo_app):
         encoded_app_bg = base64.b64encode(image_file.read()).decode()
         img_css_app = f"background: linear-gradient(rgba(18,18,18,0.85), rgba(18,18,18,0.92)), url('data:image/jpeg;base64,{encoded_app_bg}'); background-size: cover; background-position: center; background-attachment: fixed;"
 
-st.set_page_config(
-    page_title="Control de Producción - Industrias Metal&Co",
-    page_icon="⚙️",
-    layout="wide",
-    initial_sidebar_state="auto"
-)
-
-# Estilos CSS avanzados con llaves escapadas correctamente ({{ y }})
-st.markdown(f"""
+# Estilos CSS generales usando un string seguro sin errores de llaves
+estilos_css_globales = f"""
     <style>
         .stApp {{
             {img_css_app}
@@ -109,7 +109,7 @@ st.markdown(f"""
             cursor: pointer;
             display: flex;
             align-items: center;
-        }
+        }}
         
         [data-testid="stSidebar"] .stRadio input[type="radio"] {{
             display: none !important;
@@ -136,7 +136,8 @@ st.markdown(f"""
             border-radius: 12px !important;
         }}
     </style>
-""", unsafe_allow_html=True)
+"""
+st.markdown(estilos_css_globales, unsafe_allow_html=True)
 
 NOMBRES_LOGO = ["logometalyco.png", "logometalyco.jpg", "logo.jpeg", "logo.png"]
 LOGO_PATH = None
@@ -474,7 +475,6 @@ def generar_pdf_f01_01(datos):
     p.drawString(x_margen + 8, y_actual - 41, "SOLDADURA / PINTURA")
     p.drawString(x_margen + 252, y_actual - 41, "X")
     
-    # Bloque de firmas con Nombre Operario, Nombre Inspector y Nombre Auditor Externo
     y_actual -= 55
     p.rect(x_margen, y_actual - 42, ancho_util, 42, fill=0, stroke=1)
     p.setFont("Helvetica-Bold", 7.5)
@@ -985,7 +985,6 @@ elif rol in ["admin", "produccion"]:
     if menu_limpio == "Vista General":
         st.subheader("Dashboard Moderno ERP - Vista de Producción y Planta")
         
-        # Cálculo de métricas 100% reales basadas en Supabase
         try:
             df_oc_kpi = ejecutar_consulta("SELECT estado, meta_unidades, unidades_entregadas FROM ordenes_compra")
             total_ocs = len(df_oc_kpi)
@@ -1005,7 +1004,6 @@ elif rol in ["admin", "produccion"]:
             pct_abiertas = 0
             eficiencia_linea = 0
 
-        # Fila superior de KPIs y gráficas estilo dashboard
         col_kpi1, col_kpi2, col_kpi3 = st.columns([1, 1, 1.2])
         with col_kpi1:
             st.markdown(f"""
@@ -1022,7 +1020,6 @@ elif rol in ["admin", "produccion"]:
                 </div>
             """, unsafe_allow_html=True)
         with col_kpi3:
-            # Gráfica circular estilo dona con leyenda clara de materiales
             try:
                 df_inv_tot = ejecutar_consulta("SELECT SUM(cantidad) as total FROM inventario")
                 inv_total = float(df_inv_tot.iloc[0]['total']) if not df_inv_tot.empty and pd.notna(df_inv_tot.iloc[0]['total']) else 0
@@ -1060,7 +1057,6 @@ elif rol in ["admin", "produccion"]:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Sección de Gráfica de Líneas de Rendimiento por Turno (Sin datos falsos)
         st.markdown("### RENDIMIENTO DE PRODUCCIÓN POR TURNO")
         try:
             df_rend = ejecutar_consulta("SELECT fecha_registro, unidades_producidas FROM registro_produccion ORDER BY fecha_registro ASC LIMIT 10")
