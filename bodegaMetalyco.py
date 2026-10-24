@@ -13,11 +13,15 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 # =====================================================
-# PALETA DE COLORES Y ESTILOS (INDUSTRIAL EXÓTICO)
+# CONFIGURACIÓN DE FONDO GENERAL DE LA APLICACIÓN
 # =====================================================
-COLOR_FONDO_OSCURO = "#121212"  # Negro profundo
-COLOR_TEXTO_CLARO = "#E0E0E0"    # Blanco suave
-COLOR_ACENTO_NARANJA = "#FF7A00" # Naranja vibrante
+img_css_app = "background-color: #121212;"
+ruta_fondo_app = "fondo_app.jpg"  # Guarda tu imagen de fondo con este nombre si deseas usarla
+
+if os.path.exists(ruta_fondo_app):
+    with open(ruta_fondo_app, "rb") as image_file:
+        encoded_app_bg = base64.b64encode(image_file.read()).decode()
+        img_css_app = f"background: linear-gradient(rgba(18,18,18,0.85), rgba(18,18,18,0.92)), url('data:image/jpeg;base64,{encoded_app_bg}'); background-size: cover; background-position: center; background-attachment: fixed;"
 
 st.set_page_config(
     page_title="Control de Producción - Industrias Metal&Co",
@@ -27,31 +31,31 @@ st.set_page_config(
 )
 
 # Estilos CSS avanzados para unificación de botones y diseño limpio estilo ERP
-st.markdown("""
+st.markdown(f"""
     <style>
-        .stApp {
-            background-color: #121212;
-            color: #E0E0E0;
-        }
+        .stApp {{
+            {img_css_app}
+        }}
         
-        .block-container {
+        .block-container {{
             padding-top: 1rem;
             padding-bottom: 2rem;
             padding-left: 1.5rem;
             padding-right: 1.5rem;
-        }
+        }}
         
-        [data-testid="stSidebar"] {
-            background-color: #1a1a1a;
+        [data-testid="stSidebar"] {{
+            background-color: rgba(26, 26, 26, 0.92);
+            backdrop-filter: blur(10px);
             border-right: 2px solid rgba(255, 122, 0, 0.2);
             padding-top: 1rem;
-        }
+        }}
 
-        [data-testid="stSidebar"] .stRadio > label {
+        [data-testid="stSidebar"] .stRadio > label {{
             display: none !important;
-        }
+        }}
 
-        .stButton>button {
+        .stButton>button {{
             width: 100% !important;
             height: 3.2rem !important;
             font-size: 1rem !important;
@@ -62,35 +66,35 @@ st.markdown("""
             border: 1px solid rgba(255, 122, 0, 0.5) !important;
             box-shadow: 0 4px 15px rgba(255, 122, 0, 0.4) !important;
             transition: all 0.3s ease !important;
-        }
-        .stButton>button:hover {
+        }}
+        .stButton>button:hover {{
             background: linear-gradient(135deg, #ff9124 0%, #FF7A00 100%) !important;
             box-shadow: 0 6px 20px rgba(255, 122, 0, 0.6) !important;
             transform: translateY(-1px) !important;
-        }
+        }}
 
-        .profile-container {
+        .profile-container {{
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             width: 100%;
             margin-bottom: 10px;
-        }
-        .profile-img {
+        }}
+        .profile-img {{
             width: 80px;
             height: 80px;
             border-radius: 50%;
             object-fit: cover;
             border: 2px solid #FF7A00;
             box-shadow: 0 4px 15px rgba(255, 122, 0, 0.3);
-        }
+        }}
 
-        [data-testid="stSidebar"] .stRadio > div {
+        [data-testid="stSidebar"] .stRadio > div {{
             gap: 8px;
             width: 100%;
-        }
-        [data-testid="stSidebar"] .stRadio label {
+        }}
+        [data-testid="stSidebar"] .stRadio label {{
             background-color: #212121;
             color: #C0C0C0;
             padding: 12px 16px;
@@ -107,30 +111,30 @@ st.markdown("""
             align-items: center;
         }
         
-        [data-testid="stSidebar"] .stRadio input[type="radio"] {
+        [data-testid="stSidebar"] .stRadio input[type="radio"] {{
             display: none !important;
-        }
-        [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label div:first-child {
+        }}
+        [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label div:first-child {{
             display: none !important;
-        }
+        }}
 
-        [data-testid="stSidebar"] .stRadio label:hover {
+        [data-testid="stSidebar"] .stRadio label:hover {{
             color: #FF7A00 !important;
             border-color: #FF7A00 !important;
             background-color: rgba(255, 122, 0, 0.08) !important;
             box-shadow: 0 4px 12px rgba(255, 122, 0, 0.2);
-        }
+        }}
 
         [data-testid="stSidebar"] .stRadio div[checked="true"] label,
         [data-testid="stSidebar"] .stRadio input:checked + div,
-        [data-testid="stSidebar"] .stRadio label:has(input:checked) {
+        [data-testid="stSidebar"] .stRadio label:has(input:checked) {{
             background-color: rgba(255, 122, 0, 0.15) !important;
             color: #FF7A00 !important;
             font-weight: bold !important;
             border: 1px solid #FF7A00 !important;
             box-shadow: 0 0 15px rgba(255, 122, 0, 0.4);
             border-radius: 12px !important;
-        }
+        }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -145,7 +149,7 @@ def mostrar_logo(ancho=200):
     if LOGO_PATH:
         st.image(LOGO_PATH, width=ancho)
     else:
-        st.markdown(f"<h2 style='color: {COLOR_ACENTO_NARANJA}; text-align:center;'>METAL&CO</h2>", unsafe_allow_html=True)
+        st.markdown(f"<h2 style='color: #FF7A00; text-align:center;'>METAL&CO</h2>", unsafe_allow_html=True)
 
 DB_PARAMS = {
     "dbname": "postgres",
@@ -470,7 +474,7 @@ def generar_pdf_f01_01(datos):
     p.drawString(x_margen + 8, y_actual - 41, "SOLDADURA / PINTURA")
     p.drawString(x_margen + 252, y_actual - 41, "X")
     
-    # Bloque de firmas actualizado con Operario, Inspector y Auditor Externo como en la primera imagen
+    # Bloque de firmas con Nombre Operario, Nombre Inspector y Nombre Auditor Externo
     y_actual -= 55
     p.rect(x_margen, y_actual - 42, ancho_util, 42, fill=0, stroke=1)
     p.setFont("Helvetica-Bold", 7.5)
@@ -1944,7 +1948,7 @@ elif rol in ["admin", "produccion"]:
                                 st.success("¡Usuario actualizado!")
                                 st.rerun()
         except Exception as e:
-                            st.error(f"Error: {e}")
+            st.error(f"Error: {e}")
 
     elif menu_limpio == "Configuración" and rol == "admin":
         st.subheader("Configuración General de la Empresa y Sistema")
