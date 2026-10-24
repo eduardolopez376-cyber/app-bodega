@@ -1131,7 +1131,7 @@ elif rol in ["admin", "produccion"]:
         st.markdown("---")
         
         # =====================================================
-        # NUEVO APARTADO: RENDIMIENTO DE UNIDADES POR HORA POR OPERARIO Y REFERENCIA
+        # APARTADO VISUAL: RENDIMIENTO UPH CON BARRAS VERDE/ROJO Y ALERTAS
         # =====================================================
         st.markdown("### RENDIMIENTO DE UNIDADES POR HORA (POR OPERARIO Y REFERENCIA)")
         try:
@@ -1144,17 +1144,65 @@ elif rol in ["admin", "produccion"]:
                 ORDER BY total_producidas DESC
             """)
             if not df_uph.empty:
-                df_uph['Unidades / Hora'] = df_uph.apply(
+                df_uph['Unidades_Hora'] = df_uph.apply(
                     lambda row: round(row['total_producidas'] / row['total_horas'], 2) if row['total_horas'] > 0 else row['total_producidas'], 
                     axis=1
                 )
-                df_uph_view = df_uph[['operario_nombre', 'referencia', 'total_producidas', 'total_horas', 'Unidades / Hora']].copy()
-                df_uph_view.columns = ['Operario', 'Referencia', 'Total Producidas', 'Horas Acumuladas', 'Unidades / Hora (UPH)']
-                st.dataframe(df_uph_view, use_container_width=True)
+                
+                # Asignamos etiqueta visual de alerta y color de barra
+                def evaluar_estado_uph(uph):
+                    if uph >= 120:
+                        return "Óptimo (>= 120)", "#2a9d8f" # Verde
+                    else:
+                        return "ALERTA: Bajo rendimiento (< 120)", "#e76f51" # Rojo
+                
+                df_uph[['Estado_Rendimiento', 'Color_Barra']] = pd.DataFrame(
+                    df_uph['Unidades_Hora'].apply(evaluar_estado_uph).tolist(), 
+                    index=df_uph.index
+                )
+                
+                # GRÁFICA DE BARRAS INTERACTIVA PLOTLY
+                df_uph['Etiqueta_Grafico'] = df_uph['operario_nombre'] + " (" + df_uph['referencia'] + ")"
+                
+                fig_uph = go.Figure()
+                fig_uph.add_trace(go.Bar(
+                    x=df_uph['Etiqueta_Grafico'],
+                    y=df_uph['Unidades_Hora'],
+                    marker_color=df_uph['Color_Barra'],
+                    text=df_uph['Unidades_Hora'],
+                    textposition='auto',
+                ))
+                
+                # Línea de meta de 120 unidades por hora
+                fig_uph.add_hline(
+                    y=120, line_dash="dash", line_color="#FF7A00",
+                    annotation_text="Meta Mínima (120 UPH)", 
+                    annotation_position="top right"
+                )
+                
+                fig_uph.update_layout(
+                    title_text="Unidades / Hora por Operario y Referencia (Verde: >=120 | Rojo: <120)",
+                    title_font_size=13,
+                    title_font_color="#888",
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(26,26,26,0.6)',
+                    font_color="#E0E0E0",
+                    margin=dict(t=40, b=20, l=20, r=20),
+                    height=320,
+                    xaxis=dict(showgrid=False, title="Operario (Referencia)"),
+                    yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', title="Unidades por Hora (UPH)")
+                )
+                st.plotly_chart(fig_uph, use_container_width=True)
+                
+                # TABLA DETALLADA CON MENSAJE DE ALERTA DIRECTO AL OPERARIO
+                df_tabla_alerta = df_uph[['operario_nombre', 'referencia', 'total_producidas', 'total_horas', 'Unidades_Hora', 'Estado_Rendimiento']].copy()
+                df_tabla_alerta.columns = ['Operario', 'Referencia', 'Total Producidas', 'Horas Acumuladas', 'Unidades / Hora (UPH)', 'Mensaje de Alerta al Operario']
+                st.dataframe(df_tabla_alerta, use_container_width=True)
+                
             else:
-                st.info("Aún no hay registros de producción para calcular el rendimiento por hora.")
+                st.info("Aún no hay registros de producción suficientes para graficar el rendimiento UPH.")
         except Exception as e:
-            st.info(f"Información de rendimiento por hora en proceso de sincronización: {e}")
+            st.warning(f"Información de rendimiento UPH en proceso de sincronización: {e}")
 
         st.markdown("---")
         st.write("### Próximas Compras y Referencias Activas")
@@ -1688,7 +1736,7 @@ elif rol in ["admin", "produccion"]:
             if ops_raw and not mats_raw.empty:
                 with st.form("form_entregas", clear_on_submit=True):
                     op_sel = st.selectbox("Operario Destino", ops, index=0)
-                    mat_sel = st.selectbox("Ítem en Inventario", mats_nombres, index=0)
+                    mat_sel = st.selectbox("Ítem in Inventario", mats_nombres, index=0)
                     cant = st.number_input("Cantidad a Entregar", min_value=1, value=1)
                     if st.form_submit_button("Guardar", type="primary", use_container_width=True):
                         if op_sel == "-- Seleccione Operario --" or mat_sel == "-- Seleccione Ítem --":
