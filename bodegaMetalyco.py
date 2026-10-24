@@ -1040,17 +1040,23 @@ elif rol in ["admin", "produccion"]:
         st.markdown("<br>", unsafe_allow_html=True)
 
         # =====================================================
-        # TARJETAS DE MÉTRICAS SUPERIORES (KPIs ESTILO IMAGEN)
+        # TARJETAS DE MÉTRICAS SUPERIORES (KPIs FILTRADOS CORRECTAMENTE)
         # =====================================================
         try:
-            df_kpi_base = ejecutar_consulta("SELECT unidades_producidas, horas_trabajadas, observaciones, fecha_registro FROM registro_produccion")
+            df_kpi_base = ejecutar_consulta("SELECT operario_nombre, unidades_producidas, horas_trabajadas, observaciones, fecha_registro FROM registro_produccion")
             
-            if filtro_op_sel != "Todas" and not df_kpi_base.empty:
-                df_kpi_base = df_kpi_base[df_kpi_base['operario_nombre'] == filtro_op_sel]
-            if filtro_mes_sel != "Todas" and not df_kpi_base.empty and 'fecha_registro' in df_kpi_base.columns:
-                meses_dict_rev = {1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"}
-                df_kpi_base['mes_nombre'] = pd.to_datetime(df_kpi_base['fecha_registro']).dt.month.map(meses_dict_rev)
-                df_kpi_base = df_kpi_base[df_kpi_base['mes_nombre'] == filtro_mes_sel]
+            if not df_kpi_base.empty:
+                # Normalizamos espacios y minúsculas/mayúsculas para el filtro de operador
+                if filtro_op_sel != "Todas":
+                    df_kpi_base = df_kpi_base[df_kpi_base['operario_nombre'].astype(str).str.strip().str.lower() == filtro_op_sel.strip().lower()]
+                
+                # Filtro por Mes basado en fecha_registro
+                if filtro_mes_sel != "Todas" and 'fecha_registro' in df_kpi_base.columns:
+                    df_kpi_base['dt_temp'] = pd.to_datetime(df_kpi_base['fecha_registro'], errors='coerce')
+                    meses_dict_rev = {1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"}
+                    df_kpi_base['mes_nombre'] = df_kpi_base['dt_temp'].dt.month.map(meses_dict_rev)
+                    
+                    df_kpi_base = df_kpi_base[df_kpi_base['mes_nombre'] == filtro_mes_sel]
 
             total_buenas = int(df_kpi_base['unidades_producidas'].sum()) if not df_kpi_base.empty else 0
             
@@ -1068,7 +1074,7 @@ elif rol in ["admin", "produccion"]:
                             
             total_producidas_kpi = total_buenas + total_defectuosas
             total_horas_kpi = float(df_kpi_base['horas_trabajadas'].sum()) if not df_kpi_base.empty else 0.0
-        except:
+        except Exception as e:
             total_buenas, total_defectuosas, total_producidas_kpi, total_horas_kpi = 0, 0, 0, 0.0
 
         card_html = f"""
