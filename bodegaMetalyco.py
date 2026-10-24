@@ -1846,17 +1846,16 @@ elif rol in ["admin", "produccion"]:
     elif menu_limpio == "Configuración" and rol == "admin":
         st.subheader("Configuración General de la Empresa y Sistema")
         try:
-            # Cargar datos actuales de configuración si existen en base de datos
             cfg_db = ejecutar_consulta("SELECT clave, valor FROM configuracion_empresa")
             cfg_dict = {row['clave']: row['valor'] for _, row in cfg_db.iterrows()} if not cfg_db.empty else {}
             
             with st.form("form_configuracion_general"):
-                st.markdown("### 🏢 Datos Institucionales (Reportes y PDF)")
+                st.subheader("Datos Institucionales (Reportes y PDF)")
                 razon_social_val = st.text_input("Razón Social de la Empresa", value=cfg_dict.get("razon_social", "Industrias Metal&Co"))
                 nit_val = st.text_input("NIT de la Empresa", value=cfg_dict.get("nit_empresa", ""))
                 tel_val = st.text_input("Teléfono de Contacto", value=cfg_dict.get("telefono_empresa", ""))
                 
-                st.markdown("### ⚙️ Parámetros de Operación")
+                st.subheader("Parámetros de Operación")
                 alerta_stock_val = st.number_input("Umbral por defecto para Stock Mínimo en Inventario", min_value=1, value=int(cfg_dict.get("stock_minimo_defecto", 5)))
                 
                 if st.form_submit_button("Guardar Configuración", type="primary", use_container_width=True):
@@ -1876,7 +1875,7 @@ elif rol in ["admin", "produccion"]:
                     st.rerun()
                     
             st.write("---")
-            st.subheader("🖼️ Actualizar Logo Institucional del Sistema")
+            st.subheader("Actualizar Logo Institucional del Sistema")
             with st.form("form_subir_logo"):
                 archivo_logo = st.file_uploader("Selecciona la nueva imagen del logo (PNG o JPG)", type=["png", "jpg", "jpeg"])
                 if st.form_submit_button("Subir y Aplicar Logo", type="primary", use_container_width=True):
