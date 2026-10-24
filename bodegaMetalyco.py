@@ -993,7 +993,7 @@ if rol == "operario":
 elif rol in ["admin", "produccion"]:
     
     if menu_limpio == "Programar":
-        st.subheader("Programación Directa por Orden de Compra y Referencia")
+        st.subheader("Programación de OC")
         fecha_seleccionada = st.date_input("Selecciona el día a consultar/programar", value=(datetime.utcnow() - timedelta(hours=5)).date(), key="cal_admin_dia")
         try:
             ops_raw = ejecutar_consulta("SELECT nombre FROM usuarios WHERE rol = 'operario'")['nombre'].tolist()
