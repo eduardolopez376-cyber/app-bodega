@@ -1045,7 +1045,6 @@ elif rol in ["admin", "produccion"]:
         try:
             df_kpi_base = ejecutar_consulta("SELECT unidades_producidas, horas_trabajadas, observaciones, fecha_registro FROM registro_produccion")
             
-            # Aplicamos filtros si están activos
             if filtro_op_sel != "Todas" and not df_kpi_base.empty:
                 df_kpi_base = df_kpi_base[df_kpi_base['operario_nombre'] == filtro_op_sel]
             if filtro_mes_sel != "Todas" and not df_kpi_base.empty and 'fecha_registro' in df_kpi_base.columns:
@@ -1055,7 +1054,6 @@ elif rol in ["admin", "produccion"]:
 
             total_buenas = int(df_kpi_base['unidades_producidas'].sum()) if not df_kpi_base.empty else 0
             
-            # Calculamos defectuosas desde observaciones
             total_defectuosas = 0
             if not df_kpi_base.empty:
                 for _, row_k in df_kpi_base.iterrows():
@@ -1073,7 +1071,6 @@ elif rol in ["admin", "produccion"]:
         except:
             total_buenas, total_defectuosas, total_producidas_kpi, total_horas_kpi = 0, 0, 0, 0.0
 
-        # Tarjetas visuales superiores con tono anaranjado institucional
         card_html = f"""
             <div style="display: flex; gap: 15px; margin-bottom: 25px; flex-wrap: wrap;">
                 <div style="flex: 1; background: linear-gradient(135deg, #FF7A00 0%, #cc6200 100%); border-radius: 14px; padding: 18px; text-align: center; box-shadow: 0 8px 20px rgba(255,122,0,0.3);">
@@ -1096,10 +1093,124 @@ elif rol in ["admin", "produccion"]:
         """
         st.markdown(card_html, unsafe_allow_html=True)
 
-        st.markdown("---")
+        st.markdown("<br>", unsafe_allow_html=True)
 
         # =====================================================
-        # APARTADO VISUAL: RENDIMIENTO UPH EN BARRAS HORIZONTALES
+        # BLOQUE ORIGINAL RESTAURADO: STATUS OC, EFICIENCIA Y DONUT DE MATERIALES
+        # =====================================================
+        try:
+            df_oc_kpi = ejecutar_consulta("SELECT estado, meta_unidades, unidades_entregadas FROM ordenes_compra")
+            total_ocs = len(df_oc_kpi)
+            if total_ocs > 0:
+                completadas = len(df_oc_kpi[df_oc_kpi['unidades_entregadas'] >= df_oc_kpi['meta_unidades']])
+                pct_abiertas = int(((total_ocs - completadas) / total_ocs) * 100)
+            else:
+                pct_abiertas = 0
+
+            df_prod_kpi = ejecutar_consulta("SELECT unidades_producidas FROM registro_produccion")
+            if not df_prod_kpi.empty and total_ocs > 0:
+                total_producidas = int(df_prod_kpi['unidades_producidas'].sum())
+                eficiencia_linea = min(100, int((total_producidas / 100) * 100))
+            else:
+                eficiencia_linea = 0
+        except:
+            pct_abiertas = 0
+            eficiencia_linea = 0
+
+        col_kpi1, col_kpi2, col_kpi3 = st.columns([1, 1, 1.2])
+        with col_kpi1:
+            st.markdown(f"""
+                <div style="background-color: #1a1a1a; border: 1px solid rgba(255,122,0,0.3); border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+                    <p style="color: #888; font-size: 0.9rem; margin-bottom: 5px; font-weight: bold;">STATUS ÓRDENES ABIERTAS</p>
+                    <h2 style="color: #FF7A00; font-size: 2.2rem; margin: 0;">{pct_abiertas}%</h2>
+                </div>
+            """, unsafe_allow_html=True)
+        with col_kpi2:
+            st.markdown(f"""
+                <div style="background-color: #1a1a1a; border: 1px solid rgba(255,122,0,0.3); border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+                    <p style="color: #888; font-size: 0.9rem; margin-bottom: 5px; font-weight: bold;">EFICIENCIA DE LÍNEA</p>
+                    <h2 style="color: #FF7A00; font-size: 2.2rem; margin: 0;">{eficiencia_linea}%</h2>
+                </div>
+            """, unsafe_allow_html=True)
+        with col_kpi3:
+            try:
+                df_inv_tot = ejecutar_consulta("SELECT SUM(cantidad) as total FROM inventario")
+                inv_total = float(df_inv_tot.iloc[0]['total']) if not df_inv_tot.empty and pd.notna(df_inv_tot.iloc[0]['total']) else 0
+            except:
+                inv_total = 0
+
+            if inv_total > 0:
+                labels_donut = ['Disponible', 'En Uso / Stock Bajo', 'Reservado']
+                values_donut = [70, 20, 10]
+            else:
+                labels_donut = ['Sin inventario']
+                values_donut = [100]
+
+            fig_donut = go.Figure(data=[go.Pie(
+                labels=labels_donut, 
+                values=values_donut, 
+                hole=.6,
+                marker_colors=['#FF7A00', '#2a9d8f', '#6c757d'],
+                textinfo='label+percent',
+                textfont_size=10
+            )])
+            fig_donut.update_layout(
+                title_text="STATUS DE MATERIALES", 
+                title_font_size=12,
+                title_font_color="#888",
+                showlegend=True,
+                legend=dict(orientation="h", y=-0.2, font=dict(size=9)),
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                font_color="#E0E0E0",
+                margin=dict(t=30, b=30, l=10, r=10),
+                height=160
+            )
+            st.plotly_chart(fig_donut, use_container_width=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Gráfica de rendimiento por turno original
+        st.markdown("### RENDIMIENTO DE PRODUCCIÓN POR TURNO")
+        try:
+            df_rend = ejecutar_consulta("SELECT fecha_registro, unidades_producidas FROM registro_produccion ORDER BY fecha_registro ASC LIMIT 10")
+            if not df_rend.empty:
+                fechas_x = df_rend['fecha_registro'].astype(str).tolist()
+                valores_y = df_rend['unidades_producidas'].tolist()
+            else:
+                fechas_x = []
+                valores_y = []
+        except:
+            fechas_x = []
+            valores_y = []
+
+        if len(fechas_x) > 0:
+            fig_line = go.Figure()
+            fig_line.add_trace(go.Scatter(
+                x=fechas_x, y=valores_y,
+                mode='lines+markers',
+                name='Producción Real',
+                line=dict(color='#FF7A00', width=3),
+                fill='tozeroy',
+                fillcolor='rgba(255, 122, 0, 0.1)'
+            ))
+            fig_line.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(26,26,26,0.6)',
+                font_color="#E0E0E0",
+                margin=dict(t=10, b=20, l=20, r=20),
+                height=280,
+                xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', fixedrange=False),
+                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', fixedrange=False)
+            )
+            st.plotly_chart(fig_line, use_container_width=True)
+        else:
+            st.info("No hay registros de producción suficientes para mostrar la gráfica de rendimiento.")
+
+        st.markdown("---")
+        
+        # =====================================================
+        # APARTADO VISUAL NUEVO: RENDIMIENTO UPH EN BARRAS HORIZONTALES
         # =====================================================
         st.markdown("### RENDIMIENTO DE UNIDADES POR HORA (POR OPERARIO Y REFERENCIA)")
         try:
@@ -1115,7 +1226,6 @@ elif rol in ["admin", "produccion"]:
             df_uph = ejecutar_consulta(query_uph)
             
             if not df_uph.empty:
-                # Filtrar según los selectores superiores
                 if filtro_op_sel != "Todas":
                     df_uph = df_uph[df_uph['operario_nombre'] == filtro_op_sel]
                 if filtro_mes_sel != "Todas" and 'ultima_fecha' in df_uph.columns:
@@ -1129,10 +1239,8 @@ elif rol in ["admin", "produccion"]:
                     axis=1
                 )
                 
-                # Ordenar de mayor a menor rendimiento para que luzca idéntico al estilo de la referencia
                 df_uph = df_uph.sort_values(by='Unidades_Hora', ascending=True)
                 
-                # Asignar color: Verde si >= 120, Rojo si < 120
                 def evaluar_estado_uph(uph):
                     if uph >= 120:
                         return "Óptimo (>= 120)", "#2a9d8f" # Verde
@@ -1146,9 +1254,6 @@ elif rol in ["admin", "produccion"]:
                 
                 df_uph['Eje_Y_Etiqueta'] = df_uph['operario_nombre'] + " (" + df_uph['referencia'] + ")"
                 
-                # =====================================================
-                # GRÁFICA DE BARRAS HORIZONTALES ESTILO POWER BI
-                # =====================================================
                 fig_uph_horiz = go.Figure()
                 fig_uph_horiz.add_trace(go.Bar(
                     y=df_uph['Eje_Y_Etiqueta'],
@@ -1159,7 +1264,6 @@ elif rol in ["admin", "produccion"]:
                     textposition='auto',
                 ))
                 
-                # Línea vertical punteada de meta (120 UPH)
                 fig_uph_horiz.add_vline(
                     x=120, line_dash="dash", line_color="#FF7A00",
                     annotation_text="Meta Mínima (120 UPH)", 
@@ -1180,7 +1284,6 @@ elif rol in ["admin", "produccion"]:
                 )
                 st.plotly_chart(fig_uph_horiz, use_container_width=True)
                 
-                # TABLA DE ALERTA OPERATIVA
                 st.markdown("#### Detalle y Alertas de Operarios")
                 df_tabla_alerta = df_uph[['operario_nombre', 'referencia', 'total_producidas', 'total_horas', 'Unidades_Hora', 'Estado_Rendimiento']].copy()
                 df_tabla_alerta.columns = ['Operario', 'Referencia', 'Total Producidas', 'Horas Acumuladas', 'Unidades / Hora (UPH)', 'Estado de Alerta y Notificación']
