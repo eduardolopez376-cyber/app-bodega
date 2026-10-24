@@ -5,6 +5,7 @@ import os
 import io
 import urllib.parse
 import base64
+import uuid
 from datetime import datetime, time, date, timedelta
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
@@ -49,7 +50,7 @@ st.markdown("""
             display: none !important;
         }
 
-        /* Unificar el tamaño y estilo de TODOS los botones de la aplicación (Menú y Formularios) */
+        /* Unificar el tamaño y estilo de TODOS los botones de la aplicación */
         .stButton>button {
             width: 100% !important;
             height: 3.2rem !important;
@@ -86,7 +87,7 @@ st.markdown("""
             box-shadow: 0 4px 15px rgba(255, 122, 0, 0.3);
         }
 
-        /* Transformar las opciones del menú lateral en tarjetas uniformes del mismo tamaño */
+        /* Transformar las opciones del menú lateral en tarjetas uniformes */
         [data-testid="stSidebar"] .stRadio > div {
             gap: 8px;
             width: 100%;
@@ -108,7 +109,6 @@ st.markdown("""
             align-items: center;
         }
         
-        /* Ocultar por completo los círculos selectores nativos de radio */
         [data-testid="stSidebar"] .stRadio input[type="radio"] {
             display: none !important;
         }
@@ -116,7 +116,6 @@ st.markdown("""
             display: none !important;
         }
 
-        /* Efecto hover (al pasar el cursor por encima) */
         [data-testid="stSidebar"] .stRadio label:hover {
             color: #FF7A00 !important;
             border-color: #FF7A00 !important;
@@ -124,7 +123,6 @@ st.markdown("""
             box-shadow: 0 4px 12px rgba(255, 122, 0, 0.2);
         }
 
-        /* Estilo fijo para la opción seleccionada (activa en naranja con borde brillante) */
         [data-testid="stSidebar"] .stRadio div[checked="true"] label,
         [data-testid="stSidebar"] .stRadio input:checked + div,
         [data-testid="stSidebar"] .stRadio label:has(input:checked) {
@@ -212,6 +210,7 @@ def inicializar_tablas_sistema():
         ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS telefono VARCHAR(50);")
         ejecutar_comando("ALTER TABLE ordenes_compra ADD COLUMN IF NOT EXISTS fecha_registro DATE;")
         ejecutar_comando("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS avatar_path TEXT;")
+        ejecutar_comando("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS session_token TEXT;")
     except Exception as e:
         print(f"Nota en inicialización: {e}")
 
@@ -492,8 +491,29 @@ if "nombre_usuario" not in st.session_state:
     st.session_state["nombre_usuario"] = None
 if "username" not in st.session_state:
     st.session_state["username"] = None
+if "session_token" not in st.session_state:
+    st.session_state["session_token"] = None
 if "form_key_counter" not in st.session_state:
     st.session_state["form_key_counter"] = 0
+
+# ====================================================
+# CONTROL DE SESIÓN ÚNICA (ANTI-DISPOSITIVOS MÚLTIPLES)
+# ====================================================
+if st.session_state["autenticado"] and st.session_state["username"]:
+    try:
+        val_token = ejecutar_consulta(
+            "SELECT session_token FROM usuarios WHERE username = %s",
+            (st.session_state["username"],)
+        )
+        if not val_token.empty:
+            token_en_bd = val_token.iloc[0]["session_token"]
+            if token_en_bd != st.session_state.get("session_token"):
+                st.warning("⚠️ Tu sesión ha sido cerrada porque la cuenta fue abierta en otro dispositivo.")
+                st.session_state["autenticado"] = False
+                st.session_state["session_token"] = None
+                st.rerun()
+    except Exception:
+        pass
 
 # ====================================================
 # PANTALLA DE LOGIN CLÁSICA Y ELEGANTE CON TU FONDO
@@ -581,11 +601,18 @@ if not st.session_state["autenticado"]:
                             (user_input, pass_input)
                         )
                         if not res.empty:
+                            nuevo_token = str(uuid.uuid4())
+                            ejecutar_comando(
+                                "UPDATE usuarios SET session_token = %s WHERE username = %s",
+                                (nuevo_token, res.iloc[0]["username"])
+                            )
+                            
                             st.session_state["autenticado"] = True
                             st.session_state["username"] = res.iloc[0]["username"]
                             st.session_state["nombre_usuario"] = res.iloc[0]["nombre"]
                             st.session_state["rol"] = res.iloc[0]["rol"]
                             st.session_state["avatar_path"] = res.iloc[0]["avatar_path"]
+                            st.session_state["session_token"] = nuevo_token
                             st.rerun()
                         else:
                             st.error("Usuario o contraseña incorrectos")
@@ -597,7 +624,7 @@ if not st.session_state["autenticado"]:
     st.stop()
 
 # ====================================================
-# BARRA LATERAL ESTILO DASHBOARD (MINIMALISTA + RETRAÍBLE)
+# BARRA LATERAL ESTILO DASHBOARD
 # ====================================================
 with st.sidebar:
     mostrar_logo(ancho=160)
@@ -669,17 +696,23 @@ with st.sidebar:
     if st.button("Actualizar", use_container_width=True):
         st.rerun()
     if st.button("Cerrar Sesión", use_container_width=True):
+        # Limpiar token en la BD al cerrar sesión por seguridad
+        try:
+            ejecutar_comando("UPDATE usuarios SET session_token = NULL WHERE username = %s", (st.session_state['username'],))
+        except:
+            pass
         st.session_state["autenticado"] = False
         st.session_state["rol"] = None
         st.session_state["nombre_usuario"] = None
         st.session_state["username"] = None
         st.session_state["avatar_path"] = None
+        st.session_state["session_token"] = None
         st.rerun()
 
 menu_limpio = menu_seleccionado
 
 # ====================================================
-# ENCABEZADO PRINCIPAL DE LA PÁGINA (CENTRADO Y FECHA DE COLOMBIA)
+# ENCABEZADO PRINCIPAL DE LA PÁGINA (FECHA COLOMBIA)
 # ====================================================
 fecha_colombia_str = (datetime.utcnow() - timedelta(hours=5)).strftime('%Y-%m-%d')
 
@@ -746,7 +779,6 @@ if rol == "operario":
                     tarea_elegida_str = st.selectbox("Selecciona la Tarea a Registrar", lista_opciones, index=0)
                     
                     if tarea_elegida_str == "-- Seleccione una tarea --":
-                        st.info("Por favor seleccione una tarea válida para continuar.")
                         id_t_temp = None
                         maq_nombre_temp = ""
                     else:
