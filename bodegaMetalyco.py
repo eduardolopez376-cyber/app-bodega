@@ -1021,42 +1021,50 @@ elif rol in ["admin", "produccion"]:
         st.subheader("Dashboard Moderno ERP - Vista de Producción y Planta")
         
         # =====================================================
-        # FILTROS SUPERIORES ESTILO POWER BI / EXCEL
+        # FILTROS SUPERIORES: OPERADOR, MES Y REFERENCIA
         # =====================================================
         try:
             ops_list_db = ejecutar_consulta("SELECT DISTINCT operario_nombre FROM registro_produccion")['operario_nombre'].tolist()
+            refs_list_db = ejecutar_consulta("SELECT DISTINCT referencia FROM registro_produccion")['referencia'].tolist()
         except:
             ops_list_db = []
+            refs_list_db = []
             
         opciones_operario_filtro = ["Todas"] + (ops_list_db if ops_list_db else [])
         opciones_mes_filtro = ["Todas", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+        opciones_ref_filtro = ["Todas"] + (refs_list_db if refs_list_db else [])
         
-        f_col1, f_col2, f_col3, f_col4, f_col5 = st.columns([1, 1, 1, 1, 1])
+        f_col1, f_col2, f_col3 = st.columns([1, 1, 1])
         with f_col1:
             filtro_op_sel = st.selectbox("Operador", opciones_operario_filtro)
         with f_col2:
             filtro_mes_sel = st.selectbox("Mes", opciones_mes_filtro)
+        with f_col3:
+            filtro_ref_sel = st.selectbox("Referencia", opciones_ref_filtro)
             
         st.markdown("<br>", unsafe_allow_html=True)
 
         # =====================================================
-        # TARJETAS DE MÉTRICAS SUPERIORES (KPIs FILTRADOS CORRECTAMENTE)
+        # TARJETAS DE MÉTRICAS SUPERIORES (KPIs CON 3 FILTROS)
         # =====================================================
         try:
-            df_kpi_base = ejecutar_consulta("SELECT operario_nombre, unidades_producidas, horas_trabajadas, observaciones, fecha_registro FROM registro_produccion")
+            df_kpi_base = ejecutar_consulta("SELECT operario_nombre, referencia, unidades_producidas, horas_trabajadas, observaciones, fecha_registro FROM registro_produccion")
             
             if not df_kpi_base.empty:
-                # Normalizamos espacios y minúsculas/mayúsculas para el filtro de operador
+                # 1. Filtro por Operador
                 if filtro_op_sel != "Todas":
                     df_kpi_base = df_kpi_base[df_kpi_base['operario_nombre'].astype(str).str.strip().str.lower() == filtro_op_sel.strip().lower()]
                 
-                # Filtro por Mes basado en fecha_registro
+                # 2. Filtro por Mes
                 if filtro_mes_sel != "Todas" and 'fecha_registro' in df_kpi_base.columns:
                     df_kpi_base['dt_temp'] = pd.to_datetime(df_kpi_base['fecha_registro'], errors='coerce')
                     meses_dict_rev = {1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"}
                     df_kpi_base['mes_nombre'] = df_kpi_base['dt_temp'].dt.month.map(meses_dict_rev)
-                    
                     df_kpi_base = df_kpi_base[df_kpi_base['mes_nombre'] == filtro_mes_sel]
+                
+                # 3. Filtro por Referencia
+                if filtro_ref_sel != "Todas":
+                    df_kpi_base = df_kpi_base[df_kpi_base['referencia'].astype(str).str.strip().str.lower() == filtro_ref_sel.strip().lower()]
 
             total_buenas = int(df_kpi_base['unidades_producidas'].sum()) if not df_kpi_base.empty else 0
             
@@ -1102,7 +1110,7 @@ elif rol in ["admin", "produccion"]:
         st.markdown("<br>", unsafe_allow_html=True)
 
         # =====================================================
-        # BLOQUE ORIGINAL RESTAURADO: STATUS OC, EFICIENCIA Y DONUT DE MATERIALES
+        # BLOQUE ORIGINAL: STATUS OC, EFICIENCIA Y DONUT DE MATERIALES
         # =====================================================
         try:
             df_oc_kpi = ejecutar_consulta("SELECT estado, meta_unidades, unidades_entregadas FROM ordenes_compra")
@@ -1216,7 +1224,7 @@ elif rol in ["admin", "produccion"]:
         st.markdown("---")
         
         # =====================================================
-        # APARTADO VISUAL NUEVO: RENDIMIENTO UPH EN BARRAS HORIZONTALES
+        # APARTADO VISUAL: RENDIMIENTO UPH EN BARRAS HORIZONTALES
         # =====================================================
         st.markdown("### RENDIMIENTO DE UNIDADES POR HORA (POR OPERARIO Y REFERENCIA)")
         try:
@@ -1233,11 +1241,13 @@ elif rol in ["admin", "produccion"]:
             
             if not df_uph.empty:
                 if filtro_op_sel != "Todas":
-                    df_uph = df_uph[df_uph['operario_nombre'] == filtro_op_sel]
+                    df_uph = df_uph[df_uph['operario_nombre'].astype(str).str.strip().str.lower() == filtro_op_sel.strip().lower()]
                 if filtro_mes_sel != "Todas" and 'ultima_fecha' in df_uph.columns:
                     meses_dict_rev = {1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"}
                     df_uph['mes_nombre'] = pd.to_datetime(df_uph['ultima_fecha']).dt.month.map(meses_dict_rev)
                     df_uph = df_uph[df_uph['mes_nombre'] == filtro_mes_sel]
+                if filtro_ref_sel != "Todas":
+                    df_uph = df_uph[df_uph['referencia'].astype(str).str.strip().str.lower() == filtro_ref_sel.strip().lower()]
 
             if not df_uph.empty:
                 df_uph['Unidades_Hora'] = df_uph.apply(
