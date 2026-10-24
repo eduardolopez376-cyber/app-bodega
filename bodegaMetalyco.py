@@ -1264,7 +1264,7 @@ elif rol in ["admin", "produccion"]:
             st.error(f"Error: {e}")
 
     elif menu_limpio == "Servicios" and rol == "admin":
-        st.subheader("Administración de Servicios Prestados")
+        st.subheader("Administración de Servicios")
         try:
             df_serv = ejecutar_consulta("SELECT * FROM servicios_prestados ORDER BY id DESC")
             with st.expander("Crear Servicio", expanded=False):
@@ -1277,7 +1277,7 @@ elif rol in ["admin", "produccion"]:
                             st.rerun()
 
             if not df_serv.empty:
-                st.write("### Listado y Borrado Masivo de Servicios")
+                st.write("### Listado de Servicios")
                 df_serv_v = df_serv.copy()
                 df_serv_v.insert(0, "Seleccionar", False)
                 edited_serv = st.data_editor(df_serv_v, key="editor_serv_mult", use_container_width=True, hide_index=True)
