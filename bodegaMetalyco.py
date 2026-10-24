@@ -1035,19 +1035,42 @@ elif rol in ["admin", "produccion"]:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Sección de Gráfica de Líneas de Rendimiento por Turno
+       # Sección de Gráfica de Líneas de Rendimiento por Turno
         st.markdown("### RENDIMIENTO DE PRODUCCIÓN POR TURNO")
         try:
             df_rend = ejecutar_consulta("SELECT fecha_registro, unidades_producidas FROM registro_produccion ORDER BY fecha_registro ASC LIMIT 10")
-            if not df_rend.empty and len(df_rend) > 1:
+            if not df_rend.empty:
                 fechas_x = df_rend['fecha_registro'].astype(str).tolist()
                 valores_y = df_rend['unidades_producidas'].tolist()
             else:
-                fechas_x = ["Turno 1", "Turno 2", "Turno 3", "Turno 4", "Turno 5", "Turno 6", "Turno 7"]
-                valores_y = [20, 35, 30, 45, 40, 60, 55]
+                fechas_x = []
+                valores_y = []
         except:
-            fechas_x = ["Turno 1", "Turno 2", "Turno 3", "Turno 4", "Turno 5", "Turno 6", "Turno 7"]
-            valores_y = [20, 35, 30, 45, 40, 60, 55]
+            fechas_x = []
+            valores_y = []
+
+        if len(fechas_x) > 0:
+            fig_line = go.Figure()
+            fig_line.add_trace(go.Scatter(
+                x=fechas_x, y=valores_y,
+                mode='lines+markers',
+                name='Producción Real',
+                line=dict(color='#FF7A00', width=3),
+                fill='tozeroy',
+                fillcolor='rgba(255, 122, 0, 0.1)'
+            ))
+            fig_line.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(26,26,26,0.6)',
+                font_color="#E0E0E0",
+                margin=dict(t=10, b=20, l=20, r=20),
+                height=280,
+                xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)'),
+                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)')
+            )
+            st.plotly_chart(fig_line, use_container_width=True)
+        else:
+            st.info("No hay registros de producción suficientes para mostrar la gráfica.")
 
         fig_line = go.Figure()
         fig_line.add_trace(go.Scatter(
