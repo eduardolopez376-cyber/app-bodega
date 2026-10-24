@@ -1216,7 +1216,7 @@ elif rol in ["admin", "produccion"]:
                             st.error("Escribe el nombre y selecciona un tipo de propiedad válido.")
 
             if not df_maqs.empty:
-                st.write("### Listado y Borrado Masivo de Máquinas")
+                st.write("### Listado de Máquinas")
                 df_maqs_v = df_maqs.copy()
                 df_maqs_v.insert(0, "Seleccionar", False)
                 edited_maq = st.data_editor(df_maqs_v, key="editor_maq_mult", use_container_width=True, hide_index=True)
