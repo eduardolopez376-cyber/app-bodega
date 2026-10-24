@@ -935,7 +935,7 @@ if rol == "operario":
                     def_imp = st.number_input("Unidades Defectuosas (Scrap / NC)", min_value=0, value=0)
                     obs_imp = st.text_area("Observaciones del Imprevisto")
                     
-                    submit_imp = st.form_submit_button("Guardar e Imprimir F-01-01", type="primary", use_container_width=True)
+                    submit_imp = st.form_submit_button("Guardar", type="primary", use_container_width=True)
                     
                     if submit_imp:
                         if oc_imp == "-- Seleccione OC --" or maq_imp == "-- Seleccione Máquina --" or ref_imp == "-- Seleccione Referencia --" or act_imp == "-- Seleccione Actividad --":
@@ -1987,7 +1987,7 @@ elif rol in ["admin", "produccion"]:
                 st.subheader("Parámetros de Operación")
                 alerta_stock_val = st.number_input("Umbral por defecto para Stock Mínimo en Inventario", min_value=1, value=int(cfg_dict.get("stock_minimo_defecto", 5)))
                 
-                if st.form_submit_button("Guardar Configuración", type="primary", use_container_width=True):
+                if st.form_submit_button("Guardar", type="primary", use_container_width=True):
                     configs_a_guardar = [
                         ("razon_social", razon_social_val),
                         ("nit_empresa", nit_val),
@@ -2007,7 +2007,7 @@ elif rol in ["admin", "produccion"]:
             st.subheader("Actualizar Logo Institucional del Sistema")
             with st.form("form_subir_logo"):
                 archivo_logo = st.file_uploader("Selecciona la nueva imagen del logo (PNG o JPG)", type=["png", "jpg", "jpeg"])
-                if st.form_submit_button("Subir y Aplicar Logo", type="primary", use_container_width=True):
+                if st.form_submit_button("Guardar", type="primary", use_container_width=True):
                     if archivo_logo is not None:
                         nombre_guardado = "logometalyco.png"
                         with open(nombre_guardado, "wb") as f:
