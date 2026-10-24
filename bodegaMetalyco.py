@@ -1153,7 +1153,7 @@ elif rol in ["admin", "produccion"]:
                                 st.rerun()
 
             st.write("---")
-            st.write("### estado de OC")
+            st.write("### Estado de OC")
             df_oc = ejecutar_consulta("SELECT * FROM ordenes_compra ORDER BY id DESC")
             if not df_oc.empty:
                 if 'fecha_registro' in df_oc.columns:
