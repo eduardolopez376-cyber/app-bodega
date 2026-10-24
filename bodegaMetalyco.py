@@ -11,6 +11,7 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 import plotly.express as px
 import plotly.graph_objects as go
+from streamlit_option_menu import option_menu
 
 st.set_page_config(
     page_title="Control de Producción - Industrias Metal&Co",
@@ -23,14 +24,13 @@ st.set_page_config(
 # CONFIGURACIÓN DE FONDO GENERAL DE LA APLICACIÓN
 # =====================================================
 img_css_app = "background-color: #121212;"
-ruta_fondo_app = "fondo_app.jpg"  # Guarda tu imagen de fondo con este nombre si deseas usarla
+ruta_fondo_app = "fondo_app.jpg"
 
 if os.path.exists(ruta_fondo_app):
     with open(ruta_fondo_app, "rb") as image_file:
         encoded_app_bg = base64.b64encode(image_file.read()).decode()
         img_css_app = f"background: linear-gradient(rgba(18,18,18,0.85), rgba(18,18,18,0.92)), url('data:image/jpeg;base64,{encoded_app_bg}'); background-size: cover; background-position: center; background-attachment: fixed;"
 
-# Estilos CSS generales usando un string seguro sin errores de llaves
 estilos_css_globales = f"""
     <style>
         .stApp {{
@@ -49,10 +49,6 @@ estilos_css_globales = f"""
             backdrop-filter: blur(10px);
             border-right: 2px solid rgba(255, 122, 0, 0.2);
             padding-top: 1rem;
-        }}
-
-        [data-testid="stSidebar"] .stRadio > label {{
-            display: none !important;
         }}
 
         .stButton>button {{
@@ -88,52 +84,6 @@ estilos_css_globales = f"""
             object-fit: cover;
             border: 2px solid #FF7A00;
             box-shadow: 0 4px 15px rgba(255, 122, 0, 0.3);
-        }}
-
-        [data-testid="stSidebar"] .stRadio > div {{
-            gap: 8px;
-            width: 100%;
-        }}
-        [data-testid="stSidebar"] .stRadio label {{
-            background-color: #212121;
-            color: #C0C0C0;
-            padding: 12px 16px;
-            border-radius: 12px;
-            font-weight: 500;
-            font-size: 0.95rem;
-            width: 100% !important;
-            height: 3.2rem !important;
-            box-sizing: border-box;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            transition: all 0.3s ease;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-        }}
-        
-        [data-testid="stSidebar"] .stRadio input[type="radio"] {{
-            display: none !important;
-        }}
-        [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label div:first-child {{
-            display: none !important;
-        }}
-
-        [data-testid="stSidebar"] .stRadio label:hover {{
-            color: #FF7A00 !important;
-            border-color: #FF7A00 !important;
-            background-color: rgba(255, 122, 0, 0.08) !important;
-            box-shadow: 0 4px 12px rgba(255, 122, 0, 0.2);
-        }}
-
-        [data-testid="stSidebar"] .stRadio div[checked="true"] label,
-        [data-testid="stSidebar"] .stRadio input:checked + div,
-        [data-testid="stSidebar"] .stRadio label:has(input:checked) {{
-            background-color: rgba(255, 122, 0, 0.15) !important;
-            color: #FF7A00 !important;
-            font-weight: bold !important;
-            border: 1px solid #FF7A00 !important;
-            box-shadow: 0 0 15px rgba(255, 122, 0, 0.4);
-            border-radius: 12px !important;
         }}
     </style>
 """
@@ -673,22 +623,61 @@ with st.sidebar:
                 st.rerun()
 
     st.markdown("---")
-    st.write("### Menú Principal")
     
     rol = st.session_state["rol"]
     
     if rol == "operario":
         opciones_menu = ["Mi Programación", "Registrar Producción", "Tarea Imprevista"]
+        iconos_menu = ["calendar-check", "clipboard-plus", "exclamation-triangle"]
     elif rol == "produccion":
         opciones_menu = ["Vista General", "Programar", "Órdenes Compra", "Referencias", "Reportes", "Entregas", "Herramientas", "Cargue Ítems", "Inventario"]
+        iconos_menu = ["grid", "calendar3", "cart3", "journal-richtext", "file-earmark-bar-graph", "box-arrow-right", "wrench", "cloud-arrow-up", "archive"]
     else:  # Admin
         opciones_menu = [
             "Vista General", "Programar", "Órdenes Compra", "Máquinas", "Servicios", 
             "Referencias", "Reportes", "Entregas", "Herramientas", 
             "Cargue Ítems", "Inventario", "Clases", "Clientes", "Usuarios", "Configuración"
         ]
+        iconos_menu = [
+            "grid", "calendar3", "cart3", "cpu", "tools", 
+            "journal-richtext", "file-earmark-bar-graph", "box-arrow-right", "wrench", 
+            "cloud-arrow-up", "archive", "tags", "building", "people", "gear"
+        ]
     
-    menu_seleccionado = st.radio("Navegación", opciones_menu, label_visibility="collapsed")
+    menu_seleccionado = option_menu(
+        menu_title="Menú Principal",
+        options=opciones_menu,
+        icons=iconos_menu,
+        default_index=0,
+        styles={
+            "container": {"padding": "0!important", "background-color": "transparent"},
+            "icon": {"color": "#FF7A00", "font-size": "15px"}, 
+            "nav-link": {
+                "font-size": "0.93rem", 
+                "text-align": "left", 
+                "margin": "4px 0px", 
+                "border-radius": "12px",
+                "background-color": "#212121",
+                "color": "#C0C0C0",
+                "border": "1px solid rgba(255, 255, 255, 0.08)",
+                "--hover-color": "rgba(255, 122, 0, 0.08)"
+            },
+            "nav-link-selected": {
+                "background-color": "rgba(255, 122, 0, 0.15)",
+                "color": "#FF7A00",
+                "font-weight": "bold",
+                "border": "1px solid #FF7A00",
+                "box-shadow": "0 0 15px rgba(255, 122, 0, 0.4)"
+            },
+            "menu-title": {
+                "color": "#888888",
+                "font-size": "0.85rem",
+                "font-weight": "bold",
+                "text-transform": "uppercase",
+                "margin-bottom": "8px"
+            }
+        }
+    )
     
     st.markdown("---")
     if st.button("Actualizar", use_container_width=True):
@@ -751,7 +740,7 @@ if rol == "operario":
             st.error(f"Error al cargar programación: {e}")
 
     elif menu_limpio == "Registrar Producción":
-        st.subheader("Registro Producción")
+        st.subheader("Registrar Producción y Generar Formato PDF (F-01-01)")
         try:
             tareas_pendientes = ejecutar_consulta(
                 """SELECT id, fecha, numero_oc, actividad, maquina, referencia, meta_unidades FROM programacion_diaria 
