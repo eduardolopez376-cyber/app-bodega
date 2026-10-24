@@ -762,20 +762,26 @@ if rol == "operario":
                 ]
                 lista_opciones = ["-- Seleccione una tarea --"] + lista_opciones_op
                 
+                # Selector fuera del formulario para detectar la máquina seleccionada de inmediato
+                tarea_elegida_str = st.selectbox("Selecciona la Tarea a Registrar", lista_opciones, index=0, key="select_tarea_operario_dinamico")
+                
+                if tarea_elegida_str == "-- Seleccione una tarea --":
+                    id_t_temp = None
+                    maq_nombre_temp = ""
+                else:
+                    id_t_temp = int(tarea_elegida_str.split(" | ")[0].replace("ID #", ""))
+                    maq_nombre_temp = str(tareas_pendientes[tareas_pendientes['id'] == id_t_temp].iloc[0]['maquina'])
+                
+                # Validación robusta detectando palabras clave en minúsculas
+                maq_lower = maq_nombre_temp.lower()
+                es_prensa = any(p in maq_lower for p in ['prensa', 'troqueladora', 'dobladora', 'pren'])
+                
                 with st.form("form_reporte_operario"):
-                    tarea_elegida_str = st.selectbox("Selecciona la Tarea a Registrar", lista_opciones, index=0)
-                    
-                    if tarea_elegida_str == "-- Seleccione una tarea --":
-                        id_t_temp = None
-                        maq_nombre_temp = ""
-                    else:
-                        id_t_temp = int(tarea_elegida_str.split(" | ")[0].replace("ID #", ""))
-                        maq_nombre_temp = tareas_pendientes[tareas_pendientes['id'] == id_t_temp].iloc[0]['maquina']
-                    
-                    es_prensa = any(p in maq_nombre_temp.lower() for p in ['prensa', 'troqueladora', 'dobladora'])
-                    presion_input = ""
                     if es_prensa:
-                        presion_input = st.text_input("Presión de Trabajo (Ej: 150 Ton / 25 MPa)")
+                        st.info(f"⚙️ Máquina detectada como prensa (`{maq_nombre_temp}`). Por favor ingresa la presión de trabajo:")
+                        presion_input = st.text_input("Presión de Trabajo (Ej: 150 Ton / 25 MPa)", key="input_presion_operario")
+                    else:
+                        presion_input = ""
                     
                     h_inicio = st.time_input("Hora de Inicio Real", time(7, 0))
                     h_fin = st.time_input("Hora de Finalización Real", time(17, 0))
