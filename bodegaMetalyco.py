@@ -197,6 +197,13 @@ def inicializar_tablas_sistema():
                 nombre VARCHAR(100) UNIQUE NOT NULL
             );
         """)
+        ejecutar_comando("""
+            CREATE TABLE IF NOT EXISTS configuracion_empresa (
+                id SERIAL PRIMARY KEY,
+                clave VARCHAR(100) UNIQUE NOT NULL,
+                valor TEXT
+            );
+        """)
         ejecutar_comando("ALTER TABLE maquinas ADD COLUMN IF NOT EXISTS tipo_propiedad VARCHAR(50) DEFAULT 'PROPIA';")
         ejecutar_comando("ALTER TABLE maquinas ADD COLUMN IF NOT EXISTS costo_hora_alquiler NUMERIC(12,2) DEFAULT 0;")
         ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS numero_oc VARCHAR(100);")
@@ -291,7 +298,6 @@ def generar_pdf_f01_01(datos):
     ancho_util = width - 60
     y_actual = height - 40
 
-    # Ajustado: Logo con mayor tamaño (ancho 110, alto 35) para que no se vea tan pequeño
     if LOGO_PATH and os.path.exists(LOGO_PATH):
         try:
             p.drawImage(LOGO_PATH, x_margen, y_actual - 30, width=110, height=35, preserveAspectRatio=True, mask='auto')
@@ -434,7 +440,6 @@ def generar_pdf_f01_01(datos):
     p.drawString(x_margen + 8, y_actual - 9, f"{datos.get('hora_inicio', '')}")
     p.drawString(x_margen + 78, y_actual - 9, f"{datos.get('hora_fin', '')}")
     
-    # Ajustado: Muestra la presión ingresada por el operario en lugar de "OK"
     presion_param = datos.get('presion', '')
     p.drawString(x_margen + 135, y_actual - 9, str(presion_param) if presion_param else "N/A")
     
@@ -522,11 +527,10 @@ def validar_sesion_tiempo_real():
         except Exception:
             pass
 
-# Ejecutar la validación en segundo plano
 validar_sesion_tiempo_real()
 
 # ====================================================
-# PANTALLA DE LOGIN CLÁSICA Y ELEGANTE CON TU FONDO
+# PANTALLA DE LOGIN
 # ====================================================
 if not st.session_state["autenticado"]:
     img_css_fondo = "background-color: #121212;"
@@ -584,7 +588,6 @@ if not st.session_state["autenticado"]:
         </style>
     """
     st.markdown(estilos_login_css, unsafe_allow_html=True)
-
     st.markdown("<br>", unsafe_allow_html=True)
     
     col_l1, col_l2, col_l3 = st.columns([1, 1.3, 1])
@@ -697,7 +700,7 @@ with st.sidebar:
         opciones_menu = [
             "Programar", "Órdenes Compra", "Máquinas", "Servicios", 
             "Referencias", "Reportes", "Entregas", "Herramientas", 
-            "Cargue Ítems", "Inventario", "Clases", "Clientes", "Usuarios"
+            "Cargue Ítems", "Inventario", "Clases", "Clientes", "Usuarios", "Configuración"
         ]
     
     menu_seleccionado = st.radio("Navegación", opciones_menu, label_visibility="collapsed")
@@ -1839,3 +1842,51 @@ elif rol in ["admin", "produccion"]:
                                 st.rerun()
         except Exception as e:
             st.error(f"Error: {e}")
+
+    elif menu_limpio == "Configuración" and rol == "admin":
+        st.subheader("Configuración General de la Empresa y Sistema")
+        try:
+            # Cargar datos actuales de configuración si existen en base de datos
+            cfg_db = ejecutar_consulta("SELECT clave, valor FROM configuracion_empresa")
+            cfg_dict = {row['clave']: row['valor'] for _, row in cfg_db.iterrows()} if not cfg_db.empty else {}
+            
+            with st.form("form_configuracion_general"):
+                st.markdown("### 🏢 Datos Institucionales (Reportes y PDF)")
+                razon_social_val = st.text_input("Razón Social de la Empresa", value=cfg_dict.get("razon_social", "Industrias Metal&Co"))
+                nit_val = st.text_input("NIT de la Empresa", value=cfg_dict.get("nit_empresa", ""))
+                tel_val = st.text_input("Teléfono de Contacto", value=cfg_dict.get("telefono_empresa", ""))
+                
+                st.markdown("### ⚙️ Parámetros de Operación")
+                alerta_stock_val = st.number_input("Umbral por defecto para Stock Mínimo en Inventario", min_value=1, value=int(cfg_dict.get("stock_minimo_defecto", 5)))
+                
+                if st.form_submit_button("Guardar Configuración", type="primary", use_container_width=True):
+                    configs_a_guardar = [
+                        ("razon_social", razon_social_val),
+                        ("nit_empresa", nit_val),
+                        ("telefono_empresa", tel_val),
+                        ("stock_minimo_defecto", str(alerta_stock_val))
+                    ]
+                    for clave, valor in configs_a_guardar:
+                        ejecutar_comando(
+                            """INSERT INTO configuracion_empresa (clave, valor) VALUES (%s, %s)
+                               ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor""",
+                            (clave, valor)
+                        )
+                    st.success("¡Configuración general guardada con éxito!")
+                    st.rerun()
+                    
+            st.write("---")
+            st.subheader("🖼️ Actualizar Logo Institucional del Sistema")
+            with st.form("form_subir_logo"):
+                archivo_logo = st.file_uploader("Selecciona la nueva imagen del logo (PNG o JPG)", type=["png", "jpg", "jpeg"])
+                if st.form_submit_button("Subir y Aplicar Logo", type="primary", use_container_width=True):
+                    if archivo_logo is not None:
+                        nombre_guardado = "logometalyco.png"
+                        with open(nombre_guardado, "wb") as f:
+                            f.write(archivo_logo.getbuffer())
+                        st.success("¡Logo actualizado correctamente en el sistema! Recarga la página para visualizarlo.")
+                        st.rerun()
+                    else:
+                        st.error("Por favor selecciona un archivo de imagen válido.")
+        except Exception as e:
+            st.error(f"Error en configuración: {e}")
