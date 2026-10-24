@@ -1610,7 +1610,7 @@ elif rol in ["admin", "produccion"]:
             st.error(f"Error en herramientas: {e}")
 
     elif menu_limpio == "Cargue Ítems":
-        st.subheader("Cargue Único de Ítems al Inventario")
+        st.subheader("Cargue Inventario")
         try:
             clases_raw = ejecutar_consulta("SELECT nombre FROM clases_inventario")['nombre'].tolist() if not ejecutar_consulta("SELECT nombre FROM clases_inventario").empty else []
             lista_clases = ["-- Seleccione Clase --"] + clases_raw
