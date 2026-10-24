@@ -21,37 +21,33 @@ st.set_page_config(
 )
 
 # =====================================================
-# CONFIGURACIÓN DE FONDO GENERAL DE LA APLICACIÓN
+# CONFIGURACIÓN DE ESTILOS CSS GLOBALES Y MENÚ LATERAL
 # =====================================================
-img_css_app = "background-color: #121212;"
-ruta_fondo_app = "fondo_app.jpg"
-
-if os.path.exists(ruta_fondo_app):
-    with open(ruta_fondo_app, "rb") as image_file:
-        encoded_app_bg = base64.b64encode(image_file.read()).decode()
-        img_css_app = f"background: linear-gradient(rgba(18,18,18,0.85), rgba(18,18,18,0.92)), url('data:image/jpeg;base64,{encoded_app_bg}'); background-size: cover; background-position: center; background-attachment: fixed;"
-
-estilos_css_globales = f"""
+estilos_css_globales = """
     <style>
-        .stApp {{
-            {img_css_app}
-        }}
-        
-        .block-container {{
+        .block-container {
             padding-top: 1rem;
             padding-bottom: 2rem;
             padding-left: 1.5rem;
             padding-right: 1.5rem;
-        }}
+        }
         
-        [data-testid="stSidebar"] {{
+        [data-testid="stSidebar"] {
             background-color: rgba(26, 26, 26, 0.92);
             backdrop-filter: blur(10px);
             border-right: 2px solid rgba(255, 122, 0, 0.2);
             padding-top: 1rem;
-        }}
+        }
 
-        .stButton>button {{
+        /* EFECTO HOVER Y SELECCIÓN PARA EL MENÚ LATERAL */
+        .nav-link:hover {
+            background-color: rgba(255, 122, 0, 0.18) !important;
+            color: #FF7A00 !important;
+            border: 1px solid rgba(255, 122, 0, 0.4) !important;
+            border-radius: 12px !important;
+        }
+
+        .stButton>button {
             width: 100% !important;
             height: 3.2rem !important;
             font-size: 1rem !important;
@@ -62,32 +58,42 @@ estilos_css_globales = f"""
             border: 1px solid rgba(255, 122, 0, 0.5) !important;
             box-shadow: 0 4px 15px rgba(255, 122, 0, 0.4) !important;
             transition: all 0.3s ease !important;
-        }}
-        .stButton>button:hover {{
+        }
+        .stButton>button:hover {
             background: linear-gradient(135deg, #ff9124 0%, #FF7A00 100%) !important;
             box-shadow: 0 6px 20px rgba(255, 122, 0, 0.6) !important;
             transform: translateY(-1px) !important;
-        }}
+        }
 
-        .profile-container {{
+        .profile-container {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             width: 100%;
             margin-bottom: 10px;
-        }}
-        .profile-img {{
+        }
+        .profile-img {
             width: 80px;
             height: 80px;
             border-radius: 50%;
             object-fit: cover;
             border: 2px solid #FF7A00;
             box-shadow: 0 4px 15px rgba(255, 122, 0, 0.3);
-        }}
+        }
     </style>
 """
 st.markdown(estilos_css_globales, unsafe_allow_html=True)
+
+# Fondo general de la aplicación
+img_css_app = "background-color: #121212;"
+ruta_fondo_app = "fondo_app.jpg"
+if os.path.exists(ruta_fondo_app):
+    with open(ruta_fondo_app, "rb") as image_file:
+        encoded_app_bg = base64.b64encode(image_file.read()).decode()
+        img_css_app = f"background: linear-gradient(rgba(18,18,18,0.85), rgba(18,18,18,0.92)), url('data:image/jpeg;base64,{encoded_app_bg}'); background-size: cover; background-position: center; background-attachment: fixed;"
+
+st.markdown(f"<style>.stApp {{ {img_css_app} }}</style>", unsafe_allow_html=True)
 
 NOMBRES_LOGO = ["logometalyco.png", "logometalyco.jpg", "logo.jpeg", "logo.png"]
 LOGO_PATH = None
@@ -111,9 +117,6 @@ DB_PARAMS = {
     "sslmode": "require"
 }
 
-# =====================================================
-# OPTIMIZACIÓN CON CACHÉ INTELIGENTE
-# =====================================================
 @st.cache_data(ttl=30, show_spinner=False)
 def ejecutar_consulta_cached(query, params_key=None):
     conn = psycopg2.connect(**DB_PARAMS)
@@ -670,7 +673,6 @@ with st.sidebar:
                 "color": "#C0C0C0",
                 "border": "1px solid rgba(255, 255, 255, 0.08)",
                 "transition": "all 0.3s ease",
-                "--hover-color": "rgba(255, 122, 0, 0.18)"
             },
             "nav-link-selected": {
                 "background-color": "rgba(255, 122, 0, 0.15)",
