@@ -669,7 +669,8 @@ with st.sidebar:
                 "background-color": "#212121",
                 "color": "#C0C0C0",
                 "border": "1px solid rgba(255, 255, 255, 0.08)",
-                "--hover-color": "rgba(255, 122, 0, 0.08)"
+                "transition": "all 0.3s ease",
+                "--hover-color": "rgba(255, 122, 0, 0.18)"
             },
             "nav-link-selected": {
                 "background-color": "rgba(255, 122, 0, 0.15)",
