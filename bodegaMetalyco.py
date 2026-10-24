@@ -751,7 +751,7 @@ if rol == "operario":
             st.error(f"Error al cargar programación: {e}")
 
     elif menu_limpio == "Registrar Producción":
-        st.subheader("Registrar Producción y Generar Formato PDF (F-01-01)")
+        st.subheader("Registro Producción")
         try:
             tareas_pendientes = ejecutar_consulta(
                 """SELECT id, fecha, numero_oc, actividad, maquina, referencia, meta_unidades FROM programacion_diaria 
