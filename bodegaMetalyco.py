@@ -39,14 +39,6 @@ estilos_css_globales = """
             padding-top: 1rem;
         }
 
-        /* EFECTO HOVER Y SELECCIÓN PARA EL MENÚ LATERAL */
-        .nav-link:hover {
-            background-color: rgba(255, 122, 0, 0.18) !important;
-            color: #FF7A00 !important;
-            border: 1px solid rgba(255, 122, 0, 0.4) !important;
-            border-radius: 12px !important;
-        }
-
         .stButton>button {
             width: 100% !important;
             height: 3.2rem !important;
@@ -669,10 +661,10 @@ with st.sidebar:
                 "text-align": "left", 
                 "margin": "4px 0px", 
                 "border-radius": "12px",
-                "background-color": "#212121",
                 "color": "#C0C0C0",
                 "border": "1px solid rgba(255, 255, 255, 0.08)",
                 "transition": "all 0.3s ease",
+                "--hover-color": "rgba(255, 122, 0, 0.18)"
             },
             "nav-link-selected": {
                 "background-color": "rgba(255, 122, 0, 0.15)",
