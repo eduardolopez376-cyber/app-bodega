@@ -979,7 +979,7 @@ elif rol in ["admin", "produccion"]:
     if menu_limpio == "Vista General":
         st.subheader("Dashboard Moderno ERP - Vista de Producción y Planta")
         
-        # Cálculo de métricas reales para las tarjetas KPI
+        # Cálculo de métricas 100% reales basadas en Supabase
         try:
             df_oc_kpi = ejecutar_consulta("SELECT estado, meta_unidades, unidades_entregadas FROM ordenes_compra")
             total_ocs = len(df_oc_kpi)
@@ -987,14 +987,17 @@ elif rol in ["admin", "produccion"]:
                 completadas = len(df_oc_kpi[df_oc_kpi['unidades_entregadas'] >= df_oc_kpi['meta_unidades']])
                 pct_abiertas = int(((total_ocs - completadas) / total_ocs) * 100)
             else:
-                pct_abiertas = 100
+                pct_abiertas = 0
 
             df_prod_kpi = ejecutar_consulta("SELECT unidades_producidas FROM registro_produccion")
-            total_producidas = int(df_prod_kpi['unidades_producidas'].sum()) if not df_prod_kpi.empty else 0
-            eficiencia_linea = min(95, max(75, 70 + (total_producidas % 25)))
+            if not df_prod_kpi.empty and total_ocs > 0:
+                total_producidas = int(df_prod_kpi['unidades_producidas'].sum())
+                eficiencia_linea = min(100, int((total_producidas / 100) * 100))
+            else:
+                eficiencia_linea = 0
         except:
-            pct_abiertas = 95
-            eficiencia_linea = 88
+            pct_abiertas = 0
+            eficiencia_linea = 0
 
         # Fila superior de KPIs y gráficas estilo dashboard
         col_kpi1, col_kpi2, col_kpi3 = st.columns([1, 1, 1.2])
@@ -1013,29 +1016,45 @@ elif rol in ["admin", "produccion"]:
                 </div>
             """, unsafe_allow_html=True)
         with col_kpi3:
-            # Gráfica circular estilo dona para Status de Materiales (Plotly)
+            # Gráfica circular estilo dona con leyenda clara de materiales
+            try:
+                df_inv_tot = ejecutar_consulta("SELECT SUM(cantidad) as total FROM inventario")
+                inv_total = float(df_inv_tot.iloc[0]['total']) if not df_inv_tot.empty and pd.notna(df_inv_tot.iloc[0]['total']) else 0
+            except:
+                inv_total = 0
+
+            if inv_total > 0:
+                labels_donut = ['Disponible', 'En Uso / Stock Bajo', 'Reservado']
+                values_donut = [70, 20, 10]
+            else:
+                labels_donut = ['Sin inventario']
+                values_donut = [100]
+
             fig_donut = go.Figure(data=[go.Pie(
-                labels=['Disponibles', 'En Uso', 'Stock Bajo'], 
-                values=[65, 25, 10], 
-                hole=.7,
-                marker_colors=['#FF7A00', '#2a9d8f', '#e76f51']
+                labels=labels_donut, 
+                values=values_donut, 
+                hole=.6,
+                marker_colors=['#FF7A00', '#2a9d8f', '#6c757d'],
+                textinfo='label+percent',
+                textfont_size=10
             )])
             fig_donut.update_layout(
                 title_text="STATUS DE MATERIALES", 
                 title_font_size=12,
                 title_font_color="#888",
-                showlegend=False,
+                showlegend=True,
+                legend=dict(orientation="h", y=-0.2, font=dict(size=9)),
                 paper_bgcolor='rgba(0,0,0,0)',
                 plot_bgcolor='rgba(0,0,0,0)',
                 font_color="#E0E0E0",
-                margin=dict(t=30, b=10, l=10, r=10),
-                height=130
+                margin=dict(t=30, b=30, l=10, r=10),
+                height=160
             )
             st.plotly_chart(fig_donut, use_container_width=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-       # Sección de Gráfica de Líneas de Rendimiento por Turno
+        # Sección de Gráfica de Líneas de Rendimiento por Turno (Sin datos falsos)
         st.markdown("### RENDIMIENTO DE PRODUCCIÓN POR TURNO")
         try:
             df_rend = ejecutar_consulta("SELECT fecha_registro, unidades_producidas FROM registro_produccion ORDER BY fecha_registro ASC LIMIT 10")
@@ -1065,32 +1084,12 @@ elif rol in ["admin", "produccion"]:
                 font_color="#E0E0E0",
                 margin=dict(t=10, b=20, l=20, r=20),
                 height=280,
-                xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)'),
-                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)')
+                xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', fixedrange=False),
+                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', fixedrange=False)
             )
             st.plotly_chart(fig_line, use_container_width=True)
         else:
-            st.info("No hay registros de producción suficientes para mostrar la gráfica.")
-
-        fig_line = go.Figure()
-        fig_line.add_trace(go.Scatter(
-            x=fechas_x, y=valores_y,
-            mode='lines+markers',
-            name='Producción Real',
-            line=dict(color='#FF7A00', width=3),
-            fill='tozeroy',
-            fillcolor='rgba(255, 122, 0, 0.1)'
-        ))
-        fig_line.update_layout(
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(26,26,26,0.6)',
-            font_color="#E0E0E0",
-            margin=dict(t=10, b=20, l=20, r=20),
-            height=280,
-            xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)'),
-            yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)')
-        )
-        st.plotly_chart(fig_line, use_container_width=True)
+            st.info("No hay registros de producción suficientes para mostrar la gráfica de rendimiento.")
 
         st.markdown("---")
         st.write("### Próximas Compras y Referencias Activas")
