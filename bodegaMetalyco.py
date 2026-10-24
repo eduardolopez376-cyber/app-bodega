@@ -1109,7 +1109,7 @@ elif rol in ["admin", "produccion"]:
             st.error(f"Error en Programación: {e}")
 
     elif menu_limpio == "Órdenes Compra":
-        st.subheader("Gestión de Órdenes de Compra (OC), Clientes y Alarma de Pendientes")
+        st.subheader("Gestion de OC")
         try:
             refs_raw = ejecutar_consulta("SELECT codigo FROM referencias")['codigo'].tolist() if not ejecutar_consulta("SELECT codigo FROM referencias").empty else []
             serv_raw = ejecutar_consulta("SELECT nombre FROM servicios_prestados")['nombre'].tolist() if not ejecutar_consulta("SELECT nombre FROM servicios_prestados").empty else []
@@ -1153,7 +1153,7 @@ elif rol in ["admin", "produccion"]:
                                 st.rerun()
 
             st.write("---")
-            st.write("### Estado y Reporte de Alarma de Piezas Pendientes por OC")
+            st.write("### estado de OC")
             df_oc = ejecutar_consulta("SELECT * FROM ordenes_compra ORDER BY id DESC")
             if not df_oc.empty:
                 if 'fecha_registro' in df_oc.columns:
