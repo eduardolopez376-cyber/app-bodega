@@ -132,7 +132,6 @@ def ejecutar_comando(query, params=None):
     conn.commit()
     cur.close()
     conn.close()
-    # Limpiamos el caché automáticamente para que refleje los cambios al instante
     ejecutar_consulta_cached.clear()
 
 def inicializar_tablas_sistema():
@@ -1128,6 +1127,34 @@ elif rol in ["admin", "produccion"]:
             st.plotly_chart(fig_line, use_container_width=True)
         else:
             st.info("No hay registros de producción suficientes para mostrar la gráfica de rendimiento.")
+
+        st.markdown("---")
+        
+        # =====================================================
+        # NUEVO APARTADO: RENDIMIENTO DE UNIDADES POR HORA POR OPERARIO Y REFERENCIA
+        # =====================================================
+        st.markdown("### RENDIMIENTO DE UNIDADES POR HORA (POR OPERARIO Y REFERENCIA)")
+        try:
+            df_uph = ejecutar_consulta("""
+                SELECT operario_nombre, referencia, 
+                       SUM(unidades_producidas) as total_producidas, 
+                       SUM(horas_trabajadas) as total_horas 
+                FROM registro_produccion 
+                GROUP BY operario_nombre, referencia 
+                ORDER BY total_producidas DESC
+            """)
+            if not df_uph.empty:
+                df_uph['Unidades / Hora'] = df_uph.apply(
+                    lambda row: round(row['total_producidas'] / row['total_horas'], 2) if row['total_horas'] > 0 else row['total_producidas'], 
+                    axis=1
+                )
+                df_uph_view = df_uph[['operario_nombre', 'referencia', 'total_producidas', 'total_horas', 'Unidades / Hora']].copy()
+                df_uph_view.columns = ['Operario', 'Referencia', 'Total Producidas', 'Horas Acumuladas', 'Unidades / Hora (UPH)']
+                st.dataframe(df_uph_view, use_container_width=True)
+            else:
+                st.info("Aún no hay registros de producción para calcular el rendimiento por hora.")
+        except Exception as e:
+            st.info(f"Información de rendimiento por hora en proceso de sincronización: {e}")
 
         st.markdown("---")
         st.write("### Próximas Compras y Referencias Activas")
