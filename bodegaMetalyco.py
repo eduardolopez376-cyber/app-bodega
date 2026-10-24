@@ -1372,7 +1372,7 @@ elif rol in ["admin", "produccion"]:
             st.error(f"Error: {e}")
 
     elif menu_limpio == "Reportes":
-        st.subheader("Centro de Reportes Gerenciales y de Producción")
+        st.subheader("Centro de Reportes")
         tipo_reporte_gerencial = st.radio(
             "Selecciona la vista de reporte:", 
             ["Reporte de Producción", "Costos Máquinas Alquiladas"], 
@@ -1393,7 +1393,7 @@ elif rol in ["admin", "produccion"]:
                 anio_opcion = st.number_input("Año", min_value=2024, max_value=2030, value=(datetime.utcnow() - timedelta(hours=5)).year)
 
         if tipo_reporte_gerencial == "Reporte de Producción":
-            st.markdown("### Reporte de Producción en Columnas Separadas para Excel")
+            st.markdown("### Reporte de Producción Excel")
             try:
                 df_produccion_raw = ejecutar_consulta("SELECT * FROM registro_produccion ORDER BY id DESC")
                 if not df_produccion_raw.empty:
