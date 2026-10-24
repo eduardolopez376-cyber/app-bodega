@@ -909,7 +909,7 @@ if rol == "operario":
             if not maqs_raw or not refs_raw:
                 st.warning("Faltan máquinas o referencias registradas en el sistema.")
             else:
-                with st.form("form_tarea_imprevista", clear_on_submit=True):
+                with st.form("form_tarea_imprevista"):
                     oc_imp = st.selectbox("Orden de Compra Asociada", ocs_disp, index=0)
                     cliente_asociado_oc = mapa_oc_cliente.get(oc_imp, "N/A")
                     if oc_imp not in ["-- Seleccione OC --", "SIN OC"]:
@@ -935,7 +935,9 @@ if rol == "operario":
                     def_imp = st.number_input("Unidades Defectuosas (Scrap / NC)", min_value=0, value=0)
                     obs_imp = st.text_area("Observaciones del Imprevisto")
                     
-                    if st.form_submit_button("Guardar", type="primary", use_container_width=True):
+                    submit_imp = st.form_submit_button("Guardar e Imprimir F-01-01", type="primary", use_container_width=True)
+                    
+                    if submit_imp:
                         if oc_imp == "-- Seleccione OC --" or maq_imp == "-- Seleccione Máquina --" or ref_imp == "-- Seleccione Referencia --" or act_imp == "-- Seleccione Actividad --":
                             st.error("Por favor seleccione todas las opciones obligatorias de los desplegables.")
                         else:
@@ -961,8 +963,43 @@ if rol == "operario":
                                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::date)""",
                                 (st.session_state['nombre_usuario'], maq_imp, ref_imp, oc_imp, h_ini_imp, h_fin_imp, uni_imp, obs_final_imp, es_alq, horas_calc, presion_imp, fecha_exacta_actual_imp)
                             )
-                            st.success("¡Tarea imprevista registrada!")
-                            st.rerun()
+
+                            datos_pdf_imp = {
+                                "fecha": fecha_exacta_actual_imp,
+                                "numero_oc": oc_imp,
+                                "cliente": cliente_asociado_oc,
+                                "referencia": ref_imp,
+                                "maquina": maq_imp,
+                                "actividad": act_imp,
+                                "presion": presion_imp,
+                                "hora_inicio": str(h_ini_imp),
+                                "hora_fin": str(h_fin_imp),
+                                "producidas": uni_imp,
+                                "defectuosas": def_imp,
+                                "observaciones": obs_final_imp,
+                                "operario": st.session_state['nombre_usuario']
+                            }
+                            
+                            pdf_buffer_imp = generar_pdf_f01_01(datos_pdf_imp)
+                            st.session_state["ultimo_pdf_buffer_imp"] = pdf_buffer_imp.getvalue()
+                            st.session_state["ultimo_pdf_nombre_imp"] = f"F-01-01_IMPREVISTO_OC_{oc_imp}_{ref_imp}.pdf"
+                            st.success("¡Tarea imprevista registrada y formato F-01-01 generado con éxito!")
+
+            if "ultimo_pdf_buffer_imp" in st.session_state:
+                st.markdown("---")
+                st.write("### Formato F-01-01 (Tarea Imprevista) Listo para Descargar")
+                st.download_button(
+                    label="Descargar Formato F-01-01 (PDF Oficial)",
+                    data=st.session_state["ultimo_pdf_buffer_imp"],
+                    file_name=st.session_state["ultimo_pdf_nombre_imp"],
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+                
+                texto_wsp_imp = f"Hola, comparto el formato de tarea imprevista F-01-01 completado por el operario *{st.session_state['nombre_usuario']}*."
+                link_whatsapp_imp = f"https://api.whatsapp.com/send?text={urllib.parse.quote(texto_wsp_imp)}"
+                st.markdown(f'<a href="{link_whatsapp_imp}" target="_blank"><button style="width:100%; background-color:#25D366; color:white; height:3rem; font-size:1.1rem; font-weight:bold; border:none; border-radius:8px; cursor:pointer;">Enviar Aviso por WhatsApp</button></a>', unsafe_allow_html=True)
+
         except Exception as e:
             st.error(f"Error al cargar formulario: {e}")
 
