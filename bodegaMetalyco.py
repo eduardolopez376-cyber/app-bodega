@@ -1308,7 +1308,7 @@ elif rol in ["admin", "produccion"]:
             st.error(f"Error: {e}")
 
     elif menu_limpio == "Referencias":
-        st.subheader("Gestión de Referencias (Catálogo Base)")
+        st.subheader("Gestión de Referencias")
         try:
             df_refs = ejecutar_consulta("SELECT * FROM referencias")
             clientes_raw = ejecutar_consulta("SELECT nombre FROM clientes")['nombre'].tolist() if not ejecutar_consulta("SELECT nombre FROM clientes").empty else []
@@ -1328,7 +1328,7 @@ elif rol in ["admin", "produccion"]:
                             st.error("Ingrese un código válido y seleccione un cliente.")
 
             if not df_refs.empty:
-                st.write("### Listado y Borrado Masivo de Referencias")
+                st.write("### Listado de Referencias")
                 df_refs_v = df_refs.copy()
                 df_refs_v.insert(0, "Seleccionar", False)
                 edited_refs = st.data_editor(df_refs_v, key="editor_refs_mult", use_container_width=True, hide_index=True)
