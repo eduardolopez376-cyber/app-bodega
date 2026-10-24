@@ -291,9 +291,10 @@ def generar_pdf_f01_01(datos):
     ancho_util = width - 60
     y_actual = height - 40
 
+    # Ajustado: Logo con mayor tamaño (ancho 110, alto 35) para que no se vea tan pequeño
     if LOGO_PATH and os.path.exists(LOGO_PATH):
         try:
-            p.drawImage(LOGO_PATH, x_margen, y_actual - 25, width=80, height=25, preserveAspectRatio=True, mask='auto')
+            p.drawImage(LOGO_PATH, x_margen, y_actual - 30, width=110, height=35, preserveAspectRatio=True, mask='auto')
         except:
             p.setFont("Helvetica-Bold", 12)
             p.drawString(x_margen, y_actual - 15, "Metal&Co")
@@ -432,7 +433,11 @@ def generar_pdf_f01_01(datos):
     p.setFont("Helvetica", 8)
     p.drawString(x_margen + 8, y_actual - 9, f"{datos.get('hora_inicio', '')}")
     p.drawString(x_margen + 78, y_actual - 9, f"{datos.get('hora_fin', '')}")
-    p.drawString(x_margen + 145, y_actual - 9, "OK")
+    
+    # Ajustado: Muestra la presión ingresada por el operario en lugar de "OK"
+    presion_param = datos.get('presion', '')
+    p.drawString(x_margen + 135, y_actual - 9, str(presion_param) if presion_param else "N/A")
+    
     p.drawString(x_margen + 235, y_actual - 9, f"{datos.get('producidas', 0)}")
     p.drawString(x_margen + 310, y_actual - 9, f"{datos.get('defectuosas', 0)}")
     p.drawString(x_margen + 385, y_actual - 9, "0")
@@ -761,7 +766,7 @@ if rol == "operario":
             st.error(f"Error al cargar programación: {e}")
 
     elif menu_limpio == "Registrar Producción":
-        st.subheader("Registro Producción ")
+        st.subheader("Registrar Producción y Generar Formato PDF (F-01-01)")
         try:
             tareas_pendientes = ejecutar_consulta(
                 """SELECT id, fecha, numero_oc, actividad, maquina, referencia, meta_unidades FROM programacion_diaria 
@@ -907,7 +912,7 @@ if rol == "operario":
             st.error(f"Error al registrar producción: {e}")
 
     elif menu_limpio == "Tarea Imprevista":
-        st.subheader("Registrar Tarea Imprevista")
+        st.subheader("Registrar e Iniciar Tarea Imprevista No Programada")
         try:
             maqs_raw = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
             refs_raw = ejecutar_consulta("SELECT codigo FROM referencias")['codigo'].tolist()
@@ -993,7 +998,7 @@ if rol == "operario":
 elif rol in ["admin", "produccion"]:
     
     if menu_limpio == "Programar":
-        st.subheader("Programación de OC")
+        st.subheader("Programación Directa por Orden de Compra y Referencia")
         fecha_seleccionada = st.date_input("Selecciona el día a consultar/programar", value=(datetime.utcnow() - timedelta(hours=5)).date(), key="cal_admin_dia")
         try:
             ops_raw = ejecutar_consulta("SELECT nombre FROM usuarios WHERE rol = 'operario'")['nombre'].tolist()
@@ -1153,7 +1158,7 @@ elif rol in ["admin", "produccion"]:
                                 st.rerun()
 
             st.write("---")
-            st.write("### Estado de OC")
+            st.write("### estado de OC")
             df_oc = ejecutar_consulta("SELECT * FROM ordenes_compra ORDER BY id DESC")
             if not df_oc.empty:
                 if 'fecha_registro' in df_oc.columns:
@@ -1216,7 +1221,7 @@ elif rol in ["admin", "produccion"]:
                             st.error("Escribe el nombre y selecciona un tipo de propiedad válido.")
 
             if not df_maqs.empty:
-                st.write("### Listado de Máquinas")
+                st.write("### Listado y Borrado Masivo de Máquinas")
                 df_maqs_v = df_maqs.copy()
                 df_maqs_v.insert(0, "Seleccionar", False)
                 edited_maq = st.data_editor(df_maqs_v, key="editor_maq_mult", use_container_width=True, hide_index=True)
@@ -1264,7 +1269,7 @@ elif rol in ["admin", "produccion"]:
             st.error(f"Error: {e}")
 
     elif menu_limpio == "Servicios" and rol == "admin":
-        st.subheader("Administración de Servicios")
+        st.subheader("Administración de Servicios Prestados")
         try:
             df_serv = ejecutar_consulta("SELECT * FROM servicios_prestados ORDER BY id DESC")
             with st.expander("Crear Servicio", expanded=False):
@@ -1277,7 +1282,7 @@ elif rol in ["admin", "produccion"]:
                             st.rerun()
 
             if not df_serv.empty:
-                st.write("### Listado de Servicios")
+                st.write("### Listado y Borrado Masivo de Servicios")
                 df_serv_v = df_serv.copy()
                 df_serv_v.insert(0, "Seleccionar", False)
                 edited_serv = st.data_editor(df_serv_v, key="editor_serv_mult", use_container_width=True, hide_index=True)
@@ -1308,7 +1313,7 @@ elif rol in ["admin", "produccion"]:
             st.error(f"Error: {e}")
 
     elif menu_limpio == "Referencias":
-        st.subheader("Gestión de Referencias")
+        st.subheader("Gestión de Referencias (Catálogo Base)")
         try:
             df_refs = ejecutar_consulta("SELECT * FROM referencias")
             clientes_raw = ejecutar_consulta("SELECT nombre FROM clientes")['nombre'].tolist() if not ejecutar_consulta("SELECT nombre FROM clientes").empty else []
@@ -1328,7 +1333,7 @@ elif rol in ["admin", "produccion"]:
                             st.error("Ingrese un código válido y seleccione un cliente.")
 
             if not df_refs.empty:
-                st.write("### Listado de Referencias")
+                st.write("### Listado y Borrado Masivo de Referencias")
                 df_refs_v = df_refs.copy()
                 df_refs_v.insert(0, "Seleccionar", False)
                 edited_refs = st.data_editor(df_refs_v, key="editor_refs_mult", use_container_width=True, hide_index=True)
@@ -1372,7 +1377,7 @@ elif rol in ["admin", "produccion"]:
             st.error(f"Error: {e}")
 
     elif menu_limpio == "Reportes":
-        st.subheader("Centro de Reportes")
+        st.subheader("Centro de Reportes Gerenciales y de Producción")
         tipo_reporte_gerencial = st.radio(
             "Selecciona la vista de reporte:", 
             ["Reporte de Producción", "Costos Máquinas Alquiladas"], 
@@ -1393,7 +1398,7 @@ elif rol in ["admin", "produccion"]:
                 anio_opcion = st.number_input("Año", min_value=2024, max_value=2030, value=(datetime.utcnow() - timedelta(hours=5)).year)
 
         if tipo_reporte_gerencial == "Reporte de Producción":
-            st.markdown("### Reporte de Producción Excel")
+            st.markdown("### Reporte de Producción en Columnas Separadas para Excel")
             try:
                 df_produccion_raw = ejecutar_consulta("SELECT * FROM registro_produccion ORDER BY id DESC")
                 if not df_produccion_raw.empty:
@@ -1610,7 +1615,7 @@ elif rol in ["admin", "produccion"]:
             st.error(f"Error en herramientas: {e}")
 
     elif menu_limpio == "Cargue Ítems":
-        st.subheader("Cargue Inventario")
+        st.subheader("Cargue Único de Ítems al Inventario")
         try:
             clases_raw = ejecutar_consulta("SELECT nombre FROM clases_inventario")['nombre'].tolist() if not ejecutar_consulta("SELECT nombre FROM clases_inventario").empty else []
             lista_clases = ["-- Seleccione Clase --"] + clases_raw
@@ -1638,7 +1643,7 @@ elif rol in ["admin", "produccion"]:
             st.error(f"Error: {e}")
 
     elif menu_limpio == "Inventario":
-        st.subheader("Inventario General")
+        st.subheader("Inventario General de la Planta")
         try:
             inv_gen = ejecutar_consulta("SELECT codigo, nombre, tipo as clase, cantidad, stock_minimo FROM inventario")
             if not inv_gen.empty:
@@ -1662,7 +1667,7 @@ elif rol in ["admin", "produccion"]:
             st.error(f"Error: {e}")
 
     elif menu_limpio == "Clases" and rol == "admin":
-        st.subheader("Administración de Clases")
+        st.subheader("Administración de Clases de Inventario")
         try:
             clases_actuales = ejecutar_consulta("SELECT * FROM clases_inventario ORDER BY id DESC")
             with st.expander("Crear Clase", expanded=False):
@@ -1675,7 +1680,7 @@ elif rol in ["admin", "produccion"]:
                             st.rerun()
 
             if not clases_actuales.empty:
-                st.write("### Listado de Clases")
+                st.write("### Listado y Borrado Masivo de Clases")
                 clases_v = clases_actuales.copy()
                 clases_v.insert(0, "Seleccionar", False)
                 edited_clases = st.data_editor(clases_v, key="editor_clases_mult", use_container_width=True, hide_index=True)
@@ -1724,7 +1729,7 @@ elif rol in ["admin", "produccion"]:
                             st.rerun()
 
             if not clientes_df.empty:
-                st.write("### Listado de Clientes")
+                st.write("### Listado y Borrado Masivo de Clientes")
                 clientes_v = clientes_df.copy()
                 clientes_v.insert(0, "Seleccionar", False)
                 edited_cli = st.data_editor(clientes_v, key="editor_cli_mult", use_container_width=True, hide_index=True)
@@ -1769,7 +1774,7 @@ elif rol in ["admin", "produccion"]:
             st.error(f"Error: {e}")
 
     elif menu_limpio == "Usuarios" and rol == "admin":
-        st.subheader("Gestión del Sistema")
+        st.subheader("Gestión y Seguridad de Usuarios del Sistema")
         try:
             users_df = ejecutar_consulta("SELECT id, username, nombre, rol FROM usuarios ORDER BY id DESC")
             with st.expander("Crear Usuario", expanded=False):
@@ -1787,7 +1792,7 @@ elif rol in ["admin", "produccion"]:
                             st.error("Complete los datos y seleccione un rol válido.")
 
             if not users_df.empty:
-                st.write("### Listado de Usuarios")
+                st.write("### Listado y Borrado Masivo de Usuarios")
                 users_v = users_df.copy()
                 users_v.insert(0, "Seleccionar", False)
                 edited_users = st.data_editor(users_v, key="editor_users_mult", use_container_width=True, hide_index=True)
