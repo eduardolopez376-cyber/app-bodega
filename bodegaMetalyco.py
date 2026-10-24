@@ -111,11 +111,19 @@ DB_PARAMS = {
     "sslmode": "require"
 }
 
-def ejecutar_consulta(query, params=None):
+# =====================================================
+# OPTIMIZACIÓN CON CACHÉ INTELIGENTE
+# =====================================================
+@st.cache_data(ttl=30, show_spinner=False)
+def ejecutar_consulta_cached(query, params_key=None):
     conn = psycopg2.connect(**DB_PARAMS)
-    df = pd.read_sql_query(query, conn, params=params)
+    df = pd.read_sql_query(query, conn, params=list(params_key) if params_key else None)
     conn.close()
     return df
+
+def ejecutar_consulta(query, params=None):
+    params_key = tuple(params) if params else None
+    return ejecutar_consulta_cached(query, params_key)
 
 def ejecutar_comando(query, params=None):
     conn = psycopg2.connect(**DB_PARAMS)
@@ -124,6 +132,8 @@ def ejecutar_comando(query, params=None):
     conn.commit()
     cur.close()
     conn.close()
+    # Limpiamos el caché automáticamente para que refleje los cambios al instante
+    ejecutar_consulta_cached.clear()
 
 def inicializar_tablas_sistema():
     try:
