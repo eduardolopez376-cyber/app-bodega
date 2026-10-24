@@ -30,7 +30,7 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# Estilos CSS avanzados para unificación de botones y diseño limpio estilo ERP
+# Estilos CSS avanzados con llaves escapadas correctamente ({{ y }})
 st.markdown(f"""
     <style>
         .stApp {{
