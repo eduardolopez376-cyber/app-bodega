@@ -1662,7 +1662,7 @@ elif rol in ["admin", "produccion"]:
             st.error(f"Error: {e}")
 
     elif menu_limpio == "Clases" and rol == "admin":
-        st.subheader("Administración de Clases de Inventario")
+        st.subheader("Administración de Clases")
         try:
             clases_actuales = ejecutar_consulta("SELECT * FROM clases_inventario ORDER BY id DESC")
             with st.expander("Crear Clase", expanded=False):
@@ -1675,7 +1675,7 @@ elif rol in ["admin", "produccion"]:
                             st.rerun()
 
             if not clases_actuales.empty:
-                st.write("### Listado y Borrado Masivo de Clases")
+                st.write("### Listado de Clases")
                 clases_v = clases_actuales.copy()
                 clases_v.insert(0, "Seleccionar", False)
                 edited_clases = st.data_editor(clases_v, key="editor_clases_mult", use_container_width=True, hide_index=True)
@@ -1724,7 +1724,7 @@ elif rol in ["admin", "produccion"]:
                             st.rerun()
 
             if not clientes_df.empty:
-                st.write("### Listado y Borrado Masivo de Clientes")
+                st.write("### Listado de Clientes")
                 clientes_v = clientes_df.copy()
                 clientes_v.insert(0, "Seleccionar", False)
                 edited_cli = st.data_editor(clientes_v, key="editor_cli_mult", use_container_width=True, hide_index=True)
@@ -1769,7 +1769,7 @@ elif rol in ["admin", "produccion"]:
             st.error(f"Error: {e}")
 
     elif menu_limpio == "Usuarios" and rol == "admin":
-        st.subheader("Gestión y Seguridad de Usuarios del Sistema")
+        st.subheader("Gestión del Sistema")
         try:
             users_df = ejecutar_consulta("SELECT id, username, nombre, rol FROM usuarios ORDER BY id DESC")
             with st.expander("Crear Usuario", expanded=False):
@@ -1787,7 +1787,7 @@ elif rol in ["admin", "produccion"]:
                             st.error("Complete los datos y seleccione un rol válido.")
 
             if not users_df.empty:
-                st.write("### Listado y Borrado Masivo de Usuarios")
+                st.write("### Listado de Usuarios")
                 users_v = users_df.copy()
                 users_v.insert(0, "Seleccionar", False)
                 edited_users = st.data_editor(users_v, key="editor_users_mult", use_container_width=True, hide_index=True)
