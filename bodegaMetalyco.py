@@ -497,23 +497,28 @@ if "form_key_counter" not in st.session_state:
     st.session_state["form_key_counter"] = 0
 
 # ====================================================
-# CONTROL DE SESIÓN ÚNICA (ANTI-DISPOSITIVOS MÚLTIPLES)
+# CONTROL DE SESIÓN ÚNICA EN TIEMPO REAL (CADA 5 SEG)
 # ====================================================
-if st.session_state["autenticado"] and st.session_state["username"]:
-    try:
-        val_token = ejecutar_consulta(
-            "SELECT session_token FROM usuarios WHERE username = %s",
-            (st.session_state["username"],)
-        )
-        if not val_token.empty:
-            token_en_bd = val_token.iloc[0]["session_token"]
-            if token_en_bd != st.session_state.get("session_token"):
-                st.warning("⚠️ Tu sesión ha sido cerrada porque la cuenta fue abierta en otro dispositivo.")
-                st.session_state["autenticado"] = False
-                st.session_state["session_token"] = None
-                st.rerun()
-    except Exception:
-        pass
+@st.fragment(run_every=5)
+def validar_sesion_tiempo_real():
+    if st.session_state.get("autenticado") and st.session_state.get("username"):
+        try:
+            val_token = ejecutar_consulta(
+                "SELECT session_token FROM usuarios WHERE username = %s",
+                (st.session_state["username"],)
+            )
+            if not val_token.empty:
+                token_en_bd = val_token.iloc[0]["session_token"]
+                if token_en_bd != st.session_state.get("session_token"):
+                    st.warning("⚠️ Tu sesión ha sido cerrada porque la cuenta fue abierta en otro dispositivo.")
+                    st.session_state["autenticado"] = False
+                    st.session_state["session_token"] = None
+                    st.rerun()
+        except Exception:
+            pass
+
+# Ejecutar la validación en segundo plano
+validar_sesion_tiempo_real()
 
 # ====================================================
 # PANTALLA DE LOGIN CLÁSICA Y ELEGANTE CON TU FONDO
@@ -696,7 +701,6 @@ with st.sidebar:
     if st.button("Actualizar", use_container_width=True):
         st.rerun()
     if st.button("Cerrar Sesión", use_container_width=True):
-        # Limpiar token en la BD al cerrar sesión por seguridad
         try:
             ejecutar_comando("UPDATE usuarios SET session_token = NULL WHERE username = %s", (st.session_state['username'],))
         except:
