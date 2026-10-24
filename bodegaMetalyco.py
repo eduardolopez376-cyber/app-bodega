@@ -470,11 +470,13 @@ def generar_pdf_f01_01(datos):
     p.drawString(x_margen + 8, y_actual - 41, "SOLDADURA / PINTURA")
     p.drawString(x_margen + 252, y_actual - 41, "X")
     
+    # Bloque de firmas actualizado con Operario, Inspector y Auditor Externo como en la primera imagen
     y_actual -= 55
-    p.rect(x_margen, y_actual - 32, ancho_util, 32, fill=0, stroke=1)
+    p.rect(x_margen, y_actual - 42, ancho_util, 42, fill=0, stroke=1)
     p.setFont("Helvetica-Bold", 7.5)
-    p.drawString(x_margen + 10, y_actual - 11, f"OPERARIO: {datos.get('operario', 'N/A')}")
-    p.drawString(x_margen + 300, y_actual - 11, "INSPECTOR: _____________________")
+    p.drawString(x_margen + 10, y_actual - 11, f"NOMBRE OPERARIO: {datos.get('operario', 'N/A')}")
+    p.drawString(x_margen + 295, y_actual - 11, "NOMBRE INSPECTOR: _____________________")
+    p.drawString(x_margen + 130, y_actual - 28, "NOMBRE AUDITOR EXTERNO (SI APLICA): _____________________")
     
     p.showPage()
     p.save()
@@ -1942,7 +1944,7 @@ elif rol in ["admin", "produccion"]:
                                 st.success("¡Usuario actualizado!")
                                 st.rerun()
         except Exception as e:
-            st.error(f"Error: {e}")
+                            st.error(f"Error: {e}")
 
     elif menu_limpio == "Configuración" and rol == "admin":
         st.subheader("Configuración General de la Empresa y Sistema")
