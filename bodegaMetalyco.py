@@ -111,7 +111,6 @@ estilos_css_globales = """
             margin: 0;
         }
 
-        /* MEDIA QUERY: ADAPTA LAS TARJETAS EN CELULARES */
         @media (max-width: 768px) {
             .kpi-container {
                 flex-direction: column;
@@ -125,7 +124,6 @@ estilos_css_globales = """
 """
 st.markdown(estilos_css_globales, unsafe_allow_html=True)
 
-# Fondo general de la aplicación
 img_css_app = "background-color: #121212;"
 ruta_fondo_app = "fondo_app.jpg"
 if os.path.exists(ruta_fondo_app):
@@ -1067,7 +1065,7 @@ elif rol in ["admin", "produccion"]:
     if menu_limpio == "Vista General":
         st.subheader("Dashboard Gerencial de Planta - Control en Tiempo Real")
         
-        # 1. BARRA SUPERIOR DE FILTROS DINÁMICOS
+        # 1. BARRA SUPERIOR DE FILTROS DINÁMICOS Y RANGO DE FECHAS PERSONALIZADO
         try:
             ops_list_db = ejecutar_consulta("SELECT DISTINCT operario_nombre FROM registro_produccion")['operario_nombre'].tolist()
             refs_list_db = ejecutar_consulta("SELECT DISTINCT referencia FROM registro_produccion")['referencia'].tolist()
@@ -1079,13 +1077,22 @@ elif rol in ["admin", "produccion"]:
         opciones_mes_filtro = ["Todas", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
         opciones_ref_filtro = ["Todas"] + (refs_list_db if refs_list_db else [])
         
-        f_col1, f_col2, f_col3 = st.columns(3)
+        f_col1, f_col2, f_col3, f_col4 = st.columns(4)
         with f_col1:
             filtro_op_sel = st.selectbox("Filtrar por Operador", opciones_operario_filtro)
         with f_col2:
             filtro_mes_sel = st.selectbox("Filtrar por Mes", opciones_mes_filtro)
         with f_col3:
             filtro_ref_sel = st.selectbox("Filtrar por Referencia / SKU", opciones_ref_filtro)
+        with f_col4:
+            usar_rango_fechas = st.checkbox("Activar Rango de Fechas", value=False)
+            
+        if usar_rango_fechas:
+            r_col1, r_col2 = st.columns(2)
+            with r_col1:
+                fecha_ini_filtro = st.date_input("Fecha Inicio", value=(datetime.utcnow() - timedelta(days=7)).date())
+            with r_col2:
+                fecha_fin_filtro = st.date_input("Fecha Fin", value=(datetime.utcnow() - timedelta(hours=5)).date())
             
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -1105,6 +1112,10 @@ elif rol in ["admin", "produccion"]:
                 
                 if filtro_ref_sel != "Todas":
                     df_kpi_base = df_kpi_base[df_kpi_base['referencia'].astype(str).str.strip().str.lower() == filtro_ref_sel.strip().lower()]
+                    
+                if usar_rango_fechas and 'fecha_registro' in df_kpi_base.columns:
+                    df_kpi_base['dt_temp'] = pd.to_datetime(df_kpi_base['fecha_registro'], errors='coerce').dt.date
+                    df_kpi_base = df_kpi_base[(df_kpi_base['dt_temp'] >= fecha_ini_filtro) & (df_kpi_base['dt_temp'] <= fecha_fin_filtro)]
 
             total_buenas = int(df_kpi_base['unidades_producidas'].sum()) if not df_kpi_base.empty else 0
             total_horas = float(df_kpi_base['horas_trabajadas'].sum()) if not df_kpi_base.empty else 0.0
@@ -1126,9 +1137,13 @@ elif rol in ["admin", "produccion"]:
             
             uph_global = round(total_buenas / total_horas, 1) if total_horas > 0 else 0.0
             oee_estimado = min(100.0, round((uph_global / 130.0) * 100, 1)) if uph_global > 0 else 0.0
+            
+            # KPI Avanzado: Disponibilidad de Máquinas (Estimada sobre 10 hrs turno estándar)
+            horas_disponibles_teoricas = max(1.0, total_horas * 1.2)
+            disponibilidad_maq = min(100.0, round((total_horas / horas_disponibles_teoricas) * 100, 1)) if total_horas > 0 else 0.0
 
         except Exception as e:
-            total_buenas, total_defectuosas, total_producidas_kpi, tasa_scrap_real, oee_estimado = 0, 0, 0, 0.0, 0.0
+            total_buenas, total_defectuosas, total_producidas_kpi, tasa_scrap_real, oee_estimado, disponibilidad_maq = 0, 0, 0, 0.0, 0.0, 0.0
 
         try:
             df_oc_kpi = ejecutar_consulta("SELECT COUNT(*) as total FROM ordenes_compra WHERE estado != 'COMPLETADO'")
@@ -1136,13 +1151,18 @@ elif rol in ["admin", "produccion"]:
         except:
             total_ocs_activas = 0
 
-        # 3. FILA 1: TARJETAS DE KPIS PRINCIPALES (Stat Cards)
+        # 3. FILA 1: TARJETAS DE KPIS AVANZADOS
         kpi_html = f"""
             <div class="kpi-container">
                 <div class="kpi-card">
                     <div class="kpi-title">OEE % (Eficiencia Global)</div>
                     <div class="kpi-value" style="color: #2a9d8f;">{oee_estimado}%</div>
                     <span style="font-size: 0.75rem; color: #888;">Meta: &gt; 85.0%</span>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-title">Disponibilidad de Máquinas</div>
+                    <div class="kpi-value" style="color: #457b9d;">{disponibilidad_maq}%</div>
+                    <span style="font-size: 0.75rem; color: #888;">Tiempo operativo real</span>
                 </div>
                 <div class="kpi-card">
                     <div class="kpi-title">Total Piezas Producidas</div>
@@ -1154,17 +1174,23 @@ elif rol in ["admin", "produccion"]:
                     <div class="kpi-value" style="color: #e9c46a;">{tasa_scrap_real}%</div>
                     <span style="font-size: 0.75rem; color: #888;">Defectuosas: {total_defectuosas} u.</span>
                 </div>
-                <div class="kpi-card">
-                    <div class="kpi-title">Órdenes Activas en Proceso</div>
-                    <div class="kpi-value" style="color: #FF7A00;">{total_ocs_activas}</div>
-                    <span style="font-size: 0.75rem; color: #888;">Pendientes en planta</span>
-                </div>
             </div>
         """
         st.markdown(kpi_html, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # 4. FILA 2: GRÁFICOS PRINCIPALES (Estilo UI/UX Área Sombreada y Dona)
+        # 4. ALERTA DE STOCK CRÍTICO EN TIEMPO REAL
+        try:
+            df_stock_critico = ejecutar_consulta("SELECT codigo, nombre, cantidad, stock_minimo FROM inventario WHERE cantidad <= stock_minimo")
+            if not df_stock_critico.empty:
+                st.markdown("#### Alertas de Stock Crítico en Inventario")
+                for _, row_sc in df_stock_critico.iterrows():
+                    st.warning(f"¡Atención! El ítem **{row_sc['nombre']}** (Código: `{row_sc['codigo']}`) tiene **{row_sc['cantidad']} unidades**, lo cual está en o por debajo del stock mínimo permitido ({row_sc['stock_minimo']} u.).")
+                st.markdown("<br>", unsafe_allow_html=True)
+        except:
+            pass
+
+        # 5. FILA 2: GRÁFICOS PRINCIPALES (Área Sombreada UI/UX y Dona de Defectos)
         col_graf1, col_graf2 = st.columns([2, 1])
 
         with col_graf1:
@@ -1251,7 +1277,42 @@ elif rol in ["admin", "produccion"]:
 
         st.markdown("---")
 
-        # 5. FILA 3: TABLA INTERACTIVA DE ÓRDENES ACTIVAS
+        # 6. FILA 3: ANÁLISIS PREDICTIVO (FORECASTING) Y DESEMPEÑO POR OPERARIO
+        col_pred1, col_pred2 = st.columns(2)
+
+        with col_pred1:
+            st.markdown("#### Proyección de Cierre de Órdenes (Forecasting)")
+            try:
+                df_forecasting = ejecutar_consulta("SELECT numero_oc, referencia, meta_unidades, unidades_entregadas FROM ordenes_compra WHERE estado != 'COMPLETADO'")
+                if not df_forecasting.empty:
+                    df_forecasting['Pendientes'] = df_forecasting['meta_unidades'] - df_forecasting['unidades_entregadas'].fillna(0)
+                    df_forecasting['Estado Proyección'] = df_forecasting['Pendientes'].apply(lambda p: "A tiempo" if p < 500 else "Riesgo de Retraso")
+                    st.dataframe(df_forecasting[['numero_oc', 'referencia', 'Pendientes', 'Estado Proyección']], use_container_width=True, hide_index=True)
+                else:
+                    st.info("No hay órdenes activas para proyectar.")
+            except:
+                st.info("Sin datos suficientes para pronóstico.")
+
+        with col_pred2:
+            st.markdown("#### Desempeño Acumulado por Operario")
+            try:
+                df_ops_perf = ejecutar_consulta("SELECT operario_nombre, SUM(unidades_producidas) as total_prod FROM registro_produccion GROUP BY operario_nombre")
+                if not df_ops_perf.empty:
+                    fig_ops = px.bar(df_ops_perf, x='operario_nombre', y='total_prod', color='operario_nombre', color_discrete_sequence=['#FF7A00', '#e76f51', '#457b9d'])
+                    fig_ops.update_layout(
+                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(26,26,26,0.5)', font_color="#E0E0E0",
+                        margin=dict(t=10, b=10, l=10, r=10), height=250, showlegend=False,
+                        xaxis=dict(title="Operario"), yaxis=dict(title="Unidades Producidas")
+                    )
+                    st.plotly_chart(fig_ops, use_container_width=True)
+                else:
+                    st.info("Sin registros de operarios aún.")
+            except:
+                st.info("Sin datos para gráfico de operarios.")
+
+        st.markdown("---")
+
+        # 7. FILA 4: TABLA INTERACTIVA DE ÓRDENES ACTIVAS
         st.markdown("#### Estatus de Órdenes de Trabajo Activas (Base de Datos)")
         
         try:
@@ -2160,7 +2221,7 @@ elif rol in ["admin", "produccion"]:
             st.subheader("Actualizar Logo Institucional del Sistema")
             with st.form("form_subir_logo"):
                 archivo_logo = st.file_uploader("Selecciona la nueva imagen del logo (PNG o JPG)", type=["png", "jpg", "jpeg"])
-                if st.form_submit_button("Guardar", type="primary", use_container_width=True):
+                    if st.form_submit_button("Guardar", type="primary", use_container_width=True):
                     if archivo_logo is not None:
                         nombre_guardado = "logometalyco.png"
                         with open(nombre_guardado, "wb") as f:
