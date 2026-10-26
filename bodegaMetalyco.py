@@ -1138,7 +1138,6 @@ elif rol in ["admin", "produccion"]:
             uph_global = round(total_buenas / total_horas, 1) if total_horas > 0 else 0.0
             oee_estimado = min(100.0, round((uph_global / 130.0) * 100, 1)) if uph_global > 0 else 0.0
             
-            # KPI Avanzado: Disponibilidad de Máquinas (Estimada sobre 10 hrs turno estándar)
             horas_disponibles_teoricas = max(1.0, total_horas * 1.2)
             disponibilidad_maq = min(100.0, round((total_horas / horas_disponibles_teoricas) * 100, 1)) if total_horas > 0 else 0.0
 
@@ -2221,7 +2220,7 @@ elif rol in ["admin", "produccion"]:
             st.subheader("Actualizar Logo Institucional del Sistema")
             with st.form("form_subir_logo"):
                 archivo_logo = st.file_uploader("Selecciona la nueva imagen del logo (PNG o JPG)", type=["png", "jpg", "jpeg"])
-                    if st.form_submit_button("Guardar", type="primary", use_container_width=True):
+                if st.form_submit_button("Guardar", type="primary", use_container_width=True):
                     if archivo_logo is not None:
                         nombre_guardado = "logometalyco.png"
                         with open(nombre_guardado, "wb") as f:
