@@ -1276,7 +1276,7 @@ elif rol in ["admin", "produccion"]:
 
         st.markdown("---")
 
-        # 6. FILA 3: ANÁLISIS PREDICTIVO (FORECASTING) Y DESEMPEÑO POR OPERARIO CON SELECTOR
+        # 6. FILA 3: ANÁLISIS PREDICTIVO (FORECASTING) Y DESEMPEÑO POR OPERARIO
         col_pred1, col_pred2 = st.columns(2)
 
         with col_pred1:
@@ -1293,16 +1293,7 @@ elif rol in ["admin", "produccion"]:
                 st.info("Sin datos suficientes para pronóstico.")
 
         with col_pred2:
-            st.markdown("""
-                <div style='background: linear-gradient(135deg, #1e1e1e 0%, #2a2a2a 100%); 
-                            border: 1px solid rgba(255, 122, 0, 0.2); 
-                            border-radius: 12px; 
-                            padding: 15px; 
-                            box-shadow: 0 4px 15px rgba(0,0,0,0.4);'>
-            """, unsafe_allow_html=True)
-            
             st.markdown("#### 👥 Desempeño Acumulado por Operario")
-            
             try:
                 df_ops_perf = ejecutar_consulta("SELECT operario_nombre, SUM(unidades_producidas) as total_prod FROM registro_produccion GROUP BY operario_nombre")
                 
@@ -1333,21 +1324,23 @@ elif rol in ["admin", "produccion"]:
                         fig_ops.update_traces(
                             texttemplate='%{text:,} u.', 
                             textposition='outside',
-                            marker_line_color='rgba(255, 122, 0, 0.8)',
-                            marker_line_width=1.5,
-                            opacity=0.9
+                            marker_line_color='#FFA500',
+                            marker_line_width=2,
+                            opacity=0.95,
+                            width=0.4 if len(df_ops_filtrado) == 1 else 0.7
                         )
                         
                         fig_ops.update_layout(
                             paper_bgcolor='rgba(0,0,0,0)', 
-                            plot_bgcolor='rgba(18,18,18,0.6)', 
+                            plot_bgcolor='rgba(26,26,26,0.4)', 
                             font_color="#E0E0E0",
-                            margin=dict(t=30, b=10, l=10, r=10), 
-                            height=270, 
+                            margin=dict(t=40, b=10, l=10, r=10), 
+                            height=280, 
                             showlegend=False,
                             xaxis=dict(
                                 title=dict(text="Operario Asignado", font=dict(size=11, color="#888")),
-                                showgrid=False
+                                showgrid=False,
+                                categoryorder="total descending"
                             ),
                             yaxis=dict(
                                 title=dict(text="Unidades Producidas", font=dict(size=11, color="#888")),
@@ -1362,8 +1355,6 @@ elif rol in ["admin", "produccion"]:
                     st.info("Sin registros de operarios aún en la base de datos.")
             except Exception as e:
                 st.info("Sin datos suficientes para el gráfico de operarios.")
-                
-            st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("---")
 
