@@ -1718,7 +1718,6 @@ elif rol in ["admin", "produccion"]:
 
             if not df_refs.empty:
                 st.write("### Listado de Referencias")
-                # Ocultamos la columna de valor unitario si el rol no es admin o produccion
                 df_refs_view = df_refs.copy()
                 if 'valor_unitario' in df_refs_view.columns:
                     df_refs_view['valor_unitario'] = df_refs_view['valor_unitario'].apply(lambda x: f"${x:,.2f}" if pd.notna(x) else "$0.00")
@@ -2268,7 +2267,7 @@ elif rol in ["admin", "produccion"]:
                 if st.form_submit_button("Guardar", type="primary", use_container_width=True):
                     if archivo_logo is not None:
                         nombre_guardado = "logometalyco.png"
-                        with open(nombre_guardado, "wb"] as f:
+                        with open(nombre_guardado, "wb") as f:
                             f.write(archivo_logo.getbuffer())
                         st.success("Logo actualizado correctamente en el sistema. Recarga la página para visualizarlo.")
                         st.rerun()
