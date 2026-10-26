@@ -1276,7 +1276,7 @@ elif rol in ["admin", "produccion"]:
 
         st.markdown("---")
 
-        # 6. FILA 3: ANÁLISIS PREDICTIVO (FORECASTING) Y DESEMPEÑO POR OPERARIO
+        # 6. FILA 3: ANÁLISIS PREDICTIVO (FORECASTING) Y DESEMPEÑO POR OPERARIO CON SELECTOR
         col_pred1, col_pred2 = st.columns(2)
 
         with col_pred1:
@@ -1293,21 +1293,77 @@ elif rol in ["admin", "produccion"]:
                 st.info("Sin datos suficientes para pronóstico.")
 
         with col_pred2:
-            st.markdown("#### Desempeño Acumulado por Operario")
+            st.markdown("""
+                <div style='background: linear-gradient(135deg, #1e1e1e 0%, #2a2a2a 100%); 
+                            border: 1px solid rgba(255, 122, 0, 0.2); 
+                            border-radius: 12px; 
+                            padding: 15px; 
+                            box-shadow: 0 4px 15px rgba(0,0,0,0.4);'>
+            """, unsafe_allow_html=True)
+            
+            st.markdown("#### 👥 Desempeño Acumulado por Operario")
+            
             try:
                 df_ops_perf = ejecutar_consulta("SELECT operario_nombre, SUM(unidades_producidas) as total_prod FROM registro_produccion GROUP BY operario_nombre")
+                
                 if not df_ops_perf.empty:
-                    fig_ops = px.bar(df_ops_perf, x='operario_nombre', y='total_prod', color='operario_nombre', color_discrete_sequence=['#FF7A00', '#e76f51', '#457b9d'])
-                    fig_ops.update_layout(
-                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(26,26,26,0.5)', font_color="#E0E0E0",
-                        margin=dict(t=10, b=10, l=10, r=10), height=250, showlegend=False,
-                        xaxis=dict(title="Operario"), yaxis=dict(title="Unidades Producidas")
+                    lista_operarios_grafico = ["Todos los Operarios"] + df_ops_perf['operario_nombre'].dropna().tolist()
+                    
+                    operario_seleccionado_grafico = st.selectbox(
+                        "Filtrar vista por operario:", 
+                        lista_operarios_grafico, 
+                        key="select_operario_grafico_ui"
                     )
-                    st.plotly_chart(fig_ops, use_container_width=True)
+                    
+                    if operario_seleccionado_grafico != "Todos los Operarios":
+                        df_ops_filtrado = df_ops_perf[df_ops_perf['operario_nombre'] == operario_seleccionado_grafico]
+                    else:
+                        df_ops_filtrado = df_ops_perf
+                    
+                    if not df_ops_filtrado.empty:
+                        fig_ops = px.bar(
+                            df_ops_filtrado, 
+                            x='operario_nombre', 
+                            y='total_prod', 
+                            color='operario_nombre', 
+                            color_discrete_sequence=['#FF7A00', '#e76f51', '#457b9d', '#2a9d8f', '#e9c46a'],
+                            text='total_prod'
+                        )
+                        
+                        fig_ops.update_traces(
+                            texttemplate='%{text:,} u.', 
+                            textposition='outside',
+                            marker_line_color='rgba(255, 122, 0, 0.8)',
+                            marker_line_width=1.5,
+                            opacity=0.9
+                        )
+                        
+                        fig_ops.update_layout(
+                            paper_bgcolor='rgba(0,0,0,0)', 
+                            plot_bgcolor='rgba(18,18,18,0.6)', 
+                            font_color="#E0E0E0",
+                            margin=dict(t=30, b=10, l=10, r=10), 
+                            height=270, 
+                            showlegend=False,
+                            xaxis=dict(
+                                title=dict(text="Operario Asignado", font=dict(size=11, color="#888")),
+                                showgrid=False
+                            ),
+                            yaxis=dict(
+                                title=dict(text="Unidades Producidas", font=dict(size=11, color="#888")),
+                                showgrid=True, 
+                                gridcolor='rgba(255,255,255,0.05)'
+                            )
+                        )
+                        st.plotly_chart(fig_ops, use_container_width=True)
+                    else:
+                        st.info("No hay registros para el operario seleccionado.")
                 else:
-                    st.info("Sin registros de operarios aún.")
-            except:
-                st.info("Sin datos para gráfico de operarios.")
+                    st.info("Sin registros de operarios aún en la base de datos.")
+            except Exception as e:
+                st.info("Sin datos suficientes para el gráfico de operarios.")
+                
+            st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("---")
 
