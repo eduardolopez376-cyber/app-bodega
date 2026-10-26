@@ -73,6 +73,34 @@ estilos_css_globales = """
             border: 2px solid #FF7A00;
             box-shadow: 0 4px 15px rgba(255, 122, 0, 0.3);
         }
+
+        /* CONTENEDOR RESPONSIVO PARA LAS TARJETAS DE KPIS */
+        .kpi-container-flex {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+        }
+        .kpi-card-item {
+            flex: 1;
+            background: linear-gradient(135deg, #FF7A00 0%, #cc6200 100%);
+            border-radius: 14px;
+            padding: 18px;
+            text-align: center;
+            box-shadow: 0 8px 20px rgba(255,122,0,0.3);
+            min-width: 200px;
+        }
+
+        /* MEDIA QUERY: SOLO SE APLICA EN CELULARES (Pantallas menores a 768px) */
+        @media (max-width: 768px) {
+            .kpi-container-flex {
+                flex-direction: column; /* Apila las tarjetas verticalmente a lo ancho */
+            }
+            .kpi-card-item {
+                width: 100%;
+                min-width: 100%;
+            }
+        }
     </style>
 """
 st.markdown(estilos_css_globales, unsafe_allow_html=True)
@@ -1046,24 +1074,21 @@ elif rol in ["admin", "produccion"]:
         st.markdown("<br>", unsafe_allow_html=True)
 
         # =====================================================
-        # TARJETAS DE MÉTRICAS SUPERIORES (KPIs CON 3 FILTROS)
+        # TARJETAS DE MÉTRICAS SUPERIORES (KPIs CON CLASE RESPONSIVA)
         # =====================================================
         try:
             df_kpi_base = ejecutar_consulta("SELECT operario_nombre, referencia, unidades_producidas, horas_trabajadas, observaciones, fecha_registro FROM registro_produccion")
             
             if not df_kpi_base.empty:
-                # 1. Filtro por Operador
                 if filtro_op_sel != "Todas":
                     df_kpi_base = df_kpi_base[df_kpi_base['operario_nombre'].astype(str).str.strip().str.lower() == filtro_op_sel.strip().lower()]
                 
-                # 2. Filtro por Mes
                 if filtro_mes_sel != "Todas" and 'fecha_registro' in df_kpi_base.columns:
                     df_kpi_base['dt_temp'] = pd.to_datetime(df_kpi_base['fecha_registro'], errors='coerce')
                     meses_dict_rev = {1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"}
                     df_kpi_base['mes_nombre'] = df_kpi_base['dt_temp'].dt.month.map(meses_dict_rev)
                     df_kpi_base = df_kpi_base[df_kpi_base['mes_nombre'] == filtro_mes_sel]
                 
-                # 3. Filtro por Referencia
                 if filtro_ref_sel != "Todas":
                     df_kpi_base = df_kpi_base[df_kpi_base['referencia'].astype(str).str.strip().str.lower() == filtro_ref_sel.strip().lower()]
 
@@ -1087,20 +1112,20 @@ elif rol in ["admin", "produccion"]:
             total_buenas, total_defectuosas, total_producidas_kpi, total_horas_kpi = 0, 0, 0, 0.0
 
         card_html = f"""
-            <div style="display: flex; gap: 15px; margin-bottom: 25px; flex-wrap: wrap;">
-                <div style="flex: 1; background: linear-gradient(135deg, #FF7A00 0%, #cc6200 100%); border-radius: 14px; padding: 18px; text-align: center; box-shadow: 0 8px 20px rgba(255,122,0,0.3);">
+            <div class="kpi-container-flex">
+                <div class="kpi-card-item">
                     <p style="color: #fff; font-size: 0.85rem; margin-bottom: 4px; font-weight: bold; text-transform: uppercase;">⚙️ Total Piezas Buenas</p>
                     <h2 style="color: #ffffff; font-size: 1.8rem; margin: 0;">{total_buenas:,}</h2>
                 </div>
-                <div style="flex: 1; background: linear-gradient(135deg, #FF7A00 0%, #cc6200 100%); border-radius: 14px; padding: 18px; text-align: center; box-shadow: 0 8px 20px rgba(255,122,0,0.3);">
+                <div class="kpi-card-item">
                     <p style="color: #fff; font-size: 0.85rem; margin-bottom: 4px; font-weight: bold; text-transform: uppercase;">⚙️ Piezas Rechazadas</p>
                     <h2 style="color: #ffffff; font-size: 1.8rem; margin: 0;">{total_defectuosas:,}</h2>
                 </div>
-                <div style="flex: 1; background: linear-gradient(135deg, #FF7A00 0%, #cc6200 100%); border-radius: 14px; padding: 18px; text-align: center; box-shadow: 0 8px 20px rgba(255,122,0,0.3);">
+                <div class="kpi-card-item">
                     <p style="color: #fff; font-size: 0.85rem; margin-bottom: 4px; font-weight: bold; text-transform: uppercase;">⚙️ Piezas Producidas</p>
                     <h2 style="color: #ffffff; font-size: 1.8rem; margin: 0;">{total_producidas_kpi:,}</h2>
                 </div>
-                <div style="flex: 1; background: linear-gradient(135deg, #FF7A00 0%, #cc6200 100%); border-radius: 14px; padding: 18px; text-align: center; box-shadow: 0 8px 20px rgba(255,122,0,0.3);">
+                <div class="kpi-card-item">
                     <p style="color: #fff; font-size: 0.85rem; margin-bottom: 4px; font-weight: bold; text-transform: uppercase;">⚙️ Horas Productivas</p>
                     <h2 style="color: #ffffff; font-size: 1.8rem; margin: 0;">{total_horas_kpi:,.1f}</h2>
                 </div>
