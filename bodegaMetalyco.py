@@ -1164,20 +1164,24 @@ elif rol in ["admin", "produccion"]:
         st.markdown(kpi_html, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # 4. FILA 2: GRÁFICOS PRINCIPALES (UPH Real y Dona de Calidad)
+        # 4. FILA 2: GRÁFICOS PRINCIPALES (Estilo UI/UX Área Sombreada y Dona)
         col_graf1, col_graf2 = st.columns([2, 1])
 
         with col_graf1:
-            st.markdown("#### 📈 Rendimiento UPH Real (Unidades por Hora) vs Meta")
+            st.markdown("#### 📈 Rendimiento UPH Real (Área Sombreada UI/UX) vs Meta")
             
+            # Reutilizamos el DataFrame filtrado exacto para que respete el mes/operario/referencia seleccionado
+            # Si el filtro arroja 0 registros (como en un mes sin producción), el gráfico no mostrará datos ficticios.
             try:
-                df_uph_real = ejecutar_consulta("""
-                    SELECT fecha_registro::text as fecha, SUM(unidades_producidas) as produccion, SUM(horas_trabajadas) as horas 
-                    FROM registro_produccion 
-                    GROUP BY fecha_registro 
-                    ORDER BY fecha_registro ASC 
-                    LIMIT 15
-                """)
+                if not df_kpi_base.empty and 'fecha_registro' in df_kpi_base.columns:
+                    df_uph_real = df_kpi_base.groupby('fecha_registro').agg({
+                        'unidades_producidas': 'sum',
+                        'horas_trabajadas': 'sum'
+                    }).reset_index()
+                    df_uph_real.columns = ['fecha', 'produccion', 'horas']
+                    df_uph_real = df_uph_real.sort_values('fecha')
+                else:
+                    df_uph_real = pd.DataFrame()
             except:
                 df_uph_real = pd.DataFrame()
 
@@ -1185,25 +1189,32 @@ elif rol in ["admin", "produccion"]:
                 df_uph_real['UPH'] = df_uph_real.apply(lambda r: round(r['produccion'] / r['horas'], 1) if r['horas'] > 0 else 0, axis=1)
                 df_uph_real['Meta'] = 130
 
-                fig_uph = px.bar(
+                # Gráfico de Área Sombreada (Estilo UI/UX de referencia)
+                fig_uph = px.area(
                     df_uph_real, 
                     x='fecha', 
                     y='UPH',
-                    text='UPH',
+                    markers=True,
                     color_discrete_sequence=['#FF7A00']
                 )
+                
+                # Línea de Meta (Target) punteada
                 fig_uph.add_trace(
                     go.Scatter(
                         x=df_uph_real['fecha'], 
                         y=df_uph_real['Meta'], 
-                        mode='lines+text', 
+                        mode='lines', 
                         name='Meta (130 UPH)',
-                        line=dict(color='#e76f51', dash='dash', width=3)
+                        line=dict(color='#e76f51', dash='dash', width=2)
                     )
                 )
             else:
                 fig_uph = go.Figure()
-                fig_uph.add_annotation(text="Registra más producciones para ver la curva UPH en tiempo real", x=0.5, y=0.5, showarrow=False, font=dict(color="#888", size=14))
+                fig_uph.add_annotation(
+                    text="No hay registros de producción para el filtro seleccionado", 
+                    x=0.5, y=0.5, showarrow=False, 
+                    font=dict(color="#888", size=14)
+                )
 
             fig_uph.update_layout(
                 paper_bgcolor='rgba(0,0,0,0)',
@@ -1212,7 +1223,8 @@ elif rol in ["admin", "produccion"]:
                 margin=dict(t=20, b=20, l=20, r=20),
                 height=350,
                 xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', title="Fecha de Registro"),
-                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', title="Unidades / Hora (UPH)")
+                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', title="Unidades / Hora (UPH)"),
+                legend=dict(orientation="h", y=1.1, x=0)
             )
             st.plotly_chart(fig_uph, use_container_width=True)
 
