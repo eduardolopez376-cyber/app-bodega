@@ -824,7 +824,7 @@ if rol == "operario":
                 
                 with st.form("form_reporte_operario"):
                     if es_prensa:
-                        st.info(f"⚙️ Máquina detectada como prensa (`{maq_nombre_temp}`). Por favor ingresa la presión de trabajo:")
+                        st.info(f"Máquina detectada como prensa (`{maq_nombre_temp}`). Por favor ingresa la presión de trabajo:")
                         presion_input = st.text_input("Presión de Trabajo (Ej: 150 Ton / 25 MPa)", key="input_presion_operario")
                     else:
                         presion_input = ""
@@ -919,9 +919,9 @@ if rol == "operario":
                             st.session_state["ultimo_pdf_nombre"] = f"F-01-01_OC_{num_oc_asociada}_{referencia_pieza}.pdf"
                             
                             if unidades < meta_asignada_tarea:
-                                st.warning(f"¡Producción registrada! Atención: Se reportaron piezas pendientes por completar ({meta_asignada_tarea - unidades} u. faltantes). La orden se ha cerrado definitivamente.")
+                                st.warning(f"Producción registrada. Atención: Se reportaron piezas pendientes por completar ({meta_asignada_tarea - unidades} u. faltantes). La orden se ha cerrado definitivamente.")
                             else:
-                                st.success("¡Producción registrada y formato F-01-01 generado con éxito!")
+                                st.success("Producción registrada y formato F-01-01 generado con éxito.")
 
             if "ultimo_pdf_buffer" in st.session_state:
                 st.markdown("---")
@@ -1039,7 +1039,7 @@ if rol == "operario":
                             pdf_buffer_imp = generar_pdf_f01_01(datos_pdf_imp)
                             st.session_state["ultimo_pdf_buffer_imp"] = pdf_buffer_imp.getvalue()
                             st.session_state["ultimo_pdf_nombre_imp"] = f"F-01-01_IMPREVISTO_OC_{oc_imp}_{ref_imp}.pdf"
-                            st.success("¡Tarea imprevista registrada y formato F-01-01 generado con éxito!")
+                            st.success("Tarea imprevista registrada y formato F-01-01 generado con éxito.")
 
             if "ultimo_pdf_buffer_imp" in st.session_state:
                 st.markdown("---")
@@ -1065,7 +1065,7 @@ if rol == "operario":
 elif rol in ["admin", "produccion"]:
     
     if menu_limpio == "Vista General":
-        st.subheader("📊 Dashboard Gerencial de Planta - Control en Tiempo Real")
+        st.subheader("Dashboard Gerencial de Planta - Control en Tiempo Real")
         
         # 1. BARRA SUPERIOR DE FILTROS DINÁMICOS
         try:
@@ -1140,22 +1140,22 @@ elif rol in ["admin", "produccion"]:
         kpi_html = f"""
             <div class="kpi-container">
                 <div class="kpi-card">
-                    <div class="kpi-title">⚙️ OEE % (Eficiencia Global)</div>
+                    <div class="kpi-title">OEE % (Eficiencia Global)</div>
                     <div class="kpi-value" style="color: #2a9d8f;">{oee_estimado}%</div>
                     <span style="font-size: 0.75rem; color: #888;">Meta: &gt; 85.0%</span>
                 </div>
                 <div class="kpi-card">
-                    <div class="kpi-title">📦 Total Piezas Producidas</div>
+                    <div class="kpi-title">Total Piezas Producidas</div>
                     <div class="kpi-value">{total_buenas:,}</div>
                     <span style="font-size: 0.75rem; color: #2a9d8f;">Registradas en BD</span>
                 </div>
                 <div class="kpi-card">
-                    <div class="kpi-title">⚠️ Tasa de Rechazo / Scrap</div>
+                    <div class="kpi-title">Tasa de Rechazo / Scrap</div>
                     <div class="kpi-value" style="color: #e9c46a;">{tasa_scrap_real}%</div>
                     <span style="font-size: 0.75rem; color: #888;">Defectuosas: {total_defectuosas} u.</span>
                 </div>
                 <div class="kpi-card">
-                    <div class="kpi-title">🔄 Órdenes Activas en Proceso</div>
+                    <div class="kpi-title">Órdenes Activas en Proceso</div>
                     <div class="kpi-value" style="color: #FF7A00;">{total_ocs_activas}</div>
                     <span style="font-size: 0.75rem; color: #888;">Pendientes en planta</span>
                 </div>
@@ -1168,10 +1168,8 @@ elif rol in ["admin", "produccion"]:
         col_graf1, col_graf2 = st.columns([2, 1])
 
         with col_graf1:
-            st.markdown("#### 📈 Rendimiento UPH Real (Área Sombreada UI/UX) vs Meta")
+            st.markdown("#### Rendimiento UPH Real (Área Sombreada UI/UX) vs Meta")
             
-            # Reutilizamos el DataFrame filtrado exacto para que respete el mes/operario/referencia seleccionado
-            # Si el filtro arroja 0 registros (como en un mes sin producción), el gráfico no mostrará datos ficticios.
             try:
                 if not df_kpi_base.empty and 'fecha_registro' in df_kpi_base.columns:
                     df_uph_real = df_kpi_base.groupby('fecha_registro').agg({
@@ -1189,7 +1187,6 @@ elif rol in ["admin", "produccion"]:
                 df_uph_real['UPH'] = df_uph_real.apply(lambda r: round(r['produccion'] / r['horas'], 1) if r['horas'] > 0 else 0, axis=1)
                 df_uph_real['Meta'] = 130
 
-                # Gráfico de Área Sombreada (Estilo UI/UX de referencia)
                 fig_uph = px.area(
                     df_uph_real, 
                     x='fecha', 
@@ -1198,7 +1195,6 @@ elif rol in ["admin", "produccion"]:
                     color_discrete_sequence=['#FF7A00']
                 )
                 
-                # Línea de Meta (Target) punteada
                 fig_uph.add_trace(
                     go.Scatter(
                         x=df_uph_real['fecha'], 
@@ -1229,7 +1225,7 @@ elif rol in ["admin", "produccion"]:
             st.plotly_chart(fig_uph, use_container_width=True)
 
         with col_graf2:
-            st.markdown("#### 🍩 Distribución de Defectos y Calidad")
+            st.markdown("#### Distribución de Defectos y Calidad")
             
             df_defectos_real = pd.DataFrame({
                 'Causa': ['Defecto Material', 'Ajuste Máquina', 'Operario', 'Otros'],
@@ -1256,7 +1252,7 @@ elif rol in ["admin", "produccion"]:
         st.markdown("---")
 
         # 5. FILA 3: TABLA INTERACTIVA DE ÓRDENES ACTIVAS
-        st.markdown("#### 📋 Estatus de Órdenes de Trabajo Activas (Base de Datos)")
+        st.markdown("#### Estatus de Órdenes de Trabajo Activas (Base de Datos)")
         
         try:
             df_tabla_ocs_real = ejecutar_consulta("SELECT numero_oc, cliente, referencia, meta_unidades, unidades_entregadas FROM ordenes_compra ORDER BY id DESC LIMIT 10")
@@ -1270,11 +1266,11 @@ elif rol in ["admin", "produccion"]:
                 entregado = row['Cant_Completada'] if pd.notna(row['Cant_Completada']) else 0
                 meta = row['Cant_Planificada']
                 if entregado >= meta:
-                    return "🟢 Completada"
+                    return "Completada"
                 elif entregado > 0:
-                    return "🔵 En Proceso"
+                    return "En Proceso"
                 else:
-                    return "⚪ Sin Iniciar"
+                    return "Sin Iniciar"
             
             df_tabla_ocs_real['Estado'] = df_tabla_ocs_real.apply(badge_estado_real, axis=1)
             
@@ -1378,7 +1374,7 @@ elif rol in ["admin", "produccion"]:
                                     (fecha_seleccionada, oc_real, op_p, maq_p, ref_arrastrada, servicio_arrastrado, h_ini_p, h_fin_p, meta_arrastrada)
                                 )
                                 st.session_state["form_key_counter"] += 1
-                                st.success(f"¡Tarea asignada a {op_p} para la OC #{oc_real} (Ref: {ref_arrastrada}) con meta de {meta_arrastrada} u.!")
+                                st.success(f"Tarea asignada a {op_p} para la OC #{oc_real} (Ref: {ref_arrastrada}) con meta de {meta_arrastrada} u.")
                                 st.rerun()
             
             st.write("---")
@@ -1552,7 +1548,7 @@ elif rol in ["admin", "produccion"]:
                                     "UPDATE maquinas SET nombre = %s, tipo = %s, tipo_propiedad = %s, costo_hora_alquiler = %s WHERE nombre = %s",
                                     (nuevo_nom_maq.strip(), nuevo_tipo_maq.strip(), nuevo_prop_maq, nuevo_costo_maq if nuevo_prop_maq == "ALQUILADA" else 0, maq_edit_sel)
                                 )
-                                st.success("¡Máquina actualizada con éxito!")
+                                st.success("Máquina actualizada con éxito.")
                                 st.rerun()
         except Exception as e:
             st.error(f"Error: {e}")
@@ -1596,7 +1592,7 @@ elif rol in ["admin", "produccion"]:
                                 st.error("Seleccione un servicio válido.")
                             elif nuevo_nom_serv.strip():
                                 ejecutar_comando("UPDATE servicios_prestados SET nombre = %s WHERE nombre = %s", (nuevo_nom_serv.upper().strip(), serv_edit_sel))
-                                st.success("¡Servicio actualizado!")
+                                st.success("Servicio actualizado.")
                                 st.rerun()
         except Exception as e:
             st.error(f"Error: {e}")
@@ -1660,7 +1656,7 @@ elif rol in ["admin", "produccion"]:
                                     st.error("Seleccione una referencia válida.")
                                 else:
                                     ejecutar_comando("UPDATE referencias SET codigo = %s, descripcion = %s, cliente = %s WHERE codigo = %s", (nuevo_cod_ref.upper().strip(), nuevo_desc_ref, nuevo_cli_ref, ref_edit_sel))
-                                    st.success("¡Referencia actualizada!")
+                                    st.success("Referencia actualizada.")
                                     st.rerun()
         except Exception as e:
             st.error(f"Error: {e}")
@@ -1994,7 +1990,7 @@ elif rol in ["admin", "produccion"]:
                                 st.error("Seleccione una clase válida.")
                             elif nueva_nombre_clase.strip():
                                 ejecutar_comando("UPDATE clases_inventario SET nombre = %s WHERE nombre = %s", (nueva_nombre_clase.upper().strip(), clase_edit_sel))
-                                st.success("¡Clase actualizada!")
+                                st.success("Clase actualizada.")
                                 st.rerun()
         except Exception as e:
             st.error(f"Error: {e}")
@@ -2057,7 +2053,7 @@ elif rol in ["admin", "produccion"]:
                                     "UPDATE clientes SET nombre = %s, nit = %s, telefono = %s WHERE nombre = %s",
                                     (nuevo_nom_cli.strip(), nuevo_nit_cli.strip(), nuevo_tel_cli.strip(), cliente_edit_sel)
                                 )
-                                st.success("¡Cliente actualizado!")
+                                st.success("Cliente actualizado.")
                                 st.rerun()
         except Exception as e:
             st.error(f"Error: {e}")
@@ -2124,7 +2120,7 @@ elif rol in ["admin", "produccion"]:
                                     ejecutar_comando("UPDATE usuarios SET nombre = %s, password = %s, rol = %s WHERE username = %s", (nuevo_nombre.strip(), nueva_pass, nuevo_rol, edit_user_sel))
                                 else:
                                     ejecutar_comando("UPDATE usuarios SET nombre = %s, rol = %s WHERE username = %s", (nuevo_nombre.strip(), nuevo_rol, edit_user_sel))
-                                st.success("¡Usuario actualizado!")
+                                st.success("Usuario actualizado.")
                                 st.rerun()
         except Exception as e:
             st.error(f"Error: {e}")
@@ -2157,7 +2153,7 @@ elif rol in ["admin", "produccion"]:
                                ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor""",
                             (clave, valor)
                         )
-                    st.success("¡Configuración general guardada con éxito!")
+                    st.success("Configuración general guardada con éxito.")
                     st.rerun()
                     
             st.write("---")
@@ -2169,7 +2165,7 @@ elif rol in ["admin", "produccion"]:
                         nombre_guardado = "logometalyco.png"
                         with open(nombre_guardado, "wb") as f:
                             f.write(archivo_logo.getbuffer())
-                        st.success("¡Logo actualizado correctamente en el sistema! Recarga la página para visualizarlo.")
+                        st.success("Logo actualizado correctamente en el sistema. Recarga la página para visualizarlo.")
                         st.rerun()
                     else:
                         st.error("Por favor selecciona un archivo de imagen válido.")
