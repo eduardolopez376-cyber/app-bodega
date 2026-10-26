@@ -213,6 +213,7 @@ def inicializar_tablas_sistema():
         ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS fecha_registro DATE;")
         ejecutar_comando("ALTER TABLE programacion_diaria ADD COLUMN IF NOT EXISTS numero_oc VARCHAR(100);")
         ejecutar_comando("ALTER TABLE referencias ADD COLUMN IF NOT EXISTS cliente VARCHAR(150);")
+        ejecutar_comando("ALTER TABLE referencias ADD COLUMN IF NOT EXISTS valor_unitario NUMERIC(12,2) DEFAULT 0;")
         ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS nit VARCHAR(50);")
         ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS telefono VARCHAR(50);")
         ejecutar_comando("ALTER TABLE ordenes_compra ADD COLUMN IF NOT EXISTS fecha_registro DATE;")
@@ -889,9 +890,12 @@ if rol == "operario":
                                 if not oc_db.empty:
                                     ent_actuales = int(oc_db.iloc[0]['unidades_entregadas']) if pd.notna(oc_db.iloc[0]['unidades_entregadas']) else 0
                                     nuevo_entregado = ent_actuales + unidades
+                                    meta_total_oc = int(oc_db.iloc[0]['meta_unidades']) if pd.notna(oc_db.iloc[0]['meta_unidades']) else nuevo_entregado
+                                    estado_oc_calc = 'COMPLETADO' if nuevo_entregado >= meta_total_oc else 'PENDIENTE'
+                                    
                                     ejecutar_comando(
-                                        "UPDATE ordenes_compra SET unidades_entregadas = %s, estado = 'COMPLETADO' WHERE numero_oc = %s AND referencia = %s",
-                                        (nuevo_entregado, num_oc_asociada, referencia_pieza)
+                                        "UPDATE ordenes_compra SET unidades_entregadas = %s, estado = %s WHERE numero_oc = %s AND referencia = %s",
+                                        (nuevo_entregado, estado_oc_calc, num_oc_asociada, referencia_pieza)
                                     )
 
                             ejecutar_comando("UPDATE programacion_diaria SET estado = 'FINALIZADO' WHERE id = %s", (id_tarea,))
@@ -917,7 +921,7 @@ if rol == "operario":
                             st.session_state["ultimo_pdf_nombre"] = f"F-01-01_OC_{num_oc_asociada}_{referencia_pieza}.pdf"
                             
                             if unidades < meta_asignada_tarea:
-                                st.warning(f"Producción registrada. Atención: Se reportaron piezas pendientes por completar ({meta_asignada_tarea - unidades} u. faltantes). La orden se ha cerrado definitivamente.")
+                                st.warning(f"Producción registrada. Atención: Se reportaron piezas pendientes por completar ({meta_asignada_tarea - unidades} u. faltantes).")
                             else:
                                 st.success("Producción registrada y formato F-01-01 generado con éxito.")
 
@@ -1065,7 +1069,6 @@ elif rol in ["admin", "produccion"]:
     if menu_limpio == "Vista General":
         st.subheader("Dashboard Gerencial de Planta - Control en Tiempo Real")
         
-        # 1. BARRA SUPERIOR DE FILTROS DINÁMICOS Y RANGO DE FECHAS PERSONALIZADO
         try:
             ops_list_db = ejecutar_consulta("SELECT DISTINCT operario_nombre FROM registro_produccion")['operario_nombre'].tolist()
             refs_list_db = ejecutar_consulta("SELECT DISTINCT referencia FROM registro_produccion")['referencia'].tolist()
@@ -1096,7 +1099,6 @@ elif rol in ["admin", "produccion"]:
             
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # 2. EXTRACCIÓN Y CÁLCULO DE DATOS REALES DE LA BD
         try:
             df_kpi_base = ejecutar_consulta("SELECT operario_nombre, referencia, unidades_producidas, horas_trabajadas, observaciones, fecha_registro FROM registro_produccion")
             
@@ -1144,13 +1146,6 @@ elif rol in ["admin", "produccion"]:
         except Exception as e:
             total_buenas, total_defectuosas, total_producidas_kpi, tasa_scrap_real, oee_estimado, disponibilidad_maq = 0, 0, 0, 0.0, 0.0, 0.0
 
-        try:
-            df_oc_kpi = ejecutar_consulta("SELECT COUNT(*) as total FROM ordenes_compra WHERE estado != 'COMPLETADO'")
-            total_ocs_activas = int(df_oc_kpi.iloc[0]['total']) if not df_oc_kpi.empty else 0
-        except:
-            total_ocs_activas = 0
-
-        # 3. FILA 1: TARJETAS DE KPIS AVANZADOS
         kpi_html = f"""
             <div class="kpi-container">
                 <div class="kpi-card">
@@ -1178,7 +1173,6 @@ elif rol in ["admin", "produccion"]:
         st.markdown(kpi_html, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # 4. ALERTA DE STOCK CRÍTICO EN TIEMPO REAL
         try:
             df_stock_critico = ejecutar_consulta("SELECT codigo, nombre, cantidad, stock_minimo FROM inventario WHERE cantidad <= stock_minimo")
             if not df_stock_critico.empty:
@@ -1189,7 +1183,6 @@ elif rol in ["admin", "produccion"]:
         except:
             pass
 
-        # 5. FILA 2: GRÁFICOS PRINCIPALES (Área Sombreada UI/UX y Dona de Defectos)
         col_graf1, col_graf2 = st.columns([2, 1])
 
         with col_graf1:
@@ -1276,7 +1269,6 @@ elif rol in ["admin", "produccion"]:
 
         st.markdown("---")
 
-        # 6. FILA 3: ANÁLISIS PREDICTIVO (FORECASTING) Y DESEMPEÑO POR OPERARIO
         col_pred1, col_pred2 = st.columns(2)
 
         with col_pred1:
@@ -1358,9 +1350,7 @@ elif rol in ["admin", "produccion"]:
 
         st.markdown("---")
 
-        # 7. FILA 4: TABLA INTERACTIVA DE ÓRDENES ACTIVAS
         st.markdown("#### Estatus de Órdenes de Trabajo Activas (Base de Datos)")
-        
         try:
             df_tabla_ocs_real = ejecutar_consulta("SELECT numero_oc, cliente, referencia, meta_unidades, unidades_entregadas FROM ordenes_compra ORDER BY id DESC LIMIT 10")
         except:
@@ -1439,7 +1429,7 @@ elif rol in ["admin", "produccion"]:
                     }
 
             if not ops_raw or not maqs_raw or len(ocs_activas_validas) <= 1:
-                st.warning("No hay Órdenes de Compra o Referencias disponibles para programar (todas están cerradas o completadas).")
+                st.warning("No hay Órdenes de Compra o Referencias disponibles para programar.")
             else:
                 with st.expander("Crear Programación Limpia por Referencia", expanded=True):
                     k_sufijo = st.session_state["form_key_counter"]
@@ -1716,19 +1706,25 @@ elif rol in ["admin", "produccion"]:
                     r_cod = st.text_input("Código Referencia (Ej: REF-001)")
                     r_desc = st.text_input("Descripción del Producto")
                     r_cliente = st.selectbox("Cliente Asociado", lista_clientes, index=0)
+                    r_valor_unit = st.number_input("Valor Unitario de la Pieza ($) [Confidencial]", min_value=0.0, step=100.0, value=0.0)
+                    
                     if st.form_submit_button("Guardar", type="primary", use_container_width=True):
                         if r_cod.strip() and r_cliente != "-- Seleccione Cliente --":
-                            ejecutar_comando("INSERT INTO referencias (codigo, descripcion, cliente) VALUES (%s, %s, %s)", (r_cod.upper().strip(), r_desc, r_cliente))
+                            ejecutar_comando("INSERT INTO referencias (codigo, descripcion, cliente, valor_unitario) VALUES (%s, %s, %s, %s)", (r_cod.upper().strip(), r_desc, r_cliente, r_valor_unit))
                             st.success("Referencia guardada.")
                             st.rerun()
                         else:
                             st.error("Ingrese un código válido y seleccione un cliente.")
 
             if not df_refs.empty:
-                st.write("### Listado y Borrado Masivo de Referencias")
-                df_refs_v = df_refs.copy()
-                df_refs_v.insert(0, "Seleccionar", False)
-                edited_refs = st.data_editor(df_refs_v, key="editor_refs_mult", use_container_width=True, hide_index=True)
+                st.write("### Listado de Referencias")
+                # Ocultamos la columna de valor unitario si el rol no es admin o produccion
+                df_refs_view = df_refs.copy()
+                if 'valor_unitario' in df_refs_view.columns:
+                    df_refs_view['valor_unitario'] = df_refs_view['valor_unitario'].apply(lambda x: f"${x:,.2f}" if pd.notna(x) else "$0.00")
+                
+                df_refs_view.insert(0, "Seleccionar", False)
+                edited_refs = st.data_editor(df_refs_view, key="editor_refs_mult", use_container_width=True, hide_index=True)
                 codigos_a_borrar_ref = edited_refs[edited_refs["Seleccionar"] == True]["codigo"].tolist()
                 
                 if st.button("Eliminar", type="primary"):
@@ -1747,22 +1743,24 @@ elif rol in ["admin", "produccion"]:
                             ref_edit_sel = st.selectbox("Selecciona la Referencia a Editar", lista_refs_edit, index=0)
                             
                             if ref_edit_sel != "-- Seleccione Referencia --":
-                                ref_data = ejecutar_consulta("SELECT descripcion, cliente FROM referencias WHERE codigo = %s", (ref_edit_sel,))
+                                ref_data = ejecutar_consulta("SELECT descripcion, cliente, valor_unitario FROM referencias WHERE codigo = %s", (ref_edit_sel,))
                                 d_act = ref_data.iloc[0]['descripcion'] if not ref_data.empty else ""
                                 cli_act = ref_data.iloc[0]['cliente'] if not ref_data.empty else ""
+                                v_act = float(ref_data.iloc[0]['valor_unitario']) if not ref_data.empty and ref_data.iloc[0]['valor_unitario'] else 0.0
                             else:
-                                d_act, cli_act = "", ""
+                                d_act, cli_act, v_act = "", "", 0.0
                             
                             idx_c = lista_clientes.index(cli_act) if cli_act in lista_clientes else 0
                             nuevo_cod_ref = st.text_input("Nuevo Código de Referencia", value=ref_edit_sel if ref_edit_sel != "-- Seleccione Referencia --" else "")
                             nuevo_desc_ref = st.text_input("Nueva Descripción", value=d_act)
                             nuevo_cli_ref = st.selectbox("Nuevo Cliente Asociado", lista_clientes, index=idx_c)
+                            nuevo_val_unit = st.number_input("Nuevo Valor Unitario ($)", min_value=0.0, step=100.0, value=v_act)
                             
                             if st.form_submit_button("Guardar", type="primary", use_container_width=True):
                                 if ref_edit_sel == "-- Seleccione Referencia --":
                                     st.error("Seleccione una referencia válida.")
                                 else:
-                                    ejecutar_comando("UPDATE referencias SET codigo = %s, descripcion = %s, cliente = %s WHERE codigo = %s", (nuevo_cod_ref.upper().strip(), nuevo_desc_ref, nuevo_cli_ref, ref_edit_sel))
+                                    ejecutar_comando("UPDATE referencias SET codigo = %s, descripcion = %s, cliente = %s, valor_unitario = %s WHERE codigo = %s", (nuevo_cod_ref.upper().strip(), nuevo_desc_ref, nuevo_cli_ref, nuevo_val_unit, ref_edit_sel))
                                     st.success("Referencia actualizada.")
                                     st.rerun()
         except Exception as e:
@@ -2270,7 +2268,7 @@ elif rol in ["admin", "produccion"]:
                 if st.form_submit_button("Guardar", type="primary", use_container_width=True):
                     if archivo_logo is not None:
                         nombre_guardado = "logometalyco.png"
-                        with open(nombre_guardado, "wb") as f:
+                        with open(nombre_guardado, "wb"] as f:
                             f.write(archivo_logo.getbuffer())
                         st.success("Logo actualizado correctamente en el sistema. Recarga la página para visualizarlo.")
                         st.rerun()
