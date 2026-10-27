@@ -1831,6 +1831,36 @@ elif rol in ["admin", "produccion"]:
             except Exception as e:
                 st.error(f"Error: {e}")
 
+        elif tipo_reporte_gerencial == "Costos Máquinas Alquiladas":
+            st.markdown("#### ⚙️ Consolidado de Costos por Uso de Máquinas Alquiladas")
+            try:
+                df_alq_regs = ejecutar_consulta("""
+                    SELECT r.id, r.fecha_registro, r.operario_nombre, r.maquina, r.numero_oc, r.horas_trabajadas, m.costo_hora_alquiler
+                    FROM registro_produccion r
+                    JOIN maquinas m ON TRIM(UPPER(r.maquina)) = TRIM(UPPER(m.nombre))
+                    WHERE (r.es_maquina_alquilada = TRUE OR UPPER(m.tipo_propiedad) = 'ALQUILADA')
+                    ORDER BY r.id DESC
+                """)
+
+                if not df_alq_regs.empty:
+                    df_alq_regs['costo_hora_alquiler'] = pd.to_numeric(df_alq_regs['costo_hora_alquiler'], errors='coerce').fillna(0.0)
+                    df_alq_regs['horas_trabajadas'] = pd.to_numeric(df_alq_regs['horas_trabajadas'], errors='coerce').fillna(0.0)
+                    df_alq_regs['Costo Total Alquiler ($)'] = df_alq_regs['horas_trabajadas'] * df_alq_regs['costo_hora_alquiler']
+                    
+                    st.dataframe(df_alq_regs, use_container_width=True, hide_index=True)
+                    
+                    costo_total_acumulado = df_alq_regs['Costo Total Alquiler ($)'].sum()
+                    st.markdown(f"### **Costo Total Acumulado en Alquiler de Máquinas: ${costo_total_acumulado:,.2f}**")
+                    
+                    buffer_alq = io.BytesIO()
+                    with pd.ExcelWriter(buffer_alq, engine='openpyxl') as writer:
+                        df_alq_regs.to_excel(writer, index=False, sheet_name='Costos_Maquinas_Alquiladas')
+                    st.download_button("Descargar Reporte de Alquileres (Excel)", data=buffer_alq.getvalue(), file_name="costos_maquinas_alquiladas.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+                else:
+                    st.info("No hay registros de producción usando máquinas alquiladas o con costos de alquiler configurados.")
+            except Exception as e:
+                st.error(f"Error al calcular costos de máquinas alquiladas: {e}")
+
     elif menu_limpio == "Entregas":
         st.subheader("Registrar Salida de Insumo / Material a Operario")
         try:
