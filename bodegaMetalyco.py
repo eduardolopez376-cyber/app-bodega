@@ -532,7 +532,23 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.setLineWidth(0.75)
     p.line(x_margen, y_actual, width - x_margen, y_actual)
 
-    # Datos de Tercero / Cliente completos
+    # Datos de Tercero / Cliente completos con validación de nulos
+    dir_limpia = datos_remision.get('direccion', 'N/A')
+    if not dir_limpia or str(dir_limpia).lower() == 'none':
+        dir_limpia = 'N/A'
+        
+    correo_limpio = datos_remision.get('correo', 'N/A')
+    if not correo_limpio or str(correo_limpio).lower() == 'none':
+        correo_limpio = 'N/A'
+
+    tel_limpio = datos_remision.get('telefono', 'N/A')
+    if not tel_limpio or str(tel_limpio).lower() == 'none':
+        tel_limpio = 'N/A'
+
+    nit_limpio = datos_remision.get('nit', 'N/A')
+    if not nit_limpio or str(nit_limpio).lower() == 'none':
+        nit_limpio = 'N/A'
+
     y_actual -= 15
     p.setFillColorRGB(0.15, 0.15, 0.15)
     p.rect(x_margen, y_actual - 12, ancho_util, 14, fill=1, stroke=1)
@@ -552,12 +568,12 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.setFont("Helvetica-Bold", 7.5)
     p.drawString(x_margen + 320, y_actual - 12, "NIT:")
     p.setFont("Helvetica", 7.5)
-    p.drawString(x_margen + 410, y_actual - 12, f"{datos_remision.get('nit', 'N/A')}")
+    p.drawString(x_margen + 410, y_actual - 12, f"{nit_limpio}")
 
     p.setFont("Helvetica-Bold", 7.5)
     p.drawString(x_margen + 8, y_actual - 25, "DIRECCIÓN:")
     p.setFont("Helvetica", 7.5)
-    p.drawString(x_margen + 90, y_actual - 25, f"{datos_remision.get('direccion', 'N/A')}")
+    p.drawString(x_margen + 90, y_actual - 25, f"{dir_limpia}")
 
     p.setFont("Helvetica-Bold", 7.5)
     p.drawString(x_margen + 320, y_actual - 25, "FECHA DESPACHO:")
@@ -567,12 +583,12 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.setFont("Helvetica-Bold", 7.5)
     p.drawString(x_margen + 8, y_actual - 38, "TELÉFONO:")
     p.setFont("Helvetica", 7.5)
-    p.drawString(x_margen + 90, y_actual - 38, f"{datos_remision.get('telefono', 'N/A')}")
+    p.drawString(x_margen + 90, y_actual - 38, f"{tel_limpio}")
 
     p.setFont("Helvetica-Bold", 7.5)
     p.drawString(x_margen + 320, y_actual - 38, "CORREO:")
     p.setFont("Helvetica", 7.5)
-    p.drawString(x_margen + 410, y_actual - 38, f"{datos_remision.get('correo', 'N/A')}")
+    p.drawString(x_margen + 410, y_actual - 38, f"{correo_limpio}")
 
     p.setFont("Helvetica-Bold", 7.5)
     p.drawString(x_margen + 8, y_actual - 51, "CIUDAD:")
@@ -1799,21 +1815,54 @@ elif rol in ["admin", "produccion"]:
     elif menu_limpio == "Clientes" and rol == "admin":
         st.subheader("Administración de Clientes")
         try:
-            clientes_df = ejecutar_consulta("SELECT * FROM clientes ORDER BY id DESC")
-            with st.expander("Crear Cliente", expanded=False):
+            with st.expander("Crear o Actualizar Cliente", expanded=False):
                 with st.form("form_crear_cliente", clear_on_submit=True):
-                    nom_cliente = st.text_input("Razón Social")
+                    nom_cliente = st.text_input("Razón Social (Ej: Pintupartes)")
                     nit_cliente = st.text_input("NIT")
                     tel_cliente = st.text_input("Teléfono")
                     dir_cliente = st.text_input("Dirección")
                     email_cliente = st.text_input("Correo Electrónico")
                     if st.form_submit_button("Guardar", type="primary", use_container_width=True):
                         if nom_cliente.strip():
-                            ejecutar_comando("INSERT INTO clientes (nombre, nit, telefono, direccion, correo) VALUES (%s, %s, %s, %s, %s) ON CONFLICT (nombre) DO UPDATE SET nit = EXCLUDED.nit, telefono = EXCLUDED.telefono, direccion = EXCLUDED.direccion, correo = EXCLUDED.correo", (nom_cliente.strip(), nit_cliente.strip(), tel_cliente.strip(), dir_cliente.strip(), email_cliente.strip()))
-                            st.success("Cliente agregado o actualizado.")
+                            ejecutar_comando(
+                                """INSERT INTO clientes (nombre, nit, telefono, direccion, correo) 
+                                   VALUES (%s, %s, %s, %s, %s) 
+                                   ON CONFLICT (nombre) 
+                                   DO UPDATE SET nit = EXCLUDED.nit, telefono = EXCLUDED.telefono, direccion = EXCLUDED.direccion, correo = EXCLUDED.correo""",
+                                (nom_cliente.strip(), nit_cliente.strip(), tel_cliente.strip(), dir_cliente.strip(), email_cliente.strip())
+                            )
+                            st.success("¡Cliente guardado o actualizado con éxito!")
                             st.rerun()
+
+            st.write("---")
+            st.markdown("#### Listado de Clientes Registrados")
+            clientes_df = ejecutar_consulta("SELECT id, nombre, nit, telefono, direccion, correo FROM clientes ORDER BY id DESC")
+            
+            if not clientes_df.empty:
+                clientes_df_view = clientes_df.copy()
+                clientes_df_view.insert(0, "Seleccionar", False)
+                
+                edited_clientes = st.data_editor(
+                    clientes_df_view, 
+                    key="editor_clientes_mult", 
+                    use_container_width=True, 
+                    hide_index=True
+                )
+                
+                ids_a_borrar_clientes = edited_clientes[edited_clientes["Seleccionar"] == True]["id"].tolist()
+                
+                if st.button("Eliminar Cliente(s) Seleccionado(s)", type="primary"):
+                    if ids_a_borrar_clientes:
+                        for id_cli in ids_a_borrar_clientes:
+                            ejecutar_comando("DELETE FROM clientes WHERE id = %s", (id_cli,))
+                        st.success("¡Cliente(s) eliminado(s) con éxito!")
+                        st.rerun()
+                    else:
+                        st.warning("Selecciona al menos un cliente en la casilla de la izquierda para eliminar.")
+            else:
+                st.info("No hay clientes registrados en la base de datos.")
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"Error en gestión de clientes: {e}")
 
     elif menu_limpio == "Usuarios" and rol == "admin":
         st.subheader("Gestión y Seguridad de Usuarios del Sistema")
