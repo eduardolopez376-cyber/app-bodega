@@ -1125,7 +1125,7 @@ if rol == "operario":
             serv_raw = ejecutar_consulta("SELECT nombre FROM servicios_prestados")['nombre'].tolist()
             ocs_db = ejecutar_consulta("SELECT numero_oc, cliente FROM ordenes_compra WHERE estado != 'COMPLETADO'")
             
-            ocs_disp = ["-- Seleccione OC --", "SIN OC"]
+            ocs_disp = ["-- Seleccione OC --"]
             mapa_oc_cliente = {}
             if not ocs_db.empty:
                 for _, row in ocs_db.iterrows():
@@ -1138,13 +1138,13 @@ if rol == "operario":
             refs = ["-- Seleccione Referencia --"] + refs_raw
             serv_db = ["-- Seleccione Actividad --"] + (serv_raw if serv_raw else ["CORTE", "PLEGADO", "SOLDADURA", "CONFORMADO", "PINTURA"])
             
-            if not maqs_raw or not refs_raw:
-                st.warning("Faltan máquinas o referencias registradas en el sistema.")
+            if not maqs_raw or not refs_raw or len(ocs_disp) <= 1:
+                st.warning("Debes tener al menos una Orden de Compra activa registrada para reportar una tarea imprevista.")
             else:
                 with st.form("form_tarea_imprevista"):
                     oc_imp = st.selectbox("Orden de Compra Asociada", ocs_disp, index=0)
                     cliente_asociado_oc = mapa_oc_cliente.get(oc_imp, "N/A")
-                    if oc_imp not in ["-- Seleccione OC --", "SIN OC"]:
+                    if oc_imp != "-- Seleccione OC --":
                         st.info(f"Cliente asociado automáticamente: `{cliente_asociado_oc}`")
                     
                     maq_imp = st.selectbox("Máquina", maqs, index=0)
@@ -1717,14 +1717,47 @@ elif rol in ["admin", "produccion"]:
 
         if tipo_reporte_gerencial == "Reporte de Producción":
             try:
-                df_produccion_raw = ejecutar_consulta("SELECT * FROM registro_produccion ORDER BY id DESC")
+                df_produccion_raw = ejecutar_consulta("""
+                    SELECT * FROM registro_produccion 
+                    WHERE numero_oc IS NOT NULL 
+                    AND TRIM(numero_oc) <> '' 
+                    AND UPPER(TRIM(numero_oc)) <> 'SIN OC'
+                    ORDER BY id DESC
+                """)
+                
                 if not df_produccion_raw.empty:
                     df_final = generar_reporte_produccion_excel(df_produccion_raw)
-                    st.dataframe(df_final, use_container_width=True)
+                    
+                    df_final_view = df_final.copy()
+                    df_final_view.insert(0, "id_reg", df_produccion_raw['id'].values)
+                    df_final_view.insert(0, "Seleccionar", False)
+                    
+                    st.markdown("#### Listado de Producción Válida (Con OC)")
+                    edited_reporte = st.data_editor(
+                        df_final_view, 
+                        key="editor_reporte_produccion", 
+                        use_container_width=True, 
+                        hide_index=True
+                    )
+                    
+                    ids_a_borrar_reporte = edited_reporte[edited_reporte["Seleccionar"] == True]["id_reg"].tolist()
+                    
+                    if st.button("Eliminar Registro(s) Seleccionado(s)", type="primary"):
+                        if ids_a_borrar_reporte:
+                            for id_r in ids_a_borrar_reporte:
+                                ejecutar_comando("DELETE FROM registro_produccion WHERE id = %s", (int(id_r),))
+                            st.success("¡Registro(s) de producción eliminado(s) con éxito!")
+                            st.rerun()
+                        else:
+                            st.warning("Selecciona al menos un registro en la casilla de la izquierda para eliminar.")
+
+                    st.write("---")
                     buffer_prod = io.BytesIO()
                     with pd.ExcelWriter(buffer_prod, engine='openpyxl') as writer:
                         df_final.to_excel(writer, index=False, sheet_name='Reporte_Produccion')
-                    st.download_button("Descargar Reporte (Excel)", data=buffer_prod.getvalue(), file_name="reporte_produccion.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+                    st.download_button("Descargar Reporte Limpio (Excel)", data=buffer_prod.getvalue(), file_name="reporte_produccion.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+                else:
+                    st.info("No hay registros de producción asociados a Órdenes de Compra válidas.")
             except Exception as e:
                 st.error(f"Error: {e}")
 
