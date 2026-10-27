@@ -357,7 +357,6 @@ def generar_pdf_f01_01(datos):
     p.setFont("Helvetica-Bold", 8)
     p.drawString(x_margen + 8, y_actual - 26, "CLIENTE:")
     p.setFont("Helvetica", 8)
-    # Muestra el nombre comercial arrastrado correctamente
     p.drawString(x_margen + 50, y_actual - 26, f"{datos.get('cliente_comercial', datos.get('cliente', 'N/A'))}")
     
     p.setFont("Helvetica-Bold", 8)
@@ -564,7 +563,6 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.drawCentredString(width / 2.0, y_actual - 8, "DATOS DE DESTINO / CLIENTE")
 
     y_actual -= 12
-    # Caja ampliada a altura 132 para que Forma de Pago no quede fuera de cuadro
     p.setFillColorRGB(0, 0, 0)
     p.rect(x_margen, y_actual - 132, ancho_util, 132, fill=0, stroke=1)
 
@@ -682,18 +680,18 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.setFont("Helvetica-Bold", 8.5)
     p.drawString(x_margen + 315, y_actual - 40, f"TOTAL: ${total_general:,.2f}")
 
-    # Sección de Firmas corregida para que la firma no tape el texto de ELABORADO
+    # Sección de Firmas ajustada: Firma más pequeña y reposicionada para NO tapar "ELABORADO"
     y_actual -= 55
     p.rect(x_margen, y_actual - 45, ancho_util, 45, fill=0, stroke=1)
     p.setFont("Helvetica-Bold", 7)
     p.drawString(x_margen + 8, y_actual - 12, f"SOLICITADO: {datos_remision.get('elaborado', 'Felipe Valdés')}")
-    p.drawString(x_margen + 280, y_actual - 12, f"ELABORADO: {datos_remision.get('elaborado', 'Felipe Valdés')}")
+    p.drawString(x_margen + 250, y_actual - 12, f"ELABORADO: {datos_remision.get('elaborado', 'Felipe Valdés')}")
     p.drawString(x_margen + 8, y_actual - 28, f"RECIBE: {datos_remision.get('recibe_nombre', '')} - CC: {datos_remision.get('recibe_cc', '')}")
     
     if firma_img_path and os.path.exists(firma_img_path):
         try:
-            # Dibujar firma en la parte superior derecha de la caja sin tapar la línea ni las etiquetas
-            p.drawImage(firma_img_path, x_margen + 360, y_actual - 32, width=110, height=25, preserveAspectRatio=True, mask='auto')
+            # Tamaño reducido (ancho 85, alto 20) y ubicado en la esquina inferior derecha sin tocar el texto superior
+            p.drawImage(firma_img_path, x_margen + 380, y_actual - 34, width=85, height=20, preserveAspectRatio=True, mask='auto')
         except:
             pass
     p.drawString(x_margen + 350, y_actual - 35, "___________________________________")
@@ -1057,7 +1055,6 @@ if rol == "operario":
                                 cli_db = ejecutar_consulta("SELECT cliente FROM ordenes_compra WHERE numero_oc = %s", (num_oc_asociada,))
                             cliente_nombre = cli_db.iloc[0]['cliente'] if not cli_db.empty else "N/A"
                             
-                            # Obtener el nombre comercial del cliente para el F-01-01
                             cli_com_db = ejecutar_consulta("SELECT nombre_comercial FROM clientes WHERE nombre = %s", (cliente_nombre,))
                             cliente_comercial_val = cli_com_db.iloc[0]['nombre_comercial'] if not cli_com_db.empty and pd.notna(cli_com_db.iloc[0]['nombre_comercial']) else cliente_nombre
                             
@@ -1153,6 +1150,7 @@ if rol == "operario":
     elif menu_limpio == "Tarea Imprevista":
         st.subheader("Registrar e Iniciar Tarea Imprevista No Programada")
         try:
+            # Sincronización estricta: Solo máquinas y servicios activos que sí existan en la BD
             maqs_raw = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
             refs_raw = ejecutar_consulta("SELECT codigo FROM referencias")['codigo'].tolist()
             serv_raw = ejecutar_consulta("SELECT nombre FROM servicios_prestados")['nombre'].tolist()
@@ -1169,10 +1167,10 @@ if rol == "operario":
             
             maqs = ["-- Seleccione Máquina --"] + maqs_raw
             refs = ["-- Seleccione Referencia --"] + refs_raw
-            serv_db = ["-- Seleccione Actividad --"] + (serv_raw if serv_raw else ["CORTE", "PLEGADO", "SOLDADURA", "CONFORMADO", "PINTURA"])
+            serv_db = ["-- Seleccione Actividad --"] + (serv_raw if serv_raw else [])
             
-            if not maqs_raw or not refs_raw or len(ocs_disp) <= 1:
-                st.warning("Debes tener al menos una Orden de Compra activa registrada para reportar una tarea imprevista.")
+            if not maqs_raw or not refs_raw or not serv_raw or len(ocs_disp) <= 1:
+                st.warning("Debes tener máquinas, servicios y Órdenes de Compra activas registradas para reportar una tarea imprevista.")
             else:
                 with st.form("form_tarea_imprevista"):
                     oc_imp = st.selectbox("Orden de Compra Asociada", ocs_disp, index=0)
@@ -1276,7 +1274,6 @@ elif rol in ["admin", "produccion"]:
         st.subheader("Dashboard Gerencial de Planta - Control en Tiempo Real")
         
         try:
-            # Carga limpia y sin bloqueos agresivos para asegurar que el dashboard SIEMPRE muestre los registros existentes en BD
             df_kpi_base = ejecutar_consulta("SELECT operario_nombre, referencia, numero_oc, unidades_producidas, horas_trabajadas, observaciones, fecha_registro FROM registro_produccion")
             
             ops_list_db = df_kpi_base['operario_nombre'].dropna().unique().tolist() if not df_kpi_base.empty else []
@@ -1549,6 +1546,7 @@ elif rol in ["admin", "produccion"]:
         fecha_seleccionada = st.date_input("Selecciona el día a consultar/programar", value=(datetime.utcnow() - timedelta(hours=5)).date(), key="cal_admin_dia")
         try:
             ops_raw = ejecutar_consulta("SELECT nombre FROM usuarios WHERE rol = 'operario'")['nombre'].tolist()
+            # Validación estricta: Si se borraron máquinas o servicios, no se deben listar ni permitir programar
             maqs_raw = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
             ops = ["-- Seleccione Operario --"] + (ops_raw if ops_raw else [])
             maqs = ["-- Seleccione Máquina --"] + (maqs_raw if maqs_raw else [])
@@ -1575,7 +1573,7 @@ elif rol in ["admin", "produccion"]:
                     info_ocs_dict[clave_combinada] = {"id_oc": oc_id, "numero_oc": oc_num, "referencia": ref_val, "servicio": str(r['servicio']).strip(), "meta": int(r['meta_unidades'])}
 
             if not ops_raw or not maqs_raw or len(ocs_activas_validas) <= 1:
-                st.warning("No hay Órdenes de Compra o Referencias disponibles para programar.")
+                st.warning("No hay Órdenes de Compra, Referencias o Máquinas disponibles para programar.")
             else:
                 with st.expander("Crear Programación Limpia por Referencia", expanded=True):
                     k_sufijo = st.session_state["form_key_counter"]
@@ -1637,7 +1635,7 @@ elif rol in ["admin", "produccion"]:
             clientes_raw = ejecutar_consulta("SELECT nombre FROM clientes")['nombre'].tolist() if not ejecutar_consulta("SELECT nombre FROM clientes").empty else []
             
             lista_refs = ["-- Seleccione Referencia --"] + refs_raw
-            lista_servicios = ["-- Seleccione Servicio --"] + (serv_raw if serv_raw else ["NINGUNO"])
+            lista_servicios = ["-- Seleccione Servicio --"] + (serv_raw if serv_raw else [])
             lista_clientes = ["-- Seleccione Cliente --"] + clientes_raw
             
             with st.expander("Crear Orden de Compra", expanded=True):
@@ -1694,6 +1692,18 @@ elif rol in ["admin", "produccion"]:
                             ejecutar_comando("INSERT INTO maquinas (nombre, tipo, tipo_propiedad, costo_hora_alquiler) VALUES (%s, %s, %s, %s)", (m_nom.strip(), m_tipo.strip(), m_prop, m_costo_alq if m_prop == "ALQUILADA" else 0))
                             st.success("Máquina agregada.")
                             st.rerun()
+            
+            if not df_maqs.empty:
+                df_maqs_v = df_maqs.copy()
+                df_maqs_v.insert(0, "Seleccionar", False)
+                edited_maqs = st.data_editor(df_maqs_v, key="editor_maqs_mult", use_container_width=True, hide_index=True)
+                ids_a_borrar_maqs = edited_maqs[edited_maqs["Seleccionar"] == True]["id"].tolist()
+                if st.button("Eliminar Máquina(s)", type="primary"):
+                    if ids_a_borrar_maqs:
+                        for id_m in ids_a_borrar_maqs:
+                            ejecutar_comando("DELETE FROM maquinas WHERE id = %s", (id_m,))
+                        st.success("Máquinas eliminadas.")
+                        st.rerun()
         except Exception as e:
             st.error(f"Error: {e}")
 
@@ -1709,6 +1719,18 @@ elif rol in ["admin", "produccion"]:
                             ejecutar_comando("INSERT INTO servicios_prestados (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (nom_serv.upper().strip(),))
                             st.success("Servicio agregado.")
                             st.rerun()
+
+            if not df_serv.empty:
+                df_serv_v = df_serv.copy()
+                df_serv_v.insert(0, "Seleccionar", False)
+                edited_serv = st.data_editor(df_serv_v, key="editor_serv_mult", use_container_width=True, hide_index=True)
+                ids_a_borrar_serv = edited_serv[edited_serv["Seleccionar"] == True]["id"].tolist()
+                if st.button("Eliminar Servicio(s)", type="primary"):
+                    if ids_a_borrar_serv:
+                        for id_s in ids_a_borrar_serv:
+                            ejecutar_comando("DELETE FROM servicios_prestados WHERE id = %s", (id_s,))
+                        st.success("Servicios eliminados.")
+                        st.rerun()
         except Exception as e:
             st.error(f"Error: {e}")
 
@@ -2039,7 +2061,6 @@ elif rol in ["admin", "produccion"]:
                         recibe_cc_input = st.text_input("Cédula de quien recibe")
                     
                     st.markdown("#### ✍️ Firma Digital en Pantalla (Firme abajo)")
-                    # Lienzo configurado con fondo blanco y trazo negro para evitar fondos oscuros
                     canvas_result = st_canvas(
                         fill_color="rgba(255, 165, 0, 0.3)",
                         stroke_width=2,
