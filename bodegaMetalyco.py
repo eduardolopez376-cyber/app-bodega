@@ -212,6 +212,7 @@ def inicializar_tablas_sistema():
         ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS horas_trabajadas NUMERIC(5,2) DEFAULT 0;")
         ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS presion_trabajo VARCHAR(50) DEFAULT '';")
         ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS fecha_registro DATE;")
+        ejecutar_comando("ALTER TABLE registro_produccion ADD COLUMN IF NOT EXISTS despachado BOOLEAN DEFAULT FALSE;")
         ejecutar_comando("ALTER TABLE programacion_diaria ADD COLUMN IF NOT EXISTS numero_oc VARCHAR(100);")
         ejecutar_comando("ALTER TABLE referencias ADD COLUMN IF NOT EXISTS cliente VARCHAR(150);")
         ejecutar_comando("ALTER TABLE referencias ADD COLUMN IF NOT EXISTS valor_unitario NUMERIC(12,2) DEFAULT 0;")
@@ -614,7 +615,7 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.setFont("Helvetica-Bold", 8.5)
     p.drawString(x_margen + 315, y_actual - 40, f"TOTAL: ${total_general:,.2f}")
 
-    # Sección de Firmas y Firma Digital
+    # Sección de Firmas y Firma Digital (Ajustada exactamente sobre la línea)
     y_actual -= 55
     p.rect(x_margen, y_actual - 45, ancho_util, 45, fill=0, stroke=1)
     p.setFont("Helvetica-Bold", 7)
@@ -623,11 +624,11 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     
     if firma_img_path and os.path.exists(firma_img_path):
         try:
-            p.drawImage(firma_img_path, x_margen + 380, y_actual - 43, width=120, height=35, preserveAspectRatio=True, mask='auto')
+            p.drawImage(firma_img_path, x_margen + 380, y_actual - 48, width=120, height=38, preserveAspectRatio=True, mask='auto')
         except:
             pass
     p.drawString(x_margen + 380, y_actual - 38, "___________________________________")
-    p.drawString(x_margen + 380, y_actual - 43, "Firma de quien recibe conforme")
+    p.drawString(x_margen + 380, y_actual - 46, "Firma de quien recibe conforme")
 
     p.showPage()
     p.save()
@@ -1847,10 +1848,11 @@ elif rol in ["admin", "produccion"]:
                 st.write("---")
                 st.markdown("#### Seleccionar Producción Terminada para Despachar")
                 
-                # Traer los registros de producción terminada guardados
+                # Traer únicamente los registros de producción que aún NO han sido despachados
                 prod_registros = ejecutar_consulta("""
                     SELECT id, fecha_registro, numero_oc, referencia, maquina, unidades_producidas 
                     FROM registro_produccion 
+                    WHERE (despachado IS NULL OR despachado = FALSE)
                     ORDER BY id DESC
                 """)
                 
@@ -1902,14 +1904,17 @@ elif rol in ["admin", "produccion"]:
                         elif filas_seleccionadas.empty and not troquel_incluir:
                             st.warning("Seleccione al menos un registro de producción o un troquel para despachar.")
                         else:
-                            # Procesar ítems de producción seleccionados
                             items_finales_despacho = []
+                            ids_a_marcar_despachados = []
+                            
                             for _, f_row in filas_seleccionadas.iterrows():
+                                id_prod_item = int(f_row['id'])
                                 ref_val = f_row['referencia']
                                 cant_val = int(f_row['unidades_producidas'])
                                 oc_val = f_row['numero_oc'] if pd.notna(f_row['numero_oc']) else "N/A"
                                 
-                                # Consultar valor unitario de la referencia
+                                ids_a_marcar_despachados.append(id_prod_item)
+                                
                                 ref_db = ejecutar_consulta("SELECT valor_unitario, descripcion FROM referencias WHERE codigo = %s", (ref_val,))
                                 val_unit = float(ref_db.iloc[0]['valor_unitario']) if not ref_db.empty and pd.notna(ref_db.iloc[0]['valor_unitario']) else 0.0
                                 desc_ref = ref_db.iloc[0]['descripcion'] if not ref_db.empty and pd.notna(ref_db.iloc[0]['descripcion']) else f"PIEZA {ref_val}"
@@ -1926,7 +1931,6 @@ elif rol in ["admin", "produccion"]:
                                     "subtotal": subtotal_item
                                 })
                             
-                            # Agregar troquel si fue marcado
                             if troquel_incluir and troquel_ref.strip():
                                 items_finales_despacho.append({
                                     "descripcion": f"TROQUEL PARA MANTENIMIENTO: {troquel_ref.strip()}",
@@ -1938,15 +1942,13 @@ elif rol in ["admin", "produccion"]:
                                     "subtotal": 0.0
                                 })
                             
-                            # Guardar firma digital del canvas si existe dibujo
                             firma_path_temp = None
                             if canvas_result.image_data is not None:
                                 img_arr = canvas_result.image_data
-                                if np.any(img_arr[:, :, 3] > 0): # Verificar que se dibujó algo
+                                if np.any(img_arr[:, :, 3] > 0):
                                     os.makedirs("firmas", exist_ok=True)
                                     firma_path_temp = f"firmas/firma_{num_remision_input}.png"
                                     pil_img = Image.fromarray(img_arr.astype('uint8'), mode="RGBA")
-                                    # Convertir fondo transparente a blanco para el PDF
                                     background = Image.new("RGB", pil_img.size, (255, 255, 255))
                                     background.paste(pil_img, mask=pil_img.split()[3])
                                     background.save(firma_path_temp)
@@ -1964,12 +1966,17 @@ elif rol in ["admin", "produccion"]:
                             }
                             
                             pdf_remision_buffer = generar_pdf_remision_f02_02(datos_remision_dict, items_finales_despacho, firma_path_temp)
+                            
+                            for id_reg in ids_a_marcar_despachados:
+                                ejecutar_comando("UPDATE registro_produccion SET despachado = TRUE WHERE id = %s", (id_reg,))
+                            
                             st.session_state["ultimo_pdf_remision"] = pdf_remision_buffer.getvalue()
                             st.session_state["nombre_pdf_remision"] = f"Remision_F-02-02_No_{num_remision_input}.pdf"
-                            st.success("¡Formato de Remisión F-02-02 generado con éxito!")
+                            st.success("¡Formato de Remisión F-02-02 generado con éxito y ítems despachados!")
+                            st.rerun()
 
                 else:
-                    st.info("No hay registros de producción guardados para despachar.")
+                    st.info("No hay registros de producción pendientes por despachar.")
 
             if "ultimo_pdf_remision" in st.session_state:
                 st.markdown("---")
