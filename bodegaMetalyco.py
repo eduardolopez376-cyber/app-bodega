@@ -357,7 +357,8 @@ def generar_pdf_f01_01(datos):
     p.setFont("Helvetica-Bold", 8)
     p.drawString(x_margen + 8, y_actual - 26, "CLIENTE:")
     p.setFont("Helvetica", 8)
-    p.drawString(x_margen + 50, y_actual - 26, f"{datos.get('cliente', 'N/A')}")
+    # Muestra el nombre comercial arrastrado correctamente
+    p.drawString(x_margen + 50, y_actual - 26, f"{datos.get('cliente_comercial', datos.get('cliente', 'N/A'))}")
     
     p.setFont("Helvetica-Bold", 8)
     p.drawString(x_margen + 260, y_actual - 26, "REFERENCIA:")
@@ -563,11 +564,12 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.drawCentredString(width / 2.0, y_actual - 8, "DATOS DE DESTINO / CLIENTE")
 
     y_actual -= 12
+    # Caja ampliada a altura 132 para que Forma de Pago no quede fuera de cuadro
     p.setFillColorRGB(0, 0, 0)
-    p.rect(x_margen, y_actual - 110, ancho_util, 110, fill=0, stroke=1)
+    p.rect(x_margen, y_actual - 132, ancho_util, 132, fill=0, stroke=1)
 
     y_offset = 12
-    espacio_linea = 13
+    espacio_linea = 13.5
 
     p.setFont("Helvetica-Bold", 7.5)
     p.drawString(x_margen + 8, y_actual - y_offset, "CÓDIGO TERCERO (NIT):")
@@ -627,7 +629,7 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.setFont("Helvetica", 7.5)
     p.drawString(x_margen + 130, y_actual - y_offset, f"{forma_pago_limpia}")
 
-    y_actual -= 120
+    y_actual -= 142
     p.setFillColorRGB(0.15, 0.15, 0.15)
     p.rect(x_margen, y_actual - 14, ancho_util, 14, fill=1, stroke=1)
     p.setFillColorRGB(1, 1, 1)
@@ -680,6 +682,7 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.setFont("Helvetica-Bold", 8.5)
     p.drawString(x_margen + 315, y_actual - 40, f"TOTAL: ${total_general:,.2f}")
 
+    # Sección de Firmas corregida para que la firma no tape el texto de ELABORADO
     y_actual -= 55
     p.rect(x_margen, y_actual - 45, ancho_util, 45, fill=0, stroke=1)
     p.setFont("Helvetica-Bold", 7)
@@ -689,7 +692,8 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     
     if firma_img_path and os.path.exists(firma_img_path):
         try:
-            p.drawImage(firma_img_path, x_margen + 350, y_actual - 44, width=130, height=35, preserveAspectRatio=True, mask='auto')
+            # Dibujar firma en la parte superior derecha de la caja sin tapar la línea ni las etiquetas
+            p.drawImage(firma_img_path, x_margen + 360, y_actual - 32, width=110, height=25, preserveAspectRatio=True, mask='auto')
         except:
             pass
     p.drawString(x_margen + 350, y_actual - 35, "___________________________________")
@@ -1053,6 +1057,10 @@ if rol == "operario":
                                 cli_db = ejecutar_consulta("SELECT cliente FROM ordenes_compra WHERE numero_oc = %s", (num_oc_asociada,))
                             cliente_nombre = cli_db.iloc[0]['cliente'] if not cli_db.empty else "N/A"
                             
+                            # Obtener el nombre comercial del cliente para el F-01-01
+                            cli_com_db = ejecutar_consulta("SELECT nombre_comercial FROM clientes WHERE nombre = %s", (cliente_nombre,))
+                            cliente_comercial_val = cli_com_db.iloc[0]['nombre_comercial'] if not cli_com_db.empty and pd.notna(cli_com_db.iloc[0]['nombre_comercial']) else cliente_nombre
+                            
                             maq_db = ejecutar_consulta("SELECT tipo_propiedad FROM maquinas WHERE nombre = %s", (maquina_elegida,))
                             es_alq = False
                             if not maq_db.empty:
@@ -1102,6 +1110,7 @@ if rol == "operario":
                                 "fecha": fecha_exacta_actual,
                                 "numero_oc": num_oc_asociada,
                                 "cliente": cliente_nombre,
+                                "cliente_comercial": cliente_comercial_val,
                                 "referencia": referencia_pieza,
                                 "maquina": maquina_elegida,
                                 "actividad": actividad_tarea,
@@ -1215,10 +1224,14 @@ if rol == "operario":
                                 (st.session_state['nombre_usuario'], maq_imp, ref_imp, oc_imp, h_ini_imp, h_fin_imp, uni_imp, obs_final_imp, es_alq, horas_calc, presion_imp, fecha_exacta_actual_imp)
                             )
 
+                            cli_com_db_imp = ejecutar_consulta("SELECT nombre_comercial FROM clientes WHERE nombre = %s", (cliente_asociado_oc,))
+                            cliente_comercial_val_imp = cli_com_db_imp.iloc[0]['nombre_comercial'] if not cli_com_db_imp.empty and pd.notna(cli_com_db_imp.iloc[0]['nombre_comercial']) else cliente_asociado_oc
+
                             datos_pdf_imp = {
                                 "fecha": fecha_exacta_actual_imp,
                                 "numero_oc": oc_imp,
                                 "cliente": cliente_asociado_oc,
+                                "cliente_comercial": cliente_comercial_val_imp,
                                 "referencia": ref_imp,
                                 "maquina": maq_imp,
                                 "actividad": act_imp,
@@ -1263,21 +1276,9 @@ elif rol in ["admin", "produccion"]:
         st.subheader("Dashboard Gerencial de Planta - Control en Tiempo Real")
         
         try:
-            # Sincronización estricta: los selectores se alimentan únicamente de registros de producción que correspondan a Órdenes de Compra y Referencias VÁLIDAS que aún existan en la BD
-            ocs_vigentes = ejecutar_consulta("SELECT numero_oc FROM ordenes_compra")['numero_oc'].astype(str).tolist()
-            refs_vigentes = ejecutar_consulta("SELECT codigo FROM referencias")['codigo'].astype(str).tolist()
+            # Carga limpia y sin bloqueos agresivos para asegurar que el dashboard SIEMPRE muestre los registros existentes en BD
+            df_kpi_base = ejecutar_consulta("SELECT operario_nombre, referencia, numero_oc, unidades_producidas, horas_trabajadas, observaciones, fecha_registro FROM registro_produccion")
             
-            df_kpi_base_raw = ejecutar_consulta("SELECT operario_nombre, referencia, numero_oc, unidades_producidas, horas_trabajadas, observaciones, fecha_registro FROM registro_produccion")
-            
-            if not df_kpi_base_raw.empty:
-                # Filtrar estrictamente solo lo que tiene OC vigente y referencia existente en las tablas principales
-                df_kpi_base = df_kpi_base_raw[
-                    df_kpi_base['numero_oc'].astype(str).isin(ocs_vigentes) & 
-                    df_kpi_base['referencia'].astype(str).isin(refs_vigentes)
-                ].copy()
-            else:
-                df_kpi_base = pd.DataFrame()
-
             ops_list_db = df_kpi_base['operario_nombre'].dropna().unique().tolist() if not df_kpi_base.empty else []
             refs_list_db = df_kpi_base['referencia'].dropna().unique().tolist() if not df_kpi_base.empty else []
         except:
@@ -2038,11 +2039,12 @@ elif rol in ["admin", "produccion"]:
                         recibe_cc_input = st.text_input("Cédula de quien recibe")
                     
                     st.markdown("#### ✍️ Firma Digital en Pantalla (Firme abajo)")
+                    # Lienzo configurado con fondo blanco y trazo negro para evitar fondos oscuros
                     canvas_result = st_canvas(
                         fill_color="rgba(255, 165, 0, 0.3)",
                         stroke_width=2,
-                        stroke_color="#FFFFFF",
-                        background_color="#1E1E1E",
+                        stroke_color="#000000",
+                        background_color="#FFFFFF",
                         height=150,
                         width=450,
                         drawing_mode="freedraw",
