@@ -1271,7 +1271,13 @@ elif rol in ["admin", "produccion"]:
         st.subheader("Dashboard Gerencial de Planta - Control en Tiempo Real")
         
         try:
-            df_kpi_base = ejecutar_consulta("SELECT operario_nombre, referencia, numero_oc, unidades_producidas, horas_trabajadas, observaciones, fecha_registro FROM registro_produccion")
+            # 💡 CORRECCIÓN CRUCIAl: Filtramos estrictamente los mismos registros limpios que el reporte (con OC válida)
+            df_kpi_base = ejecutar_consulta("""
+                SELECT * FROM registro_produccion 
+                WHERE numero_oc IS NOT NULL 
+                AND TRIM(numero_oc) <> '' 
+                AND UPPER(TRIM(numero_oc)) <> 'SIN OC'
+            """)
             
             ops_list_db = df_kpi_base['operario_nombre'].dropna().unique().tolist() if not df_kpi_base.empty else []
             refs_list_db = df_kpi_base['referencia'].dropna().unique().tolist() if not df_kpi_base.empty else []
