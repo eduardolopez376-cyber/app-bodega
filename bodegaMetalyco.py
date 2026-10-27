@@ -818,15 +818,9 @@ if rol == "operario":
                     id_t_temp = int(tarea_elegida_str.split(" | ")[0].replace("ID #", ""))
                     maq_nombre_temp = str(tareas_pendientes[tareas_pendientes['id'] == id_t_temp].iloc[0]['maquina'])
                 
-                maq_lower = maq_nombre_temp.lower()
-                es_prensa = any(p in maq_lower for p in ['prensa', 'troqueladora', 'dobladora', 'pren'])
-                
                 with st.form("form_reporte_operario"):
-                    if es_prensa:
-                        st.info(f"Máquina detectada como prensa (`{maq_nombre_temp}`). Por favor ingresa la presión de trabajo:")
-                        presion_input = st.text_input("Presión de Trabajo (Ej: 150 Ton / 25 MPa)", key="input_presion_operario")
-                    else:
-                        presion_input = ""
+                    # CAMPO DE PRESIÓN RESTAURADO PARA CUALQUIER MÁQUINA O PRENSA
+                    presion_input = st.text_input("Presión de Trabajo (Ej: 150 Ton / 25 MPa / N/A)", key="input_presion_operario")
                     
                     h_inicio = st.time_input("Hora de Inicio Real", time(7, 0))
                     h_fin = st.time_input("Hora de Finalización Real", time(17, 0))
@@ -975,10 +969,8 @@ if rol == "operario":
                     
                     maq_imp = st.selectbox("Máquina", maqs, index=0)
                     
-                    es_prensa_imp = any(p in maq_imp.lower() for p in ['prensa', 'troqueladora', 'dobladora'])
-                    presion_imp = ""
-                    if es_prensa_imp and maq_imp != "-- Seleccione Máquina --":
-                        presion_imp = st.text_input("Presión de Trabajo (Ej: 150 Ton / 25 MPa)")
+                    # CAMPO DE PRESIÓN RESTAURADO EN TAREA IMPREVISTA
+                    presion_imp = st.text_input("Presión de Trabajo (Ej: 150 Ton / 25 MPa / N/A)", key="input_presion_imprevista")
                         
                     ref_imp = st.selectbox("Referencia", refs, index=0)
                     act_imp = st.selectbox("Servicio / Actividad Prestada", serv_db, index=0)
