@@ -183,9 +183,13 @@ def inicializar_tablas_sistema():
                 id SERIAL PRIMARY KEY,
                 nombre VARCHAR(150) UNIQUE NOT NULL,
                 nit VARCHAR(50),
-                telefono VARCHAR(50),
+                nombre_comercial VARCHAR(150),
                 direccion VARCHAR(200),
-                correo VARCHAR(150)
+                ciudad VARCHAR(100),
+                telefono VARCHAR(50),
+                correo VARCHAR(150),
+                contacto VARCHAR(150),
+                forma_pago VARCHAR(100)
             );
         """)
         ejecutar_comando("""
@@ -218,10 +222,17 @@ def inicializar_tablas_sistema():
         ejecutar_comando("ALTER TABLE programacion_diaria ADD COLUMN IF NOT EXISTS numero_oc VARCHAR(100);")
         ejecutar_comando("ALTER TABLE referencias ADD COLUMN IF NOT EXISTS cliente VARCHAR(150);")
         ejecutar_comando("ALTER TABLE referencias ADD COLUMN IF NOT EXISTS valor_unitario NUMERIC(12,2) DEFAULT 0;")
+        
+        # Nuevas columnas de clientes por si la tabla ya existía
         ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS nit VARCHAR(50);")
-        ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS telefono VARCHAR(50);")
+        ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS nombre_comercial VARCHAR(150);")
         ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS direccion VARCHAR(200);")
+        ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS ciudad VARCHAR(100);")
+        ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS telefono VARCHAR(50);")
         ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS correo VARCHAR(150);")
+        ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS contacto VARCHAR(150);")
+        ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS forma_pago VARCHAR(100);")
+
         ejecutar_comando("ALTER TABLE ordenes_compra ADD COLUMN IF NOT EXISTS fecha_registro DATE;")
         ejecutar_comando("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS avatar_path TEXT;")
         ejecutar_comando("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS session_token TEXT;")
@@ -532,22 +543,21 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.setLineWidth(0.75)
     p.line(x_margen, y_actual, width - x_margen, y_actual)
 
-    # Datos de Tercero / Cliente completos con validación de nulos
-    dir_limpia = datos_remision.get('direccion', 'N/A')
-    if not dir_limpia or str(dir_limpia).lower() == 'none':
-        dir_limpia = 'N/A'
-        
-    correo_limpio = datos_remision.get('correo', 'N/A')
-    if not correo_limpio or str(correo_limpio).lower() == 'none':
-        correo_limpio = 'N/A'
+    # Datos de Tercero / Cliente completos con validación de nulos según estructura de la foto
+    def limpiar_val(val):
+        if not val or str(val).lower() == 'none' or str(val).strip() == '':
+            return 'N/A'
+        return str(val)
 
-    tel_limpio = datos_remision.get('telefono', 'N/A')
-    if not tel_limpio or str(tel_limpio).lower() == 'none':
-        tel_limpio = 'N/A'
-
-    nit_limpio = datos_remision.get('nit', 'N/A')
-    if not nit_limpio or str(nit_limpio).lower() == 'none':
-        nit_limpio = 'N/A'
+    nit_limpio = limpiar_val(datos_remision.get('nit'))
+    razon_social_limpia = limpiar_val(datos_remision.get('cliente_nombre'))
+    nombre_comercial_limpio = limpiar_val(datos_remision.get('nombre_comercial'))
+    dir_limpia = limpiar_val(datos_remision.get('direccion'))
+    ciudad_limpia = limpiar_val(datos_remision.get('ciudad'))
+    tel_limpio = limpiar_val(datos_remision.get('telefono'))
+    correo_limpio = limpiar_val(datos_remision.get('correo'))
+    contacto_limpio = limpiar_val(datos_remision.get('contacto'))
+    forma_pago_limpia = limpiar_val(datos_remision.get('forma_pago'))
 
     y_actual -= 15
     p.setFillColorRGB(0.15, 0.15, 0.15)
@@ -558,49 +568,70 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
 
     y_actual -= 12
     p.setFillColorRGB(0, 0, 0)
-    p.rect(x_margen, y_actual - 65, ancho_util, 65, fill=0, stroke=1)
+    p.rect(x_margen, y_actual - 110, ancho_util, 110, fill=0, stroke=1)
+
+    y_offset = 12
+    espacio_linea = 13
 
     p.setFont("Helvetica-Bold", 7.5)
-    p.drawString(x_margen + 8, y_actual - 12, "RAZÓN SOCIAL:")
+    p.drawString(x_margen + 8, y_actual - y_offset, "CÓDIGO TERCERO (NIT):")
     p.setFont("Helvetica", 7.5)
-    p.drawString(x_margen + 90, y_actual - 12, f"{datos_remision.get('cliente_nombre', 'N/A')}")
-
+    p.drawString(x_margen + 130, y_actual - y_offset, f"{nit_limpio}")
+    
     p.setFont("Helvetica-Bold", 7.5)
-    p.drawString(x_margen + 320, y_actual - 12, "NIT:")
+    p.drawString(x_margen + 320, y_actual - y_offset, "FECHA DESPACHO:")
     p.setFont("Helvetica", 7.5)
-    p.drawString(x_margen + 410, y_actual - 12, f"{nit_limpio}")
+    p.drawString(x_margen + 410, y_actual - y_offset, f"{datos_remision.get('fecha_despacho', '')}")
 
+    y_offset += espacio_linea
     p.setFont("Helvetica-Bold", 7.5)
-    p.drawString(x_margen + 8, y_actual - 25, "DIRECCIÓN:")
+    p.drawString(x_margen + 8, y_actual - y_offset, "RAZÓN SOCIAL:")
     p.setFont("Helvetica", 7.5)
-    p.drawString(x_margen + 90, y_actual - 25, f"{dir_limpia}")
+    p.drawString(x_margen + 130, y_actual - y_offset, f"{razon_social_limpia}")
 
+    y_offset += espacio_linea
     p.setFont("Helvetica-Bold", 7.5)
-    p.drawString(x_margen + 320, y_actual - 25, "FECHA DESPACHO:")
+    p.drawString(x_margen + 8, y_actual - y_offset, "NOMBRE COMERCIAL:")
     p.setFont("Helvetica", 7.5)
-    p.drawString(x_margen + 410, y_actual - 25, f"{datos_remision.get('fecha_despacho', '')}")
+    p.drawString(x_margen + 130, y_actual - y_offset, f"{nombre_comercial_limpio}")
 
+    y_offset += espacio_linea
     p.setFont("Helvetica-Bold", 7.5)
-    p.drawString(x_margen + 8, y_actual - 38, "TELÉFONO:")
+    p.drawString(x_margen + 8, y_actual - y_offset, "DIRECCIÓN:")
     p.setFont("Helvetica", 7.5)
-    p.drawString(x_margen + 90, y_actual - 38, f"{tel_limpio}")
+    p.drawString(x_margen + 130, y_actual - y_offset, f"{dir_limpia}")
 
+    y_offset += espacio_linea
     p.setFont("Helvetica-Bold", 7.5)
-    p.drawString(x_margen + 320, y_actual - 38, "CORREO:")
+    p.drawString(x_margen + 8, y_actual - y_offset, "CIUDAD:")
     p.setFont("Helvetica", 7.5)
-    p.drawString(x_margen + 410, y_actual - 38, f"{correo_limpio}")
+    p.drawString(x_margen + 130, y_actual - y_offset, f"{ciudad_limpia}")
 
+    y_offset += espacio_linea
     p.setFont("Helvetica-Bold", 7.5)
-    p.drawString(x_margen + 8, y_actual - 51, "CIUDAD:")
+    p.drawString(x_margen + 8, y_actual - y_offset, "TELÉFONO:")
     p.setFont("Helvetica", 7.5)
-    p.drawString(x_margen + 90, y_actual - 51, f"{datos_remision.get('ciudad', 'Dosquebradas')}")
+    p.drawString(x_margen + 130, y_actual - y_offset, f"{tel_limpio}")
 
+    y_offset += espacio_linea
     p.setFont("Helvetica-Bold", 7.5)
-    p.drawString(x_margen + 320, y_actual - 51, "FORMA PAGO:")
+    p.drawString(x_margen + 8, y_actual - y_offset, "CORREO:")
     p.setFont("Helvetica", 7.5)
-    p.drawString(x_margen + 410, y_actual - 51, "CRÉDITO 30 DÍAS")
+    p.drawString(x_margen + 130, y_actual - y_offset, f"{correo_limpio}")
 
-    y_actual -= 75
+    y_offset += espacio_linea
+    p.setFont("Helvetica-Bold", 7.5)
+    p.drawString(x_margen + 8, y_actual - y_offset, "CONTACTO:")
+    p.setFont("Helvetica", 7.5)
+    p.drawString(x_margen + 130, y_actual - y_offset, f"{contacto_limpio}")
+
+    y_offset += espacio_linea
+    p.setFont("Helvetica-Bold", 7.5)
+    p.drawString(x_margen + 8, y_actual - y_offset, "FORMA PAGO:")
+    p.setFont("Helvetica", 7.5)
+    p.drawString(x_margen + 130, y_actual - y_offset, f"{forma_pago_limpia}")
+
+    y_actual -= 120
     p.setFillColorRGB(0.15, 0.15, 0.15)
     p.rect(x_margen, y_actual - 14, ancho_util, 14, fill=1, stroke=1)
     p.setFillColorRGB(1, 1, 1)
@@ -1851,25 +1882,30 @@ elif rol in ["admin", "produccion"]:
             with st.expander("Crear o Actualizar Cliente", expanded=False):
                 with st.form("form_crear_cliente", clear_on_submit=True):
                     nom_cliente = st.text_input("Razón Social (Ej: Pintupartes)")
-                    nit_cliente = st.text_input("NIT")
-                    tel_cliente = st.text_input("Teléfono")
+                    nit_cliente = st.text_input("NIT (Código Tercero)")
+                    comercial_cliente = st.text_input("Nombre Comercial")
                     dir_cliente = st.text_input("Dirección")
+                    ciudad_cliente = st.text_input("Ciudad")
+                    tel_cliente = st.text_input("Teléfono")
                     email_cliente = st.text_input("Correo Electrónico")
+                    contacto_cliente = st.text_input("Contacto")
+                    forma_pago_cliente = st.text_input("Forma de Pago (Ej: CRÉDITO 30 DÍAS)")
+
                     if st.form_submit_button("Guardar", type="primary", use_container_width=True):
                         if nom_cliente.strip():
                             ejecutar_comando(
-                                """INSERT INTO clientes (nombre, nit, telefono, direccion, correo) 
-                                   VALUES (%s, %s, %s, %s, %s) 
+                                """INSERT INTO clientes (nombre, nit, nombre_comercial, direccion, ciudad, telefono, correo, contacto, forma_pago) 
+                                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) 
                                    ON CONFLICT (nombre) 
-                                   DO UPDATE SET nit = EXCLUDED.nit, telefono = EXCLUDED.telefono, direccion = EXCLUDED.direccion, correo = EXCLUDED.correo""",
-                                (nom_cliente.strip(), nit_cliente.strip(), tel_cliente.strip(), dir_cliente.strip(), email_cliente.strip())
+                                   DO UPDATE SET nit = EXCLUDED.nit, nombre_comercial = EXCLUDED.nombre_comercial, direccion = EXCLUDED.direccion, ciudad = EXCLUDED.ciudad, telefono = EXCLUDED.telefono, correo = EXCLUDED.correo, contacto = EXCLUDED.contacto, forma_pago = EXCLUDED.forma_pago""",
+                                (nom_cliente.strip(), nit_cliente.strip(), comercial_cliente.strip(), dir_cliente.strip(), ciudad_cliente.strip(), tel_cliente.strip(), email_cliente.strip(), contacto_cliente.strip(), forma_pago_cliente.strip())
                             )
                             st.success("¡Cliente guardado o actualizado con éxito!")
                             st.rerun()
 
             st.write("---")
             st.markdown("#### Listado de Clientes Registrados")
-            clientes_df = ejecutar_consulta("SELECT id, nombre, nit, telefono, direccion, correo FROM clientes ORDER BY id DESC")
+            clientes_df = ejecutar_consulta("SELECT id, nombre, nit, nombre_comercial, direccion, ciudad, telefono, correo, contacto, forma_pago FROM clientes ORDER BY id DESC")
             
             if not clientes_df.empty:
                 clientes_df_view = clientes_df.copy()
@@ -1932,7 +1968,7 @@ elif rol in ["admin", "produccion"]:
     elif menu_limpio == "Despachos (F-02-02)":
         st.subheader("Módulo de Despachos y Generación de Remisión (F-02-02)")
         try:
-            clientes_db = ejecutar_consulta("SELECT nombre, nit, telefono, direccion, correo FROM clientes")
+            clientes_db = ejecutar_consulta("SELECT nombre, nit, nombre_comercial, direccion, ciudad, telefono, correo, contacto, forma_pago FROM clientes")
             lista_clientes_despacho = ["-- Seleccione Cliente --"] + (clientes_db['nombre'].tolist() if not clientes_db.empty else [])
             
             cliente_sel = st.selectbox("Seleccione Cliente Destino", lista_clientes_despacho, index=0)
@@ -1940,7 +1976,7 @@ elif rol in ["admin", "produccion"]:
             if cliente_sel != "-- Seleccione Cliente --":
                 cli_row = clientes_db[clientes_db['nombre'] == cliente_sel].iloc[0]
                 
-                st.info(f"Cliente: **{cliente_sel}** | NIT: `{cli_row.get('nit', 'N/A')}` | Dir: `{cli_row.get('direccion', 'N/A')}`")
+                st.info(f"Cliente: **{cliente_sel}** | NIT (Código Tercero): `{cli_row.get('nit', 'N/A')}` | Dir: `{cli_row.get('direccion', 'N/A')}`")
                 
                 col_r1, col_r2 = st.columns(2)
                 with col_r1:
@@ -2061,10 +2097,13 @@ elif rol in ["admin", "produccion"]:
                                 "numero_remision": num_remision_input,
                                 "cliente_nombre": cliente_sel,
                                 "nit": cli_row.get('nit', 'N/A'),
+                                "nombre_comercial": cli_row.get('nombre_comercial', 'N/A'),
                                 "telefono": cli_row.get('telefono', 'N/A'),
                                 "correo": cli_row.get('correo', 'N/A'),
+                                "contacto": cli_row.get('contacto', 'N/A'),
+                                "forma_pago": cli_row.get('forma_pago', 'CRÉDITO 30 DÍAS'),
                                 "fecha_despacho": str(fecha_remision_input),
-                                "ciudad": "Dosquebradas",
+                                "ciudad": cli_row.get('ciudad', 'Dosquebradas'),
                                 "direccion": cli_row.get('direccion', 'N/A'),
                                 "observaciones": obs_remision,
                                 "elaborado": st.session_state['nombre_usuario'],
