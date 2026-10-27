@@ -14,6 +14,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from streamlit_option_menu import option_menu
 from streamlit_drawable_canvas import st_canvas
+from PIL import Image
 
 st.set_page_config(
     page_title="Control de Producción - Industrias Metal&Co",
@@ -1891,6 +1892,7 @@ elif rol in ["admin", "produccion"]:
                         height=150,
                         width=450,
                         drawing_mode="freedraw",
+                        return_image_data=True,
                         key="canvas_firma_despacho",
                     )
                     
