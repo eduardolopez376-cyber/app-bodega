@@ -6,3 +6,4 @@ reportlab
 pytz
 plotly
 streamlit-option-menu
+streamlit-drawable-canvas
