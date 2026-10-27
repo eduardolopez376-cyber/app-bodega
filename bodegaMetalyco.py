@@ -223,7 +223,6 @@ def inicializar_tablas_sistema():
         ejecutar_comando("ALTER TABLE referencias ADD COLUMN IF NOT EXISTS cliente VARCHAR(150);")
         ejecutar_comando("ALTER TABLE referencias ADD COLUMN IF NOT EXISTS valor_unitario NUMERIC(12,2) DEFAULT 0;")
         
-        # Nuevas columnas de clientes por si la tabla ya existía
         ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS nit VARCHAR(50);")
         ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS nombre_comercial VARCHAR(150);")
         ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS direccion VARCHAR(200);")
@@ -514,7 +513,6 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     ancho_util = width - 60
     y_actual = height - 35
 
-    # Encabezado corporativo
     if LOGO_PATH and os.path.exists(LOGO_PATH):
         try:
             p.drawImage(LOGO_PATH, x_margen, y_actual - 35, width=100, height=35, preserveAspectRatio=True, mask='auto')
@@ -531,7 +529,6 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.drawString(x_margen + 115, y_actual - 20, "NIT 902024035 | CALLE 79A NO.16-168 LA ROMELIA, DOSQUEBRADAS")
     p.drawString(x_margen + 115, y_actual - 29, "TELÉFONO +57 310 4368657 | metalycosas@gmail.com")
 
-    # Caja de Código F-02-02 y Versión (Arriba a la derecha)
     p.rect(width - 130, y_actual - 35, 100, 35, fill=0, stroke=1)
     p.setFont("Helvetica", 7.5)
     p.drawString(width - 122, y_actual - 12, "Código: F-02-02")
@@ -543,7 +540,6 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.setLineWidth(0.75)
     p.line(x_margen, y_actual, width - x_margen, y_actual)
 
-    # Datos de Tercero / Cliente completos con validación de nulos según estructura de la foto
     def limpiar_val(val):
         if not val or str(val).lower() == 'none' or str(val).strip() == '':
             return 'N/A'
@@ -638,7 +634,6 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.setFont("Helvetica-Bold", 7.5)
     p.drawCentredString(width / 2.0, y_actual - 9, "PRODUCTOS DESPACHADOS Y/O TROQUELES ENVIADOS")
 
-    # Tabla de Ítems
     y_actual -= 14
     p.setFillColorRGB(0, 0, 0)
     p.rect(x_margen, y_actual - 18, ancho_util, 18, fill=0, stroke=1)
@@ -670,7 +665,6 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     iva_general = subtotal_general * 0.19
     total_general = subtotal_general + iva_general
 
-    # Totales y Notas
     y_actual -= 10
     p.rect(x_margen, y_actual - 45, 300, 45, fill=0, stroke=1)
     p.setFont("Helvetica-Bold", 7)
@@ -686,7 +680,6 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.setFont("Helvetica-Bold", 8.5)
     p.drawString(x_margen + 315, y_actual - 40, f"TOTAL: ${total_general:,.2f}")
 
-    # Sección de Solicitado, Elaborado y Firma Digital
     y_actual -= 55
     p.rect(x_margen, y_actual - 45, ancho_util, 45, fill=0, stroke=1)
     p.setFont("Helvetica-Bold", 7)
@@ -1270,15 +1263,31 @@ elif rol in ["admin", "produccion"]:
         st.subheader("Dashboard Gerencial de Planta - Control en Tiempo Real")
         
         try:
-            ops_list_db = ejecutar_consulta("SELECT DISTINCT operario_nombre FROM registro_produccion")['operario_nombre'].tolist()
-            refs_list_db = ejecutar_consulta("SELECT DISTINCT referencia FROM registro_produccion")['referencia'].tolist()
+            # Sincronización estricta: los selectores se alimentan únicamente de registros de producción que correspondan a Órdenes de Compra y Referencias VÁLIDAS que aún existan en la BD
+            ocs_vigentes = ejecutar_consulta("SELECT numero_oc FROM ordenes_compra")['numero_oc'].astype(str).tolist()
+            refs_vigentes = ejecutar_consulta("SELECT codigo FROM referencias")['codigo'].astype(str).tolist()
+            
+            df_kpi_base_raw = ejecutar_consulta("SELECT operario_nombre, referencia, numero_oc, unidades_producidas, horas_trabajadas, observaciones, fecha_registro FROM registro_produccion")
+            
+            if not df_kpi_base_raw.empty:
+                # Filtrar estrictamente solo lo que tiene OC vigente y referencia existente en las tablas principales
+                df_kpi_base = df_kpi_base_raw[
+                    df_kpi_base['numero_oc'].astype(str).isin(ocs_vigentes) & 
+                    df_kpi_base['referencia'].astype(str).isin(refs_vigentes)
+                ].copy()
+            else:
+                df_kpi_base = pd.DataFrame()
+
+            ops_list_db = df_kpi_base['operario_nombre'].dropna().unique().tolist() if not df_kpi_base.empty else []
+            refs_list_db = df_kpi_base['referencia'].dropna().unique().tolist() if not df_kpi_base.empty else []
         except:
             ops_list_db = []
             refs_list_db = []
+            df_kpi_base = pd.DataFrame()
             
-        opciones_operario_filtro = ["Todos"] + (ops_list_db if ops_list_db else [])
+        opciones_operario_filtro = ["Todos"] + ops_list_db
         opciones_mes_filtro = ["Todas", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
-        opciones_ref_filtro = ["Todas"] + (refs_list_db if refs_list_db else [])
+        opciones_ref_filtro = ["Todas"] + refs_list_db
         
         f_col1, f_col2, f_col3, f_col4 = st.columns(4)
         with f_col1:
@@ -1300,8 +1309,6 @@ elif rol in ["admin", "produccion"]:
         st.markdown("<br>", unsafe_allow_html=True)
 
         try:
-            df_kpi_base = ejecutar_consulta("SELECT operario_nombre, referencia, unidades_producidas, horas_trabajadas, observaciones, fecha_registro FROM registro_produccion")
-            
             if not df_kpi_base.empty:
                 if filtro_op_sel != "Todos":
                     df_kpi_base = df_kpi_base[df_kpi_base['operario_nombre'].astype(str).str.strip().str.lower() == filtro_op_sel.strip().lower()]
@@ -1485,7 +1492,12 @@ elif rol in ["admin", "produccion"]:
         with col_pred2:
             st.markdown("#### 👥 Desempeño Acumulado por Operario")
             try:
-                df_ops_perf = ejecutar_consulta("SELECT operario_nombre, SUM(unidades_producidas) as total_prod FROM registro_produccion GROUP BY operario_nombre")
+                if not df_kpi_base.empty:
+                    df_ops_perf = df_kpi_base.groupby('operario_nombre')['unidades_producidas'].sum().reset_index()
+                    df_ops_perf.columns = ['operario_nombre', 'total_prod']
+                else:
+                    df_ops_perf = pd.DataFrame()
+
                 if not df_ops_perf.empty:
                     lista_operarios_grafico = ["Todos los Operarios"] + df_ops_perf['operario_nombre'].dropna().tolist()
                     operario_seleccionado_grafico = st.selectbox("Filtrar vista por operario:", lista_operarios_grafico, key="select_operario_grafico_ui")
