@@ -183,7 +183,9 @@ def inicializar_tablas_sistema():
                 id SERIAL PRIMARY KEY,
                 nombre VARCHAR(150) UNIQUE NOT NULL,
                 nit VARCHAR(50),
-                telefono VARCHAR(50)
+                telefono VARCHAR(50),
+                direccion VARCHAR(200),
+                correo VARCHAR(150)
             );
         """)
         ejecutar_comando("""
@@ -218,6 +220,8 @@ def inicializar_tablas_sistema():
         ejecutar_comando("ALTER TABLE referencias ADD COLUMN IF NOT EXISTS valor_unitario NUMERIC(12,2) DEFAULT 0;")
         ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS nit VARCHAR(50);")
         ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS telefono VARCHAR(50);")
+        ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS direccion VARCHAR(200);")
+        ejecutar_comando("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS correo VARCHAR(150);")
         ejecutar_comando("ALTER TABLE ordenes_compra ADD COLUMN IF NOT EXISTS fecha_registro DATE;")
         ejecutar_comando("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS avatar_path TEXT;")
         ejecutar_comando("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS session_token TEXT;")
@@ -528,7 +532,7 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.setLineWidth(0.75)
     p.line(x_margen, y_actual, width - x_margen, y_actual)
 
-    # Datos de Tercero / Cliente
+    # Datos de Tercero / Cliente completos
     y_actual -= 15
     p.setFillColorRGB(0.15, 0.15, 0.15)
     p.rect(x_margen, y_actual - 12, ancho_util, 14, fill=1, stroke=1)
@@ -538,7 +542,7 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
 
     y_actual -= 12
     p.setFillColorRGB(0, 0, 0)
-    p.rect(x_margen, y_actual - 38, ancho_util, 38, fill=0, stroke=1)
+    p.rect(x_margen, y_actual - 65, ancho_util, 65, fill=0, stroke=1)
 
     p.setFont("Helvetica-Bold", 7.5)
     p.drawString(x_margen + 8, y_actual - 12, "RAZÓN SOCIAL:")
@@ -546,21 +550,41 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.drawString(x_margen + 90, y_actual - 12, f"{datos_remision.get('cliente_nombre', 'N/A')}")
 
     p.setFont("Helvetica-Bold", 7.5)
-    p.drawString(x_margen + 320, y_actual - 12, "FECHA DESPACHO:")
+    p.drawString(x_margen + 320, y_actual - 12, "NIT:")
     p.setFont("Helvetica", 7.5)
-    p.drawString(x_margen + 410, y_actual - 12, f"{datos_remision.get('fecha_despacho', '')}")
+    p.drawString(x_margen + 410, y_actual - 12, f"{datos_remision.get('nit', 'N/A')}")
 
     p.setFont("Helvetica-Bold", 7.5)
-    p.drawString(x_margen + 8, y_actual - 25, "CIUDAD / DIR:")
+    p.drawString(x_margen + 8, y_actual - 25, "DIRECCIÓN:")
     p.setFont("Helvetica", 7.5)
-    p.drawString(x_margen + 90, y_actual - 25, f"{datos_remision.get('ciudad', 'Dosquebradas')} | {datos_remision.get('direccion', '')}")
+    p.drawString(x_margen + 90, y_actual - 25, f"{datos_remision.get('direccion', 'N/A')}")
 
     p.setFont("Helvetica-Bold", 7.5)
-    p.drawString(x_margen + 320, y_actual - 25, "FORMA PAGO:")
+    p.drawString(x_margen + 320, y_actual - 25, "FECHA DESPACHO:")
     p.setFont("Helvetica", 7.5)
-    p.drawString(x_margen + 410, y_actual - 25, "CRÉDITO 30 DÍAS")
+    p.drawString(x_margen + 410, y_actual - 25, f"{datos_remision.get('fecha_despacho', '')}")
 
-    y_actual -= 50
+    p.setFont("Helvetica-Bold", 7.5)
+    p.drawString(x_margen + 8, y_actual - 38, "TELÉFONO:")
+    p.setFont("Helvetica", 7.5)
+    p.drawString(x_margen + 90, y_actual - 38, f"{datos_remision.get('telefono', 'N/A')}")
+
+    p.setFont("Helvetica-Bold", 7.5)
+    p.drawString(x_margen + 320, y_actual - 38, "CORREO:")
+    p.setFont("Helvetica", 7.5)
+    p.drawString(x_margen + 410, y_actual - 38, f"{datos_remision.get('correo', 'N/A')}")
+
+    p.setFont("Helvetica-Bold", 7.5)
+    p.drawString(x_margen + 8, y_actual - 51, "CIUDAD:")
+    p.setFont("Helvetica", 7.5)
+    p.drawString(x_margen + 90, y_actual - 51, f"{datos_remision.get('ciudad', 'Dosquebradas')}")
+
+    p.setFont("Helvetica-Bold", 7.5)
+    p.drawString(x_margen + 320, y_actual - 51, "FORMA PAGO:")
+    p.setFont("Helvetica", 7.5)
+    p.drawString(x_margen + 410, y_actual - 51, "CRÉDITO 30 DÍAS")
+
+    y_actual -= 75
     p.setFillColorRGB(0.15, 0.15, 0.15)
     p.rect(x_margen, y_actual - 14, ancho_util, 14, fill=1, stroke=1)
     p.setFillColorRGB(1, 1, 1)
@@ -615,20 +639,21 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.setFont("Helvetica-Bold", 8.5)
     p.drawString(x_margen + 315, y_actual - 40, f"TOTAL: ${total_general:,.2f}")
 
-    # Sección de Firmas y Firma Digital (Ajustada exactamente sobre la línea)
+    # Sección de Solicitado, Elaborado y Firma Digital
     y_actual -= 55
     p.rect(x_margen, y_actual - 45, ancho_util, 45, fill=0, stroke=1)
     p.setFont("Helvetica-Bold", 7)
-    p.drawString(x_margen + 8, y_actual - 12, f"ELABORADO POR: {datos_remision.get('elaborado', 'Felipe Valdés')}")
-    p.drawString(x_margen + 280, y_actual - 12, f"RECIBE (NOMBRE Y CÉDULA): {datos_remision.get('recibe_nombre', '')} - CC: {datos_remision.get('recibe_cc', '')}")
+    p.drawString(x_margen + 8, y_actual - 12, f"SOLICITADO: {datos_remision.get('elaborado', 'Felipe Valdés')}")
+    p.drawString(x_margen + 280, y_actual - 12, f"ELABORADO: {datos_remision.get('elaborado', 'Felipe Valdés')}")
+    p.drawString(x_margen + 8, y_actual - 28, f"RECIBE: {datos_remision.get('recibe_nombre', '')} - CC: {datos_remision.get('recibe_cc', '')}")
     
     if firma_img_path and os.path.exists(firma_img_path):
         try:
-            p.drawImage(firma_img_path, x_margen + 380, y_actual - 48, width=120, height=38, preserveAspectRatio=True, mask='auto')
+            p.drawImage(firma_img_path, x_margen + 350, y_actual - 44, width=130, height=35, preserveAspectRatio=True, mask='auto')
         except:
             pass
-    p.drawString(x_margen + 380, y_actual - 38, "___________________________________")
-    p.drawString(x_margen + 380, y_actual - 46, "Firma de quien recibe conforme")
+    p.drawString(x_margen + 350, y_actual - 35, "___________________________________")
+    p.drawString(x_margen + 350, y_actual - 43, "Firma de quien recibe conforme")
 
     p.showPage()
     p.save()
@@ -1780,10 +1805,12 @@ elif rol in ["admin", "produccion"]:
                     nom_cliente = st.text_input("Razón Social")
                     nit_cliente = st.text_input("NIT")
                     tel_cliente = st.text_input("Teléfono")
+                    dir_cliente = st.text_input("Dirección")
+                    email_cliente = st.text_input("Correo Electrónico")
                     if st.form_submit_button("Guardar", type="primary", use_container_width=True):
                         if nom_cliente.strip():
-                            ejecutar_comando("INSERT INTO clientes (nombre, nit, telefono) VALUES (%s, %s, %s) ON CONFLICT (nombre) DO NOTHING", (nom_cliente.strip(), nit_cliente.strip(), tel_cliente.strip()))
-                            st.success("Cliente agregado.")
+                            ejecutar_comando("INSERT INTO clientes (nombre, nit, telefono, direccion, correo) VALUES (%s, %s, %s, %s, %s) ON CONFLICT (nombre) DO UPDATE SET nit = EXCLUDED.nit, telefono = EXCLUDED.telefono, direccion = EXCLUDED.direccion, correo = EXCLUDED.correo", (nom_cliente.strip(), nit_cliente.strip(), tel_cliente.strip(), dir_cliente.strip(), email_cliente.strip()))
+                            st.success("Cliente agregado o actualizado.")
                             st.rerun()
         except Exception as e:
             st.error(f"Error: {e}")
@@ -1823,23 +1850,19 @@ elif rol in ["admin", "produccion"]:
     elif menu_limpio == "Despachos (F-02-02)":
         st.subheader("Módulo de Despachos y Generación de Remisión (F-02-02)")
         try:
-            # 1. Seleccionar cliente de destino
-            clientes_db = ejecutar_consulta("SELECT nombre, nit, telefono FROM clientes")
+            clientes_db = ejecutar_consulta("SELECT nombre, nit, telefono, direccion, correo FROM clientes")
             lista_clientes_despacho = ["-- Seleccione Cliente --"] + (clientes_db['nombre'].tolist() if not clientes_db.empty else [])
             
             cliente_sel = st.selectbox("Seleccione Cliente Destino", lista_clientes_despacho, index=0)
             
             if cliente_sel != "-- Seleccione Cliente --":
                 cli_row = clientes_db[clientes_db['nombre'] == cliente_sel].iloc[0]
-                nit_cli = cli_row.get('nit', '')
-                tel_cli = cli_row.get('telefono', '')
                 
-                st.info(f"Cliente: **{cliente_sel}** | NIT: `{nit_cli}` | Tel: `{tel_cli}`")
+                st.info(f"Cliente: **{cliente_sel}** | NIT: `{cli_row.get('nit', 'N/A')}` | Dir: `{cli_row.get('direccion', 'N/A')}`")
                 
-                # Datos de cabecera de la remisión
                 col_r1, col_r2 = st.columns(2)
                 with col_r1:
-                    num_remision_input = st.text_input("Número de Remisión (Consecutivo Manual)", value="425")
+                    num_remision_input = st.text_input("Número de Remisión (Consecutivo Manual)", value="426")
                 with col_r2:
                     fecha_remision_input = st.date_input("Fecha de Despacho", value=(datetime.utcnow() - timedelta(hours=5)).date())
                 
@@ -1848,7 +1871,6 @@ elif rol in ["admin", "produccion"]:
                 st.write("---")
                 st.markdown("#### Seleccionar Producción Terminada para Despachar")
                 
-                # Traer únicamente los registros de producción que aún NO han sido despachados
                 prod_registros = ejecutar_consulta("""
                     SELECT id, fecha_registro, numero_oc, referencia, maquina, unidades_producidas 
                     FROM registro_produccion 
@@ -1956,9 +1978,12 @@ elif rol in ["admin", "produccion"]:
                             datos_remision_dict = {
                                 "numero_remision": num_remision_input,
                                 "cliente_nombre": cliente_sel,
+                                "nit": cli_row.get('nit', 'N/A'),
+                                "telefono": cli_row.get('telefono', 'N/A'),
+                                "correo": cli_row.get('correo', 'N/A'),
                                 "fecha_despacho": str(fecha_remision_input),
                                 "ciudad": "Dosquebradas",
-                                "direccion": cli_row.get('nit', 'CRA 2 NORTE'),
+                                "direccion": cli_row.get('direccion', 'N/A'),
                                 "observaciones": obs_remision,
                                 "elaborado": st.session_state['nombre_usuario'],
                                 "recibe_nombre": recibe_nombre_input.strip(),
