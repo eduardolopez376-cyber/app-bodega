@@ -156,7 +156,7 @@ DB_PARAMS = {
     "sslmode": "require"
 }
 
-@st.cache_data(ttl=30, show_spinner=False)
+@st.cache_data(ttl=5, show_spinner=False)
 def ejecutar_consulta_cached(query, params_key=None):
     conn = psycopg2.connect(**DB_PARAMS)
     df = pd.read_sql_query(query, conn, params=list(params_key) if params_key else None)
@@ -680,7 +680,6 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.setFont("Helvetica-Bold", 8.5)
     p.drawString(x_margen + 315, y_actual - 40, f"TOTAL: ${total_general:,.2f}")
 
-    # Sección de Firmas ajustada: Firma más pequeña y reposicionada para NO tapar "ELABORADO"
     y_actual -= 55
     p.rect(x_margen, y_actual - 45, ancho_util, 45, fill=0, stroke=1)
     p.setFont("Helvetica-Bold", 7)
@@ -690,7 +689,6 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     
     if firma_img_path and os.path.exists(firma_img_path):
         try:
-            # Tamaño reducido (ancho 85, alto 20) y ubicado en la esquina inferior derecha sin tocar el texto superior
             p.drawImage(firma_img_path, x_margen + 380, y_actual - 34, width=85, height=20, preserveAspectRatio=True, mask='auto')
         except:
             pass
@@ -1150,7 +1148,6 @@ if rol == "operario":
     elif menu_limpio == "Tarea Imprevista":
         st.subheader("Registrar e Iniciar Tarea Imprevista No Programada")
         try:
-            # Sincronización estricta: Solo máquinas y servicios activos que sí existan en la BD
             maqs_raw = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
             refs_raw = ejecutar_consulta("SELECT codigo FROM referencias")['codigo'].tolist()
             serv_raw = ejecutar_consulta("SELECT nombre FROM servicios_prestados")['nombre'].tolist()
@@ -1429,7 +1426,7 @@ elif rol in ["admin", "produccion"]:
             else:
                 fig_uph = go.Figure()
                 fig_uph.add_annotation(
-                    text="No hay registros de producción para el filtro seleccionado", 
+                    text="No hay registros de producción activos en la base de datos", 
                     x=0.5, y=0.5, showarrow=False, 
                     font=dict(color="#888", size=14)
                 )
@@ -1448,18 +1445,22 @@ elif rol in ["admin", "produccion"]:
 
         with col_graf2:
             st.markdown("#### Distribución de Defectos y Calidad")
-            df_defectos_real = pd.DataFrame({
-                'Causa': ['Defecto Material', 'Ajuste Máquina', 'Operario', 'Otros'],
-                'Valores': [max(1, int(total_defectuosas * 0.5)), max(1, int(total_defectuosas * 0.3)), max(1, int(total_defectuosas * 0.2)), 1]
-            })
+            if total_defectuosas > 0:
+                df_defectos_real = pd.DataFrame({
+                    'Causa': ['Defecto Material', 'Ajuste Máquina', 'Operario', 'Otros'],
+                    'Valores': [max(1, int(total_defectuosas * 0.5)), max(1, int(total_defectuosas * 0.3)), max(1, int(total_defectuosas * 0.2)), 1]
+                })
+                fig_dona = px.pie(
+                    df_defectos_real, 
+                    names='Causa', 
+                    values='Valores',
+                    hole=0.6,
+                    color_discrete_sequence=['#FF7A00', '#e76f51', '#e9c46a', '#457b9d']
+                )
+            else:
+                fig_dona = go.Figure()
+                fig_dona.add_annotation(text="Sin defectos registrados", x=0.5, y=0.5, showarrow=False, font=dict(color="#888", size=14))
 
-            fig_dona = px.pie(
-                df_defectos_real, 
-                names='Causa', 
-                values='Valores',
-                hole=0.6,
-                color_discrete_sequence=['#FF7A00', '#e76f51', '#e9c46a', '#457b9d']
-            )
             fig_dona.update_layout(
                 paper_bgcolor='rgba(0,0,0,0)',
                 plot_bgcolor='rgba(0,0,0,0)',
@@ -1483,7 +1484,7 @@ elif rol in ["admin", "produccion"]:
                     df_forecasting['Estado Proyección'] = df_forecasting['Pendientes'].apply(lambda p: "A tiempo" if p < 500 else "Riesgo de Retraso")
                     st.dataframe(df_forecasting[['numero_oc', 'referencia', 'Pendientes', 'Estado Proyección']], use_container_width=True, hide_index=True)
                 else:
-                    st.info("No hay órdenes activas para proyectar.")
+                    st.info("No hay órdenes activas pendientes en la base de datos.")
             except:
                 st.info("Sin datos suficientes para pronóstico.")
 
@@ -1496,7 +1497,7 @@ elif rol in ["admin", "produccion"]:
                 else:
                     df_ops_perf = pd.DataFrame()
 
-                if not df_ops_perf.empty:
+                if not df_ops_perf.empty and df_ops_perf['total_prod'].sum() > 0:
                     lista_operarios_grafico = ["Todos los Operarios"] + df_ops_perf['operario_nombre'].dropna().tolist()
                     operario_seleccionado_grafico = st.selectbox("Filtrar vista por operario:", lista_operarios_grafico, key="select_operario_grafico_ui")
                     
@@ -1517,8 +1518,10 @@ elif rol in ["admin", "produccion"]:
                         fig_ops.update_traces(texttemplate='%{text:,} u.', textposition='outside', marker_line_color='#FFA500', marker_line_width=2, opacity=0.95, width=0.4 if len(df_ops_filtrado) == 1 else 0.7)
                         fig_ops.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(26,26,26,0.4)', font_color="#E0E0E0", margin=dict(t=40, b=10, l=10, r=10), height=280, showlegend=False, xaxis=dict(title=dict(text="Operario Asignado", font=dict(size=11, color="#888")), showgrid=False, categoryorder="total descending"), yaxis=dict(title=dict(text="Unidades Producidas", font=dict(size=11, color="#888")), showgrid=True, gridcolor='rgba(255,255,255,0.05)'))
                         st.plotly_chart(fig_ops, use_container_width=True)
+                else:
+                    st.info("No hay registros de producción para graficar el desempeño de operarios.")
             except:
-                pass
+                st.info("Sin registros de producción.")
 
         st.markdown("---")
         st.markdown("#### Estatus de Órdenes de Trabajo Activas (Base de Datos)")
@@ -1540,13 +1543,14 @@ elif rol in ["admin", "produccion"]:
                     return "Sin Iniciar"
             df_tabla_ocs_real['Estado'] = df_tabla_ocs_real.apply(badge_estado_real, axis=1)
             st.dataframe(df_tabla_ocs_real[['ID_Orden', 'Cliente', 'Referencia', 'Cant_Planificada', 'Cant_Completada', 'Estado']], use_container_width=True, hide_index=True)
+        else:
+            st.info("No hay órdenes de compra registradas actualmente.")
 
     elif menu_limpio == "Programar":
         st.subheader("Programación Directa por Orden de Compra y Referencia")
         fecha_seleccionada = st.date_input("Selecciona el día a consultar/programar", value=(datetime.utcnow() - timedelta(hours=5)).date(), key="cal_admin_dia")
         try:
             ops_raw = ejecutar_consulta("SELECT nombre FROM usuarios WHERE rol = 'operario'")['nombre'].tolist()
-            # Validación estricta: Si se borraron máquinas o servicios, no se deben listar ni permitir programar
             maqs_raw = ejecutar_consulta("SELECT nombre FROM maquinas")['nombre'].tolist()
             ops = ["-- Seleccione Operario --"] + (ops_raw if ops_raw else [])
             maqs = ["-- Seleccione Máquina --"] + (maqs_raw if maqs_raw else [])
