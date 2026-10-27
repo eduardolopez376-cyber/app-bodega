@@ -509,8 +509,8 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
     
-    x_margen = 30
-    ancho_util = width - 60
+    x_margen = 20  # Margen optimizado para que quepan bien las 9 columnas
+    ancho_util = width - 40
     y_actual = height - 35
 
     if LOGO_PATH and os.path.exists(LOGO_PATH):
@@ -529,12 +529,12 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.drawString(x_margen + 115, y_actual - 20, "NIT 902024035 | CALLE 79A NO.16-168 LA ROMELIA, DOSQUEBRADAS")
     p.drawString(x_margen + 115, y_actual - 29, "TELÉFONO +57 310 4368657 | metalycosas@gmail.com")
 
-    p.rect(width - 130, y_actual - 35, 100, 35, fill=0, stroke=1)
+    p.rect(width - 130, y_actual - 35, 110, 35, fill=0, stroke=1)
     p.setFont("Helvetica", 7.5)
     p.drawString(width - 122, y_actual - 12, "Código: F-02-02")
     p.drawString(width - 122, y_actual - 24, "Versión: 1")
     p.setFont("Helvetica-Bold", 8.5)
-    p.drawCentredString(width - 80, y_actual - 33, f"NÚMERO: {datos_remision.get('numero_remision', 'S/N')}")
+    p.drawCentredString(width - 75, y_actual - 33, f"NÚMERO: {datos_remision.get('numero_remision', 'S/N')}")
 
     y_actual -= 45
     p.setLineWidth(0.75)
@@ -575,9 +575,9 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.drawString(x_margen + 130, y_actual - y_offset, f"{nit_limpio}")
     
     p.setFont("Helvetica-Bold", 7.5)
-    p.drawString(x_margen + 320, y_actual - y_offset, "FECHA DESPACHO:")
+    p.drawString(x_margen + 340, y_actual - y_offset, "FECHA DESPACHO:")
     p.setFont("Helvetica", 7.5)
-    p.drawString(x_margen + 410, y_actual - y_offset, f"{datos_remision.get('fecha_despacho', '')}")
+    p.drawString(x_margen + 430, y_actual - y_offset, f"{datos_remision.get('fecha_despacho', '')}")
 
     y_offset += espacio_linea
     p.setFont("Helvetica-Bold", 7.5)
@@ -637,32 +637,91 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     y_actual -= 14
     p.setFillColorRGB(0, 0, 0)
     p.rect(x_margen, y_actual - 18, ancho_util, 18, fill=0, stroke=1)
-    p.setFont("Helvetica-Bold", 7)
-    p.drawString(x_margen + 5, y_actual - 12, "DESCRIPCIÓN PRODUCTO / TROQUEL")
-    p.drawString(x_margen + 230, y_actual - 12, "CÓDIGO")
-    p.drawString(x_margen + 295, y_actual - 12, "OC / REF")
-    p.drawString(x_margen + 380, y_actual - 12, "UNIDAD")
-    p.drawString(x_margen + 445, y_actual - 12, "CANTIDAD")
-    p.drawString(x_margen + 510, y_actual - 12, "SUBTOTAL")
+    
+    # Anchos de las 9 columnas exactas que coinciden con tu formato F-02-02
+    w_desc = 135
+    w_cod = 60
+    w_op = 42
+    w_oc = 55
+    w_und = 42
+    w_cant = 42
+    w_val = 65
+    w_iva = 32
+    w_sub = 99  # Total ancho_util = 572
+    
+    x_col = x_margen
+    p.setFont("Helvetica-Bold", 6)
+    p.drawString(x_col + 3, y_actual - 12, "DESCRIPCIÓN PRODUCTO")
+    
+    x_col += w_desc
+    p.drawString(x_col + 2, y_actual - 12, "CÓDIGO PROD.")
+    
+    x_col += w_cod
+    p.drawString(x_col + 2, y_actual - 12, "OP")
+    
+    x_col += w_op
+    p.drawString(x_col + 2, y_actual - 12, "OC U OTRO")
+    
+    x_col += w_oc
+    p.drawString(x_col + 2, y_actual - 12, "UND")
+    
+    x_col += w_und
+    p.drawString(x_col + 2, y_actual - 12, "CANTIDAD")
+    
+    x_col += w_cant
+    p.drawString(x_col + 2, y_actual - 12, "PRECIO UNIT.")
+    
+    x_col += w_val
+    p.drawString(x_col + 2, y_actual - 12, "%IVA")
+    
+    x_col += w_iva
+    p.drawString(x_col + 2, y_actual - 12, "SUBTOTAL")
 
     y_actual -= 18
     subtotal_general = 0.0
+    iva_general = 0.0
 
     for item in items_despacho:
         p.rect(x_margen, y_actual - 16, ancho_util, 16, fill=0, stroke=1)
-        p.setFont("Helvetica", 7)
-        p.drawString(x_margen + 5, y_actual - 11, str(item.get('descripcion', ''))[:42])
-        p.drawString(x_margen + 230, y_actual - 11, str(item.get('codigo', 'N/A')))
-        p.drawString(x_margen + 295, y_actual - 11, str(item.get('oc', 'N/A')))
-        p.drawString(x_margen + 380, y_actual - 11, str(item.get('unidad', 'UND')))
-        p.drawString(x_margen + 450, y_actual - 11, f"{item.get('cantidad', 0):,}")
+        p.setFont("Helvetica", 6.5)
+        
+        xc = x_margen
+        p.drawString(xc + 3, y_actual - 11, str(item.get('descripcion', ''))[:38])
+        
+        xc += w_desc
+        p.drawString(xc + 2, y_actual - 11, str(item.get('codigo_producto', 'N/A'))[:15])
+        
+        xc += w_cod
+        p.drawString(xc + 2, y_actual - 11, str(item.get('op', 'N/A'))[:10])
+        
+        xc += w_op
+        p.drawString(xc + 2, y_actual - 11, str(item.get('oc', 'N/A'))[:12])
+        
+        xc += w_oc
+        p.drawString(xc + 2, y_actual - 11, str(item.get('unidad', 'UND'))[:6])
+        
+        xc += w_und
+        cant_val = int(item.get('cantidad', 0))
+        p.drawString(xc + 2, y_actual - 11, f"{cant_val:,}")
+        
+        xc += w_cant
+        val_unit = float(item.get('precio_unitario', 0.0))
+        p.drawString(xc + 2, y_actual - 11, f"${val_unit:,.2f}")
+        
+        xc += w_val
+        iva_pct = float(item.get('iva_porcentaje', 19))
+        p.drawString(xc + 2, y_actual - 11, f"{int(iva_pct)}%")
         
         sub_val = float(item.get('subtotal', 0.0))
+        item_iva = sub_val * (iva_pct / 100.0)
         subtotal_general += sub_val
-        p.drawString(x_margen + 505, y_actual - 11, f"${sub_val:,.2f}")
+        iva_general += item_iva
+        
+        xc += w_iva
+        p.drawString(xc + 2, y_actual - 11, f"${sub_val:,.2f}")
+        
         y_actual -= 16
 
-    iva_general = subtotal_general * 0.19
     total_general = subtotal_general + iva_general
 
     y_actual -= 10
@@ -1271,7 +1330,6 @@ elif rol in ["admin", "produccion"]:
         st.subheader("Dashboard Gerencial de Planta - Control en Tiempo Real")
         
         try:
-            # 💡 CORRECCIÓN CRUCIAl: Filtramos estrictamente los mismos registros limpios que el reporte (con OC válida)
             df_kpi_base = ejecutar_consulta("""
                 SELECT * FROM registro_produccion 
                 WHERE numero_oc IS NOT NULL 
@@ -2062,7 +2120,7 @@ elif rol in ["admin", "produccion"]:
                 obs_remision = st.text_area("Observaciones de la Remisión / Despacho", value="ENTREGA DE PIEZAS TERMINADAS EN PLANTA")
 
                 st.write("---")
-                st.markdown("#### Seleccionar Producción Terminada para Despachar")
+                st.markdown("#### Seleccionar Producción Terminada y Asignar Código / Precio Unitario")
                 
                 prod_registros = ejecutar_consulta("""
                     SELECT id, fecha_registro, numero_oc, referencia, maquina, unidades_producidas 
@@ -2072,12 +2130,26 @@ elif rol in ["admin", "produccion"]:
                 """)
                 
                 if not prod_registros.empty:
-                    prod_registros.insert(0, "Seleccionar", False)
-                    prod_registros['unidades_producidas'] = pd.to_numeric(prod_registros['unidades_producidas'], errors='coerce').fillna(0).astype(int)
+                    # Preparamos las columnas editables para que el usuario asigne manualmente el código, OP, unidad y precio unitario
+                    df_despacho_editable = prod_registros.copy()
+                    df_despacho_editable.insert(0, "Seleccionar", False)
+                    df_despacho_editable['codigo_producto'] = df_despacho_editable['referencia']
+                    df_despacho_editable['op'] = "N/A"
+                    df_despacho_editable['orden_compra_otro'] = df_despacho_editable['numero_oc'].fillna("N/A")
+                    df_despacho_editable['und_medida'] = "UND"
+                    df_despacho_editable['precio_unitario'] = 0.0
+                    df_despacho_editable['iva_porcentaje'] = 19.0
                     
+                    # Buscamos si hay valor unitario configurado en referencias
+                    for idx, row_ref in df_despacho_editable.iterrows():
+                        ref_val = row_ref['referencia']
+                        ref_db_val = ejecutar_consulta("SELECT valor_unitario FROM referencias WHERE codigo = %s", (ref_val,))
+                        if not ref_db_val.empty and pd.notna(ref_db_val.iloc[0]['valor_unitario']):
+                            df_despacho_editable.at[idx, 'precio_unitario'] = float(ref_db_val.iloc[0]['valor_unitario'])
+
                     edited_prod_despacho = st.data_editor(
-                        prod_registros, 
-                        key="editor_despachos_prod", 
+                        df_despacho_editable, 
+                        key="editor_despachos_prod_avanzado", 
                         use_container_width=True, 
                         hide_index=True
                     )
@@ -2085,12 +2157,17 @@ elif rol in ["admin", "produccion"]:
                     filas_seleccionadas = edited_prod_despacho[edited_prod_despacho["Seleccionar"] == True]
                     
                     st.write("---")
-                    st.markdown("#### Envío Adicional de Troquel para Mantenimiento (Manual)")
-                    with st.expander("Agregar Troquel para Mantenimiento"):
-                        troquel_ref = st.text_input("Nombre del Troquel (Misma referencia)")
-                        troquel_oc = st.text_input("OC Asociada o N/A", value="N/A")
+                    st.markdown("#### Envío Adicional de Troquel o Ítem para Mantenimiento (Manual)")
+                    with st.expander("Agregar Troquel o Ítem Adicional"):
+                        troquel_desc = st.text_input("Descripción del Ítem / Troquel", value="SOLO CONFORMADO")
+                        troquel_codigo = st.text_input("Código de Producto", value="N/A")
+                        troquel_op = st.text_input("OP", value="N/A")
+                        troquel_oc = st.text_input("Orden de Compra u Otro", value="N/A")
+                        troquel_und = st.text_input("Unidad de Medida", value="UND")
                         troquel_cant = st.number_input("Cantidad", min_value=1, value=1)
-                        troquel_incluir = st.checkbox("Incluir este troquel en la remisión")
+                        troquel_precio = st.number_input("Precio Unitario ($)", min_value=0.0, step=100.0, value=0.0)
+                        troquel_iva = st.number_input("Porcentaje IVA (%)", min_value=0.0, value=19.0)
+                        troquel_incluir = st.checkbox("Incluir este ítem adicional en la remisión")
                     
                     st.write("---")
                     st.markdown("#### Datos de la Persona que Recibe")
@@ -2117,7 +2194,7 @@ elif rol in ["admin", "produccion"]:
                         if not recibe_nombre_input.strip() or not recibe_cc_input.strip():
                             st.error("Por favor ingrese el nombre y la cédula de la persona que recibe.")
                         elif filas_seleccionadas.empty and not troquel_incluir:
-                            st.warning("Seleccione al menos un registro de producción o un troquel para despachar.")
+                            st.warning("Seleccione al menos un registro de producción o un ítem adicional para despachar.")
                         else:
                             items_finales_despacho = []
                             ids_a_marcar_despachados = []
@@ -2126,35 +2203,46 @@ elif rol in ["admin", "produccion"]:
                                 id_prod_item = int(f_row['id'])
                                 ref_val = f_row['referencia']
                                 cant_val = int(f_row['unidades_producidas'])
-                                oc_val = f_row['numero_oc'] if pd.notna(f_row['numero_oc']) else "N/A"
+                                
+                                # Capturamos los campos editados manualmente por el usuario en la tabla
+                                codigo_manual = str(f_row.get('codigo_producto', ref_val))
+                                op_manual = str(f_row.get('op', 'N/A'))
+                                oc_manual = str(f_row.get('orden_compra_otro', f_row.get('numero_oc', 'N/A')))
+                                und_manual = str(f_row.get('und_medida', 'UND'))
+                                precio_unit_val = float(f_row.get('precio_unitario', 0.0))
+                                iva_pct_val = float(f_row.get('iva_porcentaje', 19.0))
                                 
                                 ids_a_marcar_despachados.append(id_prod_item)
                                 
-                                ref_db = ejecutar_consulta("SELECT valor_unitario, descripcion FROM referencias WHERE codigo = %s", (ref_val,))
-                                val_unit = float(ref_db.iloc[0]['valor_unitario']) if not ref_db.empty and pd.notna(ref_db.iloc[0]['valor_unitario']) else 0.0
+                                ref_db = ejecutar_consulta("SELECT descripcion FROM referencias WHERE codigo = %s", (ref_val,))
                                 desc_ref = ref_db.iloc[0]['descripcion'] if not ref_db.empty and pd.notna(ref_db.iloc[0]['descripcion']) else f"PIEZA {ref_val}"
                                 
-                                subtotal_item = cant_val * val_unit
+                                subtotal_item = cant_val * precio_unit_val
                                 
                                 items_finales_despacho.append({
                                     "descripcion": f"{ref_val} - {desc_ref}",
-                                    "codigo": ref_val,
-                                    "oc": oc_val,
-                                    "unidad": "UND",
+                                    "codigo_producto": codigo_manual,
+                                    "op": op_manual,
+                                    "oc": oc_manual,
+                                    "unidad": und_manual,
                                     "cantidad": cant_val,
-                                    "precio_unitario": val_unit,
+                                    "precio_unitario": precio_unit_val,
+                                    "iva_porcentaje": iva_pct_val,
                                     "subtotal": subtotal_item
                                 })
                             
-                            if troquel_incluir and troquel_ref.strip():
+                            if troquel_incluir and troquel_desc.strip():
+                                subtotal_troquel = int(troquel_cant) * float(troquel_precio)
                                 items_finales_despacho.append({
-                                    "descripcion": f"TROQUEL PARA MANTENIMIENTO: {troquel_ref.strip()}",
-                                    "codigo": troquel_ref.strip(),
-                                    "oc": troquel_oc,
-                                    "unidad": "UND",
+                                    "descripcion": troquel_desc.strip(),
+                                    "codigo_producto": troquel_codigo.strip(),
+                                    "op": troquel_op.strip(),
+                                    "oc": troquel_oc.strip(),
+                                    "unidad": troquel_und.strip(),
                                     "cantidad": int(troquel_cant),
-                                    "precio_unitario": 0.0,
-                                    "subtotal": 0.0
+                                    "precio_unitario": float(troquel_precio),
+                                    "iva_porcentaje": float(troquel_iva),
+                                    "subtotal": subtotal_troquel
                                 })
                             
                             firma_path_temp = None
