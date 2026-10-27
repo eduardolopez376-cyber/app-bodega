@@ -509,7 +509,7 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
     
-    x_margen = 20  # Margen optimizado para que quepan bien las 9 columnas
+    x_margen = 20
     ancho_util = width - 40
     y_actual = height - 35
 
@@ -638,7 +638,6 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.setFillColorRGB(0, 0, 0)
     p.rect(x_margen, y_actual - 18, ancho_util, 18, fill=0, stroke=1)
     
-    # Anchos de las 9 columnas exactas que coinciden con tu formato F-02-02
     w_desc = 135
     w_cod = 60
     w_op = 42
@@ -647,7 +646,7 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     w_cant = 42
     w_val = 65
     w_iva = 32
-    w_sub = 99  # Total ancho_util = 572
+    w_sub = 99
     
     x_col = x_margen
     p.setFont("Helvetica-Bold", 6)
@@ -771,6 +770,10 @@ if "session_token" not in st.session_state:
     st.session_state["session_token"] = None
 if "form_key_counter" not in st.session_state:
     st.session_state["form_key_counter"] = 0
+if "mostrar_pantalla_firma" not in st.session_state:
+    st.session_state["mostrar_pantalla_firma"] = False
+if "datos_firma_temporal" not in st.session_state:
+    st.session_state["datos_firma_temporal"] = None
 
 @st.fragment(run_every=5)
 def validar_sesion_tiempo_real():
@@ -2130,7 +2133,6 @@ elif rol in ["admin", "produccion"]:
                 """)
                 
                 if not prod_registros.empty:
-                    # Preparamos las columnas editables para que el usuario asigne manualmente el código, OP, unidad y precio unitario
                     df_despacho_editable = prod_registros.copy()
                     df_despacho_editable.insert(0, "Seleccionar", False)
                     df_despacho_editable['codigo_producto'] = df_despacho_editable['referencia']
@@ -2140,7 +2142,6 @@ elif rol in ["admin", "produccion"]:
                     df_despacho_editable['precio_unitario'] = 0.0
                     df_despacho_editable['iva_porcentaje'] = 19.0
                     
-                    # Buscamos si hay valor unitario configurado en referencias
                     for idx, row_ref in df_despacho_editable.iterrows():
                         ref_val = row_ref['referencia']
                         ref_db_val = ejecutar_consulta("SELECT valor_unitario FROM referencias WHERE codigo = %s", (ref_val,))
@@ -2177,24 +2178,62 @@ elif rol in ["admin", "produccion"]:
                     with col_f2:
                         recibe_cc_input = st.text_input("Cédula de quien recibe")
                     
-                    st.markdown("#### ✍️ Firma Digital en Pantalla (Firme abajo)")
-                    canvas_result = st_canvas(
-                        fill_color="rgba(255, 165, 0, 0.3)",
-                        stroke_width=2,
-                        stroke_color="#000000",
-                        background_color="#FFFFFF",
-                        height=150,
-                        width=450,
-                        drawing_mode="freedraw",
-                        return_image_data=True,
-                        key="canvas_firma_despacho",
-                    )
+                    st.markdown("#### ✍️ Firma Digital de Quien Recibe")
                     
+                    # 💡 SOLUCIÓN PANTALLA COMPLETA PARA FIRMA TÁCTIL (MÓVIL / TABLET)
+                    if st.session_state["mostrar_pantalla_firma"]:
+                        st.markdown("""
+                            <div style="background-color: rgba(255,122,0,0.15); padding: 15px; border-radius: 10px; border: 2px solid #FF7A00; text-align: center; margin-bottom: 15px;">
+                                <h3 style="color: #FF7A00; margin: 0;">MODO DE FIRMA AMPLIADO (PANTALLA TÁCTIL)</h3>
+                                <p style="color: #ddd; font-size: 0.9rem; margin: 5px 0 0 0;">Firme en el recuadro grande de abajo con el dedo o lápiz y pulse "Guardar y Cerrar Firma".</p>
+                            </div>
+                        """, unsafe_allow_html=True)
+                        
+                        canvas_full = st_canvas(
+                            fill_color="rgba(255, 165, 0, 0.3)",
+                            stroke_width=3,
+                            stroke_color="#000000",
+                            background_color="#FFFFFF",
+                            height=300,
+                            width=700,
+                            drawing_mode="freedraw",
+                            return_image_data=True,
+                            key="canvas_firma_fullscreen",
+                        )
+                        
+                        col_bf1, col_bf2 = st.columns(2)
+                        with col_bf1:
+                            if st.button("Guardar y Cerrar Firma 💾", type="primary", use_container_width=True):
+                                if canvas_full.image_data is not None:
+                                    st.session_state["datos_firma_temporal"] = canvas_full.image_data
+                                st.session_state["mostrar_pantalla_firma"] = False
+                                st.success("¡Firma guardada correctamente!")
+                                st.rerun()
+                        with col_bf2:
+                            if st.button("Cancelar", use_container_width=True):
+                                st.session_state["mostrar_pantalla_firma"] = False
+                                st.rerun()
+                    else:
+                        # Vista miniatura / botón táctil para ampliar
+                        col_s1, col_s2 = st.columns([2, 1])
+                        with col_s1:
+                            if st.session_state.get("datos_firma_temporal") is not None:
+                                st.success("✅ Firma registrada correctamente (Lista para el PDF). Pulse el botón para modificarla.")
+                            else:
+                                st.info("ℹ️ Ninguna firma registrada todavía. Pulse el botón para firmar en pantalla táctil ampliada.")
+                        with col_s2:
+                            if st.button("✍️ Abrir Panel de Firma Táctil", use_container_width=True):
+                                st.session_state["mostrar_pantalla_firma"] = True
+                                st.rerun()
+
+                    st.write("---")
                     if st.button("Generar Remisión F-02-02 (PDF)", type="primary", use_container_width=True):
                         if not recibe_nombre_input.strip() or not recibe_cc_input.strip():
                             st.error("Por favor ingrese el nombre y la cédula de la persona que recibe.")
                         elif filas_seleccionadas.empty and not troquel_incluir:
                             st.warning("Seleccione al menos un registro de producción o un ítem adicional para despachar.")
+                        elif st.session_state.get("datos_firma_temporal") is None:
+                            st.warning("Debe registrar la firma digital de quien recibe antes de generar la remisión.")
                         else:
                             items_finales_despacho = []
                             ids_a_marcar_despachados = []
@@ -2204,7 +2243,6 @@ elif rol in ["admin", "produccion"]:
                                 ref_val = f_row['referencia']
                                 cant_val = int(f_row['unidades_producidas'])
                                 
-                                # Capturamos los campos editados manualmente por el usuario en la tabla
                                 codigo_manual = str(f_row.get('codigo_producto', ref_val))
                                 op_manual = str(f_row.get('op', 'N/A'))
                                 oc_manual = str(f_row.get('orden_compra_otro', f_row.get('numero_oc', 'N/A')))
@@ -2246,15 +2284,14 @@ elif rol in ["admin", "produccion"]:
                                 })
                             
                             firma_path_temp = None
-                            if canvas_result.image_data is not None:
-                                img_arr = canvas_result.image_data
-                                if np.any(img_arr[:, :, 3] > 0):
-                                    os.makedirs("firmas", exist_ok=True)
-                                    firma_path_temp = f"firmas/firma_{num_remision_input}.png"
-                                    pil_img = Image.fromarray(img_arr.astype('uint8'), mode="RGBA")
-                                    background = Image.new("RGB", pil_img.size, (255, 255, 255))
-                                    background.paste(pil_img, mask=pil_img.split()[3])
-                                    background.save(firma_path_temp)
+                            img_arr = st.session_state.get("datos_firma_temporal")
+                            if img_arr is not None:
+                                os.makedirs("firmas", exist_ok=True)
+                                firma_path_temp = f"firmas/firma_{num_remision_input}.png"
+                                pil_img = Image.fromarray(img_arr.astype('uint8'), mode="RGBA")
+                                background = Image.new("RGB", pil_img.size, (255, 255, 255))
+                                background.paste(pil_img, mask=pil_img.split()[3])
+                                background.save(firma_path_temp)
 
                             datos_remision_dict = {
                                 "numero_remision": num_remision_input,
