@@ -534,7 +534,6 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.drawString(x_margen + 115, y_actual - 20, "NIT 902024035 | CALLE 79A NO.16-168 LA ROMELIA, DOSQUEBRADAS")
     p.drawString(x_margen + 115, y_actual - 29, "TELÉFONO +57 310 4368657 | metalycosas@gmail.com")
 
-    # Cabecera superior derecha con REMISION, Código F-02-02 y etiqueta REMISION arriba
     p.rect(width - 150, y_actual - 42, 125, 42, fill=0, stroke=1)
     p.setFont("Helvetica-Bold", 8)
     p.drawCentredString(width - 87.5, y_actual - 8, "REMISION")
@@ -753,7 +752,6 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.drawString(x_margen + 300, y_actual - 12, f"ELABORADO: {datos_remision.get('elaborado', 'Felipe Valdés')}")
     p.drawString(x_margen + 8, y_actual - 28, f"RECIBE: {datos_remision.get('recibe_nombre', '')} - CC: {datos_remision.get('recibe_cc', '')}")
     
-    # Firma con tamaño grande y bien proporcionado sobre la línea
     if firma_img_path and os.path.exists(firma_img_path):
         try:
             p.drawImage(firma_img_path, ancho_util - 220, y_actual - 45, width=220, height=42, preserveAspectRatio=True, mask='auto')
@@ -2213,43 +2211,47 @@ elif rol in ["admin", "produccion"]:
                     
                     st.markdown("#### ✍️ Firma Digital de Quien Recibe")
                     
-                    # EXPANDER DESPLEGABLE SEGURO Y CÓMODO PARA EL PANEL DE FIRMA
-                    with st.expander("🖋️ Abrir Panel de Firma Táctil (Pantalla Completa)", expanded=st.session_state["mostrar_panel_firma"]):
-                        st.markdown("""
-                            <div style="background-color: rgba(255,122,0,0.1); padding: 10px; border-radius: 8px; border: 1px solid #FF7A00; text-align: center; margin-bottom: 10px;">
-                                <strong style="color: #FF7A00;">Dibuja tu firma en el recuadro de abajo con el dedo o lápiz y pulsa OK / Guardar Firma.</strong>
+                    # SECCIÓN DE FIRMA AMPLIA Y CÓMODA (ESTILO MODAL / TARJETA GRANDE)
+                    st.markdown("""
+                        <div style="background: linear-gradient(135deg, #1e1e1e 0%, #2a2a2a 100%); padding: 20px; border-radius: 14px; border: 2px solid #FF7A00; box-shadow: 0 8px 25px rgba(255,122,0,0.25); margin-bottom: 15px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                <span style="font-size: 1.1rem; font-weight: bold; color: #FF7A00;">✍️ Recuadro de Firma Digital (Pantalla Táctil / Mouse)</span>
+                                <span style="font-size: 0.85rem; color: #aaa;">Firma claramente sobre la línea azul</span>
                             </div>
-                        """, unsafe_allow_html=True)
-                        
-                        canvas_full = st_canvas(
-                            fill_color="rgba(255, 165, 0, 0.3)",
-                            stroke_width=5,
-                            stroke_color="#000000",
-                            background_color="#FFFFFF",
-                            height=350,
-                            width=700,
-                            drawing_mode="freedraw",
-                            return_image_data=True,
-                            key="canvas_firma_desplegable_ok",
-                        )
-                        
-                        col_bf1, col_bf2 = st.columns(2)
-                        with col_bf1:
-                            if st.button("✔ OK / Guardar Firma", type="primary", use_container_width=True):
-                                if canvas_full.image_data is not None:
-                                    st.session_state["datos_firma_temporal"] = canvas_full.image_data
-                                st.session_state["mostrar_panel_firma"] = False
-                                st.success("¡Firma guardada correctamente!")
-                                st.rerun()
-                        with col_bf2:
-                            if st.button("❌ Cancelar", use_container_width=True):
-                                st.session_state["mostrar_panel_firma"] = False
-                                st.rerun()
+                    """, unsafe_allow_html=True)
+
+                    # Lienzo de firma ancho y cómodo para celulares y PC (700x350)
+                    canvas_full = st_canvas(
+                        fill_color="rgba(255, 165, 0, 0.2)",
+                        stroke_width=4,
+                        stroke_color="#000000",
+                        background_color="#FFFFFF",
+                        height=320,
+                        width=720,
+                        drawing_mode="freedraw",
+                        return_image_data=True,
+                        key="canvas_firma_amplio_definitivo",
+                    )
+                    
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                    col_bf1, col_bf2 = st.columns(2)
+                    with col_bf1:
+                        if st.button("✔ Aplicar / Guardar Firma", type="primary", use_container_width=True):
+                            if canvas_full.image_data is not None:
+                                st.session_state["datos_firma_temporal"] = canvas_full.image_data
+                            st.success("¡Firma aplicada y guardada correctamente!")
+                            st.rerun()
+                    with col_bf2:
+                        if st.button("🗑️ Limpiar / Borrar trazo", use_container_width=True):
+                            st.session_state["datos_firma_temporal"] = None
+                            st.warning("Firma borrada. Vuelve a dibujar.")
+                            st.rerun()
 
                     if st.session_state.get("datos_firma_temporal") is not None:
-                        st.success("✅ Firma digital registrada con éxito y lista para incluirse en el PDF.")
+                        st.success("✅ Firma digital lista y almacenada en memoria para el PDF.")
                     else:
-                        st.info("ℹ️ Aún no hay ninguna firma guardada. Despliega el panel superior para firmar.")
+                        st.info("ℹ️ Dibuja tu firma en el recuadro superior y presiona 'Aplicar / Guardar Firma'.")
 
                     st.write("---")
                     if st.button("Generar Remisión F-02-02 (PDF)", type="primary", use_container_width=True):
@@ -2258,7 +2260,7 @@ elif rol in ["admin", "produccion"]:
                         elif filas_seleccionadas.empty and not troquel_incluir:
                             st.warning("Seleccione al menos un registro de producción o un ítem adicional para despachar.")
                         elif st.session_state.get("datos_firma_temporal") is None:
-                            st.warning("Debe registrar la firma digital de quien recibe antes de generar la remisión.")
+                            st.warning("Debe registrar y aplicar la firma digital antes de generar la remisión.")
                         else:
                             items_finales_despacho = []
                             ids_a_marcar_despachados = []
