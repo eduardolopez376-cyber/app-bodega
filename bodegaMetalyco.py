@@ -24,7 +24,7 @@ st.set_page_config(
 )
 
 # =====================================================
-# CONFIGURACIÓN DE ESTILOS CSS GLOBALES Y MODAL DE FIRMA
+# CONFIGURACIÓN DE ESTILOS CSS GLOBALES
 # =====================================================
 estilos_css_globales = """
     <style>
@@ -58,22 +58,6 @@ estilos_css_globales = """
             background: linear-gradient(135deg, #ff9124 0%, #FF7A00 100%) !important;
             box-shadow: 0 6px 20px rgba(255, 122, 0, 0.6) !important;
             transform: translateY(-1px) !important;
-        }
-
-        /* Estilo Overlay Pantalla Completa para Firma */
-        .firma-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background-color: rgba(10, 10, 10, 0.95);
-            z-index: 999999;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
         }
 
         .profile-container {
@@ -550,7 +534,7 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.drawString(x_margen + 115, y_actual - 20, "NIT 902024035 | CALLE 79A NO.16-168 LA ROMELIA, DOSQUEBRADAS")
     p.drawString(x_margen + 115, y_actual - 29, "TELÉFONO +57 310 4368657 | metalycosas@gmail.com")
 
-    # Cabecera superior derecha con REMISION y Código F-02-02
+    # Cabecera superior derecha con REMISION, Código F-02-02 y etiqueta REMISION arriba
     p.rect(width - 150, y_actual - 42, 125, 42, fill=0, stroke=1)
     p.setFont("Helvetica-Bold", 8)
     p.drawCentredString(width - 87.5, y_actual - 8, "REMISION")
@@ -795,8 +779,8 @@ if "session_token" not in st.session_state:
     st.session_state["session_token"] = None
 if "form_key_counter" not in st.session_state:
     st.session_state["form_key_counter"] = 0
-if "mostrar_pantalla_firma" not in st.session_state:
-    st.session_state["mostrar_pantalla_firma"] = False
+if "mostrar_panel_firma" not in st.session_state:
+    st.session_state["mostrar_panel_firma"] = False
 if "datos_firma_temporal" not in st.session_state:
     st.session_state["datos_firma_temporal"] = None
 
@@ -2229,27 +2213,24 @@ elif rol in ["admin", "produccion"]:
                     
                     st.markdown("#### ✍️ Firma Digital de Quien Recibe")
                     
-                    # LOGICA DE PANTALLA COMPLETA REAL PARA LA FIRMA
-                    if st.session_state["mostrar_pantalla_firma"]:
-                        st.markdown('<div class="firma-overlay">', unsafe_allow_html=True)
+                    # EXPANDER DESPLEGABLE SEGURO Y CÓMODO PARA EL PANEL DE FIRMA
+                    with st.expander("🖋️ Abrir Panel de Firma Táctil (Pantalla Completa)", expanded=st.session_state["mostrar_panel_firma"]):
                         st.markdown("""
-                            <div style="text-align: center; margin-bottom: 10px;">
-                                <h2 style="color: #FF7A00; margin: 0;">PANEL DE FIRMA TÁCTIL (PANTALLA COMPLETA)</h2>
-                                <p style="color: #ccc; font-size: 1rem; margin: 5px 0 0 0;">Firme con su dedo o lápiz en el recuadro y pulse el botón de OK / Guardar.</p>
+                            <div style="background-color: rgba(255,122,0,0.1); padding: 10px; border-radius: 8px; border: 1px solid #FF7A00; text-align: center; margin-bottom: 10px;">
+                                <strong style="color: #FF7A00;">Dibuja tu firma en el recuadro de abajo con el dedo o lápiz y pulsa OK / Guardar Firma.</strong>
                             </div>
                         """, unsafe_allow_html=True)
                         
-                        # Lienzo táctil grande y cómodo para celular y PC
                         canvas_full = st_canvas(
                             fill_color="rgba(255, 165, 0, 0.3)",
                             stroke_width=5,
                             stroke_color="#000000",
                             background_color="#FFFFFF",
-                            height=380,
-                            width=min(1000, int(st.session_state.get('window_width', 900))),
+                            height=350,
+                            width=700,
                             drawing_mode="freedraw",
                             return_image_data=True,
-                            key="canvas_firma_fullscreen_true",
+                            key="canvas_firma_desplegable_ok",
                         )
                         
                         col_bf1, col_bf2 = st.columns(2)
@@ -2257,25 +2238,18 @@ elif rol in ["admin", "produccion"]:
                             if st.button("✔ OK / Guardar Firma", type="primary", use_container_width=True):
                                 if canvas_full.image_data is not None:
                                     st.session_state["datos_firma_temporal"] = canvas_full.image_data
-                                st.session_state["mostrar_pantalla_firma"] = False
+                                st.session_state["mostrar_panel_firma"] = False
                                 st.success("¡Firma guardada correctamente!")
                                 st.rerun()
                         with col_bf2:
                             if st.button("❌ Cancelar", use_container_width=True):
-                                st.session_state["mostrar_pantalla_firma"] = False
+                                st.session_state["mostrar_panel_firma"] = False
                                 st.rerun()
-                        st.markdown('</div>', unsafe_allow_html=True)
+
+                    if st.session_state.get("datos_firma_temporal") is not None:
+                        st.success("✅ Firma digital registrada con éxito y lista para incluirse en el PDF.")
                     else:
-                        col_s1, col_s2 = st.columns([2, 1])
-                        with col_s1:
-                            if st.session_state.get("datos_firma_temporal") is not None:
-                                st.success("✅ Firma registrada correctamente (Lista para el PDF). Pulse el botón para modificarla.")
-                            else:
-                                st.info("ℹ️ Ninguna firma registrada todavía. Pulse el botón para abrir el panel de firma a pantalla completa.")
-                        with col_s2:
-                            if st.button("✍️ Abrir Panel de Firma Táctil", use_container_width=True):
-                                st.session_state["mostrar_pantalla_firma"] = True
-                                st.rerun()
+                        st.info("ℹ️ Aún no hay ninguna firma guardada. Despliega el panel superior para firmar.")
 
                     st.write("---")
                     if st.button("Generar Remisión F-02-02 (PDF)", type="primary", use_container_width=True):
