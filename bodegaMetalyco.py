@@ -24,7 +24,7 @@ st.set_page_config(
 )
 
 # =====================================================
-# CONFIGURACIÓN DE ESTILOS CSS GLOBALES Y MENÚ LATERAL
+# CONFIGURACIÓN DE ESTILOS CSS GLOBALES Y MODAL DE FIRMA
 # =====================================================
 estilos_css_globales = """
     <style>
@@ -58,6 +58,22 @@ estilos_css_globales = """
             background: linear-gradient(135deg, #ff9124 0%, #FF7A00 100%) !important;
             box-shadow: 0 6px 20px rgba(255, 122, 0, 0.6) !important;
             transform: translateY(-1px) !important;
+        }
+
+        /* Estilo Overlay Pantalla Completa para Firma */
+        .firma-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(10, 10, 10, 0.95);
+            z-index: 999999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
         }
 
         .profile-container {
@@ -511,7 +527,6 @@ def generar_pdf_f01_01(datos):
 
 def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=None):
     buffer = io.BytesIO()
-    # Orientación horizontal (Landscape)
     p = canvas.Canvas(buffer, pagesize=landscape(letter))
     width, height = landscape(letter)
     
@@ -535,7 +550,7 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.drawString(x_margen + 115, y_actual - 20, "NIT 902024035 | CALLE 79A NO.16-168 LA ROMELIA, DOSQUEBRADAS")
     p.drawString(x_margen + 115, y_actual - 29, "TELÉFONO +57 310 4368657 | metalycosas@gmail.com")
 
-    # Cuadro superior derecho con etiqueta REMISION añadida arriba de Código
+    # Cabecera superior derecha con REMISION y Código F-02-02
     p.rect(width - 150, y_actual - 42, 125, 42, fill=0, stroke=1)
     p.setFont("Helvetica-Bold", 8)
     p.drawCentredString(width - 87.5, y_actual - 8, "REMISION")
@@ -748,20 +763,20 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.drawString(x_margen + 415, y_actual - 40, f"TOTAL: ${total_general:,.2f}")
 
     y_actual -= 55
-    p.rect(x_margen, y_actual - 45, ancho_util, 45, fill=0, stroke=1)
+    p.rect(x_margen, y_actual - 52, ancho_util, 52, fill=0, stroke=1)
     p.setFont("Helvetica-Bold", 7.5)
     p.drawString(x_margen + 8, y_actual - 12, f"SOLICITADO: {datos_remision.get('elaborado', 'Felipe Valdés')}")
     p.drawString(x_margen + 300, y_actual - 12, f"ELABORADO: {datos_remision.get('elaborado', 'Felipe Valdés')}")
     p.drawString(x_margen + 8, y_actual - 28, f"RECIBE: {datos_remision.get('recibe_nombre', '')} - CC: {datos_remision.get('recibe_cc', '')}")
     
-    # Firma con tamaño mucho más grande y proporcionado para landscape
+    # Firma con tamaño grande y bien proporcionado sobre la línea
     if firma_img_path and os.path.exists(firma_img_path):
         try:
-            p.drawImage(firma_img_path, ancho_util - 160, y_actual - 38, width=160, height=34, preserveAspectRatio=True, mask='auto')
+            p.drawImage(firma_img_path, ancho_util - 220, y_actual - 45, width=220, height=42, preserveAspectRatio=True, mask='auto')
         except:
             pass
-    p.drawString(ancho_util - 180, y_actual - 38, "________________________________________")
-    p.drawString(ancho_util - 180, y_actual - 45, "Firma de quien recibe conforme")
+    p.drawString(ancho_util - 240, y_actual - 42, "_________________________________________________")
+    p.drawString(ancho_util - 240, y_actual - 50, "Firma de quien recibe conforme")
 
     p.showPage()
     p.save()
@@ -2214,48 +2229,51 @@ elif rol in ["admin", "produccion"]:
                     
                     st.markdown("#### ✍️ Firma Digital de Quien Recibe")
                     
+                    # LOGICA DE PANTALLA COMPLETA REAL PARA LA FIRMA
                     if st.session_state["mostrar_pantalla_firma"]:
+                        st.markdown('<div class="firma-overlay">', unsafe_allow_html=True)
                         st.markdown("""
-                            <div style="background-color: rgba(255,122,0,0.15); padding: 15px; border-radius: 10px; border: 2px solid #FF7A00; text-align: center; margin-bottom: 15px;">
-                                <h3 style="color: #FF7A00; margin: 0;">MODO DE FIRMA PANTALLA COMPLETA</h3>
-                                <p style="color: #ddd; font-size: 0.95rem; margin: 5px 0 0 0;">Firme con su dedo o lápiz en el recuadro y pulse "Guardar y Cerrar Firma".</p>
+                            <div style="text-align: center; margin-bottom: 10px;">
+                                <h2 style="color: #FF7A00; margin: 0;">PANEL DE FIRMA TÁCTIL (PANTALLA COMPLETA)</h2>
+                                <p style="color: #ccc; font-size: 1rem; margin: 5px 0 0 0;">Firme con su dedo o lápiz en el recuadro y pulse el botón de OK / Guardar.</p>
                             </div>
                         """, unsafe_allow_html=True)
                         
-                        # Panel de firma táctil ampliado (ocupa gran parte de la pantalla)
+                        # Lienzo táctil grande y cómodo para celular y PC
                         canvas_full = st_canvas(
                             fill_color="rgba(255, 165, 0, 0.3)",
-                            stroke_width=4,
+                            stroke_width=5,
                             stroke_color="#000000",
                             background_color="#FFFFFF",
-                            height=450,
-                            width=1100,
+                            height=380,
+                            width=min(1000, int(st.session_state.get('window_width', 900))),
                             drawing_mode="freedraw",
                             return_image_data=True,
-                            key="canvas_firma_fullscreen_opt",
+                            key="canvas_firma_fullscreen_true",
                         )
                         
                         col_bf1, col_bf2 = st.columns(2)
                         with col_bf1:
-                            if st.button("Guardar y Cerrar Firma 💾", type="primary", use_container_width=True):
+                            if st.button("✔ OK / Guardar Firma", type="primary", use_container_width=True):
                                 if canvas_full.image_data is not None:
                                     st.session_state["datos_firma_temporal"] = canvas_full.image_data
                                 st.session_state["mostrar_pantalla_firma"] = False
                                 st.success("¡Firma guardada correctamente!")
                                 st.rerun()
                         with col_bf2:
-                            if st.button("Cancelar", use_container_width=True):
+                            if st.button("❌ Cancelar", use_container_width=True):
                                 st.session_state["mostrar_pantalla_firma"] = False
                                 st.rerun()
+                        st.markdown('</div>', unsafe_allow_html=True)
                     else:
                         col_s1, col_s2 = st.columns([2, 1])
                         with col_s1:
                             if st.session_state.get("datos_firma_temporal") is not None:
                                 st.success("✅ Firma registrada correctamente (Lista para el PDF). Pulse el botón para modificarla.")
                             else:
-                                st.info("ℹ️ Ninguna firma registrada todavía. Pulse el botón para abrir el panel de firma en pantalla completa.")
+                                st.info("ℹ️ Ninguna firma registrada todavía. Pulse el botón para abrir el panel de firma a pantalla completa.")
                         with col_s2:
-                            if st.button("✍️ Abrir Panel de Firma Táctil (Pantalla Completa)", use_container_width=True):
+                            if st.button("✍️ Abrir Panel de Firma Táctil", use_container_width=True):
                                 st.session_state["mostrar_pantalla_firma"] = True
                                 st.rerun()
 
