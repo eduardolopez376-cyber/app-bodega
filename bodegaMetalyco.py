@@ -178,6 +178,12 @@ def ejecutar_comando(query, params=None):
 
 def inicializar_tablas_sistema():
     try:
+        # Quitamos la restricción unique de referencias para permitir el mismo código con diferentes procesos
+        try:
+            ejecutar_comando("ALTER TABLE referencias DROP CONSTRAINT IF EXISTS referencias_codigo_key;")
+        except:
+            pass
+
         ejecutar_comando("""
             CREATE TABLE IF NOT EXISTS clientes (
                 id SERIAL PRIMARY KEY,
@@ -1808,36 +1814,49 @@ elif rol in ["admin", "produccion"]:
     elif menu_limpio == "Referencias":
         st.subheader("Gestión de Referencias (Catálogo Base)")
         try:
-            df_refs = ejecutar_consulta("SELECT * FROM referencias")
+            # Quitamos la restricción unique de referencias para permitir códigos repetidos exactos con diferentes procesos
+            try:
+                ejecutar_comando("ALTER TABLE referencias DROP CONSTRAINT IF EXISTS referencias_codigo_key;")
+            except:
+                pass
+
+            df_refs = ejecutar_consulta("SELECT id, codigo, descripcion, cliente, valor_unitario FROM referencias ORDER BY id DESC")
             clientes_raw = ejecutar_consulta("SELECT nombre FROM clientes")['nombre'].tolist() if not ejecutar_consulta("SELECT nombre FROM clientes").empty else []
             lista_clientes = ["-- Seleccione Cliente --"] + clientes_raw
             
             with st.expander("Crear Referencia", expanded=False):
                 with st.form("form_crear_ref", clear_on_submit=True):
-                    r_cod = st.text_input("Código Referencia (Ej: REF-001)")
-                    r_desc = st.text_input("Descripción del Producto")
+                    r_cod = st.text_input("Código de Referencia (Ej: INCOLAMKRH01)")
+                    r_desc = st.text_input("Descripción / Proceso (Ej: SOLO CONFORMADO o TROQUELADO)")
                     r_cliente = st.selectbox("Cliente Asociado", lista_clientes, index=0)
                     r_valor_unit = st.number_input("Valor Unitario de la Pieza ($)", min_value=0.0, step=100.0, value=0.0)
                     
                     if st.form_submit_button("Guardar", type="primary", use_container_width=True):
                         if r_cod.strip() and r_cliente != "-- Seleccione Cliente --":
-                            ejecutar_comando("INSERT INTO referencias (codigo, descripcion, cliente, valor_unitario) VALUES (%s, %s, %s, %s)", (r_cod.upper().strip(), r_desc, r_cliente, r_valor_unit))
-                            st.success("Referencia guardada.")
+                            ejecutar_comando(
+                                "INSERT INTO referencias (codigo, descripcion, cliente, valor_unitario) VALUES (%s, %s, %s, %s)", 
+                                (r_cod.upper().strip(), r_desc.upper().strip(), r_cliente, r_valor_unit)
+                            )
+                            st.success("¡Referencia guardada con éxito!")
                             st.rerun()
 
             if not df_refs.empty:
                 df_refs_view = df_refs.copy()
                 df_refs_view.insert(0, "Seleccionar", False)
                 edited_refs = st.data_editor(df_refs_view, key="editor_refs_mult", use_container_width=True, hide_index=True)
-                codigos_a_borrar_ref = edited_refs[edited_refs["Seleccionar"] == True]["codigo"].tolist()
-                if st.button("Eliminar", type="primary"):
-                    if codigos_a_borrar_ref:
-                        for r_cod_item in codigos_a_borrar_ref:
-                            ejecutar_comando("DELETE FROM referencias WHERE codigo = %s", (r_cod_item,))
-                        st.success("Referencias eliminadas.")
+                
+                ids_a_borrar_ref = edited_refs[edited_refs["Seleccionar"] == True]["id"].tolist()
+                
+                if st.button("Eliminar Referencia(s) Seleccionada(s)", type="primary"):
+                    if ids_a_borrar_ref:
+                        for r_id_item in ids_a_borrar_ref:
+                            ejecutar_comando("DELETE FROM referencias WHERE id = %s", (int(r_id_item),))
+                        st.success("Referencia(s) eliminada(s) con éxito.")
                         st.rerun()
+                    else:
+                        st.warning("Selecciona al menos una referencia en la casilla de la izquierda para eliminar.")
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"Error en referencias: {e}")
 
     elif menu_limpio == "Reportes":
         st.subheader("Centro de Reportes Gerenciales y de Producción")
@@ -2180,7 +2199,6 @@ elif rol in ["admin", "produccion"]:
                     
                     st.markdown("#### ✍️ Firma Digital de Quien Recibe")
                     
-                    # 💡 SOLUCIÓN PANTALLA COMPLETA PARA FIRMA TÁCTIL (MÓVIL / TABLET)
                     if st.session_state["mostrar_pantalla_firma"]:
                         st.markdown("""
                             <div style="background-color: rgba(255,122,0,0.15); padding: 15px; border-radius: 10px; border: 2px solid #FF7A00; text-align: center; margin-bottom: 15px;">
@@ -2214,7 +2232,6 @@ elif rol in ["admin", "produccion"]:
                                 st.session_state["mostrar_pantalla_firma"] = False
                                 st.rerun()
                     else:
-                        # Vista miniatura / botón táctil para ampliar
                         col_s1, col_s2 = st.columns([2, 1])
                         with col_s1:
                             if st.session_state.get("datos_firma_temporal") is not None:
