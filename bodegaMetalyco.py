@@ -2211,26 +2211,26 @@ elif rol in ["admin", "produccion"]:
                     
                     st.markdown("#### ✍️ Firma Digital de Quien Recibe")
                     
-                    # SECCIÓN DE FIRMA AMPLIA Y CÓMODA (ESTILO MODAL / TARJETA GRANDE)
+                    # PANEL DE FIRMA AMPLIO Y ACOPLADO AL ANCHO TOTAL DE LA PANTALLA
                     st.markdown("""
-                        <div style="background: linear-gradient(135deg, #1e1e1e 0%, #2a2a2a 100%); padding: 20px; border-radius: 14px; border: 2px solid #FF7A00; box-shadow: 0 8px 25px rgba(255,122,0,0.25); margin-bottom: 15px;">
+                        <div style="background: linear-gradient(135deg, #1e1e1e 0%, #2a2a2a 100%); padding: 20px; border-radius: 14px; border: 2px solid #FF7A00; box-shadow: 0 8px 25px rgba(255,122,0,0.25); margin-bottom: 15px; width: 100%;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                                <span style="font-size: 1.1rem; font-weight: bold; color: #FF7A00;">✍️ Recuadro de Firma Digital (Pantalla Táctil / Mouse)</span>
-                                <span style="font-size: 0.85rem; color: #aaa;">Firma claramente sobre la línea azul</span>
+                                <span style="font-size: 1.1rem; font-weight: bold; color: #FF7A00;">✍️ Recuadro de Firma Digital (Pantalla Táctil / Ancho Completo)</span>
+                                <span style="font-size: 0.85rem; color: #aaa;">Firma con comodidad en cualquier dispositivo</span>
                             </div>
                     """, unsafe_allow_html=True)
 
-                    # Lienzo de firma ancho y cómodo para celulares y PC (700x350)
+                    # Lienzo ancho (750 píxeles, adaptándose fluidamente al ancho del contenedor)
                     canvas_full = st_canvas(
                         fill_color="rgba(255, 165, 0, 0.2)",
                         stroke_width=4,
                         stroke_color="#000000",
                         background_color="#FFFFFF",
                         height=320,
-                        width=720,
+                        width=750,
                         drawing_mode="freedraw",
                         return_image_data=True,
-                        key="canvas_firma_amplio_definitivo",
+                        key="canvas_firma_ancho_completo_v3",
                     )
                     
                     st.markdown("</div>", unsafe_allow_html=True)
