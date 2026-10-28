@@ -2209,49 +2209,16 @@ elif rol in ["admin", "produccion"]:
                     with col_f2:
                         recibe_cc_input = st.text_input("Cédula de quien recibe")
                     
-                    st.markdown("#### ✍️ Firma Digital de Quien Recibe")
+                    st.markdown("#### ✍️ Firma Digital de Quien Recibe (Modal)")
                     
-                    # PANEL DE FIRMA AMPLIO Y ACOPLADO AL ANCHO TOTAL DE LA PANTALLA
-                    st.markdown("""
-                        <div style="background: linear-gradient(135deg, #1e1e1e 0%, #2a2a2a 100%); padding: 20px; border-radius: 14px; border: 2px solid #FF7A00; box-shadow: 0 8px 25px rgba(255,122,0,0.25); margin-bottom: 15px; width: 100%;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                                <span style="font-size: 1.1rem; font-weight: bold; color: #FF7A00;">✍️ Recuadro de Firma Digital (Pantalla Táctil / Ancho Completo)</span>
-                                <span style="font-size: 0.85rem; color: #aaa;">Firma con comodidad en cualquier dispositivo</span>
-                            </div>
-                    """, unsafe_allow_html=True)
-
-                    # Lienzo ancho (750 píxeles, adaptándose fluidamente al ancho del contenedor)
-                    canvas_full = st_canvas(
-                        fill_color="rgba(255, 165, 0, 0.2)",
-                        stroke_width=4,
-                        stroke_color="#000000",
-                        background_color="#FFFFFF",
-                        height=320,
-                        width=750,
-                        drawing_mode="freedraw",
-                        return_image_data=True,
-                        key="canvas_firma_ancho_completo_v3",
-                    )
-                    
-                    st.markdown("</div>", unsafe_allow_html=True)
-
-                    col_bf1, col_bf2 = st.columns(2)
-                    with col_bf1:
-                        if st.button("✔ Aplicar / Guardar Firma", type="primary", use_container_width=True):
-                            if canvas_full.image_data is not None:
-                                st.session_state["datos_firma_temporal"] = canvas_full.image_data
-                            st.success("¡Firma aplicada y guardada correctamente!")
-                            st.rerun()
-                    with col_bf2:
-                        if st.button("🗑️ Limpiar / Borrar trazo", use_container_width=True):
-                            st.session_state["datos_firma_temporal"] = None
-                            st.warning("Firma borrada. Vuelve a dibujar.")
-                            st.rerun()
+                    # Botón para abrir la ventana modal de firma estilo referencia
+                    if st.button("🖊️ Abrir Panel de Firma Digital", type="primary", use_container_width=True):
+                        modal_firma_digital()
 
                     if st.session_state.get("datos_firma_temporal") is not None:
-                        st.success("✅ Firma digital lista y almacenada en memoria para el PDF.")
+                        st.success("✅ Firma digital cargada y lista para incluirse en el PDF de remisión.")
                     else:
-                        st.info("ℹ️ Dibuja tu firma en el recuadro superior y presiona 'Aplicar / Guardar Firma'.")
+                        st.info("ℹ️ Pulsa el botón superior para abrir el panel de firma y firmar de manera cómoda.")
 
                     st.write("---")
                     if st.button("Generar Remisión F-02-02 (PDF)", type="primary", use_container_width=True):
