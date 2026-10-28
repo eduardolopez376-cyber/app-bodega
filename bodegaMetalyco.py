@@ -178,7 +178,7 @@ def ejecutar_comando(query, params=None):
 
 def inicializar_tablas_sistema():
     try:
-        # Quitamos la restricción unique de referencias para permitir el mismo código con diferentes procesos
+        # Quitamos la restricción unique de referencias para permitir el mismo código exacto con diferentes procesos
         try:
             ejecutar_comando("ALTER TABLE referencias DROP CONSTRAINT IF EXISTS referencias_codigo_key;")
         except:
@@ -1707,11 +1707,22 @@ elif rol in ["admin", "produccion"]:
     elif menu_limpio == "Órdenes Compra":
         st.subheader("Gestion de OC")
         try:
-            refs_raw = ejecutar_consulta("SELECT codigo FROM referencias")['codigo'].tolist() if not ejecutar_consulta("SELECT codigo FROM referencias").empty else []
+            # Consultamos tanto el código como la descripción para mostrarlas unificadas en el selector
+            refs_db_raw = ejecutar_consulta("SELECT codigo, descripcion FROM referencias")
+            
+            lista_refs_mostrar = ["-- Seleccione Referencia --"]
+            mapa_refs = {}
+            if not refs_db_raw.empty:
+                for _, r_row in refs_db_raw.iterrows():
+                    c_ref = str(r_row['codigo'])
+                    d_ref = str(r_row['descripcion'])
+                    texto_opcion = f"{c_ref} — {d_ref}"
+                    lista_refs_mostrar.append(texto_opcion)
+                    mapa_refs[texto_opcion] = c_ref
+
             serv_raw = ejecutar_consulta("SELECT nombre FROM servicios_prestados")['nombre'].tolist() if not ejecutar_consulta("SELECT nombre FROM servicios_prestados").empty else []
             clientes_raw = ejecutar_consulta("SELECT nombre FROM clientes")['nombre'].tolist() if not ejecutar_consulta("SELECT nombre FROM clientes").empty else []
             
-            lista_refs = ["-- Seleccione Referencia --"] + refs_raw
             lista_servicios = ["-- Seleccione Servicio --"] + (serv_raw if serv_raw else [])
             lista_clientes = ["-- Seleccione Cliente --"] + clientes_raw
             
@@ -1719,20 +1730,22 @@ elif rol in ["admin", "produccion"]:
                 with st.form("form_crear_oc", clear_on_submit=True):
                     num_oc = st.text_input("Número de Orden de Compra (Ej: OC-9021)")
                     cliente_oc = st.selectbox("Cliente Asociado", lista_clientes, index=0)
-                    ref_oc = st.selectbox("Referencia Base", lista_refs, index=0)
+                    ref_seleccionada_ui = st.selectbox("Referencia Base (Código y Proceso)", lista_refs_mostrar, index=0)
                     servicio_oc = st.selectbox("Servicio Prestado", lista_servicios, index=0)
                     meta_oc = st.number_input("Cantidad Total Pedida", min_value=1, value=100)
                     
                     if st.form_submit_button("Guardar", type="primary", use_container_width=True):
-                        if not num_oc.strip() or cliente_oc == "-- Seleccione Cliente --" or ref_oc == "-- Seleccione Referencia --" or servicio_oc == "-- Seleccione Servicio --":
+                        if not num_oc.strip() or cliente_oc == "-- Seleccione Cliente --" or ref_seleccionada_ui == "-- Seleccione Referencia --" or servicio_oc == "-- Seleccione Servicio --":
                             st.error("Completa todos los campos obligatorios.")
                         else:
+                            ref_oc_limpia = mapa_refs.get(ref_seleccionada_ui, ref_seleccionada_ui)
+                            
                             ej_fecha = (datetime.utcnow() - timedelta(hours=5)).strftime('%Y-%m-%d')
                             ejecutar_comando(
                                 """INSERT INTO ordenes_compra 
                                 (numero_oc, cliente, referencia, servicio, requiere_unidades, meta_unidades, unidades_entregadas, estado, fecha_registro) 
                                 VALUES (%s, %s, %s, %s, TRUE, %s, 0, 'PENDIENTE', %s::date)""",
-                                (num_oc.upper().strip(), cliente_oc, ref_oc, servicio_oc, meta_oc, ej_fecha)
+                                (num_oc.upper().strip(), cliente_oc, ref_oc_limpia, servicio_oc, meta_oc, ej_fecha)
                             )
                             st.success(f"Orden de Compra #{num_oc} registrada con éxito.")
                             st.rerun()
@@ -1814,7 +1827,6 @@ elif rol in ["admin", "produccion"]:
     elif menu_limpio == "Referencias":
         st.subheader("Gestión de Referencias (Catálogo Base)")
         try:
-            # Quitamos la restricción unique de referencias para permitir códigos repetidos exactos con diferentes procesos
             try:
                 ejecutar_comando("ALTER TABLE referencias DROP CONSTRAINT IF EXISTS referencias_codigo_key;")
             except:
