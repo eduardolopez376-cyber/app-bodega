@@ -8,7 +8,7 @@ import urllib.parse
 import base64
 import uuid
 from datetime import datetime, time, date, timedelta
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import letter, landscape
 from reportlab.pdfgen import canvas
 import plotly.express as px
 import plotly.graph_objects as go
@@ -178,7 +178,6 @@ def ejecutar_comando(query, params=None):
 
 def inicializar_tablas_sistema():
     try:
-        # Quitamos la restricción unique de referencias para permitir el mismo código exacto con diferentes procesos
         try:
             ejecutar_comando("ALTER TABLE referencias DROP CONSTRAINT IF EXISTS referencias_codigo_key;")
         except:
@@ -512,11 +511,12 @@ def generar_pdf_f01_01(datos):
 
 def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=None):
     buffer = io.BytesIO()
-    p = canvas.Canvas(buffer, pagesize=letter)
-    width, height = letter
+    # Orientación horizontal (Landscape)
+    p = canvas.Canvas(buffer, pagesize=landscape(letter))
+    width, height = landscape(letter)
     
-    x_margen = 20
-    ancho_util = width - 40
+    x_margen = 25
+    ancho_util = width - 50
     y_actual = height - 35
 
     if LOGO_PATH and os.path.exists(LOGO_PATH):
@@ -535,14 +535,17 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.drawString(x_margen + 115, y_actual - 20, "NIT 902024035 | CALLE 79A NO.16-168 LA ROMELIA, DOSQUEBRADAS")
     p.drawString(x_margen + 115, y_actual - 29, "TELÉFONO +57 310 4368657 | metalycosas@gmail.com")
 
-    p.rect(width - 130, y_actual - 35, 110, 35, fill=0, stroke=1)
+    # Cuadro superior derecho con etiqueta REMISION añadida arriba de Código
+    p.rect(width - 150, y_actual - 42, 125, 42, fill=0, stroke=1)
+    p.setFont("Helvetica-Bold", 8)
+    p.drawCentredString(width - 87.5, y_actual - 8, "REMISION")
     p.setFont("Helvetica", 7.5)
-    p.drawString(width - 122, y_actual - 12, "Código: F-02-02")
-    p.drawString(width - 122, y_actual - 24, "Versión: 1")
+    p.drawString(width - 142, y_actual - 19, "Código: F-02-02")
+    p.drawString(width - 142, y_actual - 29, "Versión: 1")
     p.setFont("Helvetica-Bold", 8.5)
-    p.drawCentredString(width - 75, y_actual - 33, f"NÚMERO: {datos_remision.get('numero_remision', 'S/N')}")
+    p.drawCentredString(width - 87.5, y_actual - 39, f"NÚMERO: {datos_remision.get('numero_remision', 'S/N')}")
 
-    y_actual -= 45
+    y_actual -= 50
     p.setLineWidth(0.75)
     p.line(x_margen, y_actual, width - x_margen, y_actual)
 
@@ -581,9 +584,9 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.drawString(x_margen + 130, y_actual - y_offset, f"{nit_limpio}")
     
     p.setFont("Helvetica-Bold", 7.5)
-    p.drawString(x_margen + 340, y_actual - y_offset, "FECHA DESPACHO:")
+    p.drawString(x_margen + 450, y_actual - y_offset, "FECHA DESPACHO:")
     p.setFont("Helvetica", 7.5)
-    p.drawString(x_margen + 430, y_actual - y_offset, f"{datos_remision.get('fecha_despacho', '')}")
+    p.drawString(x_margen + 540, y_actual - y_offset, f"{datos_remision.get('fecha_despacho', '')}")
 
     y_offset += espacio_linea
     p.setFont("Helvetica-Bold", 7.5)
@@ -644,18 +647,18 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.setFillColorRGB(0, 0, 0)
     p.rect(x_margen, y_actual - 18, ancho_util, 18, fill=0, stroke=1)
     
-    w_desc = 135
-    w_cod = 60
-    w_op = 42
-    w_oc = 55
-    w_und = 42
-    w_cant = 42
-    w_val = 65
-    w_iva = 32
-    w_sub = 99
+    w_desc = 210
+    w_cod = 95
+    w_op = 60
+    w_oc = 75
+    w_und = 55
+    w_cant = 60
+    w_val = 90
+    w_iva = 50
+    w_sub = ancho_util - (w_desc + w_cod + w_op + w_oc + w_und + w_cant + w_val + w_iva)
     
     x_col = x_margen
-    p.setFont("Helvetica-Bold", 6)
+    p.setFont("Helvetica-Bold", 6.5)
     p.drawString(x_col + 3, y_actual - 12, "DESCRIPCIÓN PRODUCTO")
     
     x_col += w_desc
@@ -688,22 +691,22 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
 
     for item in items_despacho:
         p.rect(x_margen, y_actual - 16, ancho_util, 16, fill=0, stroke=1)
-        p.setFont("Helvetica", 6.5)
+        p.setFont("Helvetica", 7)
         
         xc = x_margen
-        p.drawString(xc + 3, y_actual - 11, str(item.get('descripcion', ''))[:38])
+        p.drawString(xc + 3, y_actual - 11, str(item.get('descripcion', ''))[:60])
         
         xc += w_desc
-        p.drawString(xc + 2, y_actual - 11, str(item.get('codigo_producto', 'N/A'))[:15])
+        p.drawString(xc + 2, y_actual - 11, str(item.get('codigo_producto', 'N/A'))[:25])
         
         xc += w_cod
-        p.drawString(xc + 2, y_actual - 11, str(item.get('op', 'N/A'))[:10])
+        p.drawString(xc + 2, y_actual - 11, str(item.get('op', 'N/A'))[:15])
         
         xc += w_op
-        p.drawString(xc + 2, y_actual - 11, str(item.get('oc', 'N/A'))[:12])
+        p.drawString(xc + 2, y_actual - 11, str(item.get('oc', 'N/A'))[:18])
         
         xc += w_oc
-        p.drawString(xc + 2, y_actual - 11, str(item.get('unidad', 'UND'))[:6])
+        p.drawString(xc + 2, y_actual - 11, str(item.get('unidad', 'UND'))[:8])
         
         xc += w_und
         cant_val = int(item.get('cantidad', 0))
@@ -730,34 +733,35 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     total_general = subtotal_general + iva_general
 
     y_actual -= 10
-    p.rect(x_margen, y_actual - 45, 300, 45, fill=0, stroke=1)
-    p.setFont("Helvetica-Bold", 7)
+    p.rect(x_margen, y_actual - 45, 400, 45, fill=0, stroke=1)
+    p.setFont("Helvetica-Bold", 7.5)
     p.drawString(x_margen + 6, y_actual - 10, "NOTAS Y CONDICIONES LOGÍSTICAS:")
-    p.setFont("Helvetica", 6.5)
+    p.setFont("Helvetica", 7)
     p.drawString(x_margen + 6, y_actual - 22, "- Horario de despachos: Lunes a Viernes 6:00 am a 2:00 pm.")
     p.drawString(x_margen + 6, y_actual - 33, f"- Observaciones: {datos_remision.get('observaciones', 'Ninguna')}")
 
-    p.rect(x_margen + 305, y_actual - 45, ancho_util - 305, 45, fill=0, stroke=1)
-    p.setFont("Helvetica-Bold", 7.5)
-    p.drawString(x_margen + 315, y_actual - 12, f"SUBTOTAL: ${subtotal_general:,.2f}")
-    p.drawString(x_margen + 315, y_actual - 26, f"IVA (19%): ${iva_general:,.2f}")
-    p.setFont("Helvetica-Bold", 8.5)
-    p.drawString(x_margen + 315, y_actual - 40, f"TOTAL: ${total_general:,.2f}")
+    p.rect(x_margen + 405, y_actual - 45, ancho_util - 405, 45, fill=0, stroke=1)
+    p.setFont("Helvetica-Bold", 8)
+    p.drawString(x_margen + 415, y_actual - 12, f"SUBTOTAL: ${subtotal_general:,.2f}")
+    p.drawString(x_margen + 415, y_actual - 26, f"IVA (19%): ${iva_general:,.2f}")
+    p.setFont("Helvetica-Bold", 9)
+    p.drawString(x_margen + 415, y_actual - 40, f"TOTAL: ${total_general:,.2f}")
 
     y_actual -= 55
     p.rect(x_margen, y_actual - 45, ancho_util, 45, fill=0, stroke=1)
-    p.setFont("Helvetica-Bold", 7)
+    p.setFont("Helvetica-Bold", 7.5)
     p.drawString(x_margen + 8, y_actual - 12, f"SOLICITADO: {datos_remision.get('elaborado', 'Felipe Valdés')}")
-    p.drawString(x_margen + 250, y_actual - 12, f"ELABORADO: {datos_remision.get('elaborado', 'Felipe Valdés')}")
+    p.drawString(x_margen + 300, y_actual - 12, f"ELABORADO: {datos_remision.get('elaborado', 'Felipe Valdés')}")
     p.drawString(x_margen + 8, y_actual - 28, f"RECIBE: {datos_remision.get('recibe_nombre', '')} - CC: {datos_remision.get('recibe_cc', '')}")
     
+    # Firma con tamaño mucho más grande y proporcionado para landscape
     if firma_img_path and os.path.exists(firma_img_path):
         try:
-            p.drawImage(firma_img_path, x_margen + 380, y_actual - 34, width=85, height=20, preserveAspectRatio=True, mask='auto')
+            p.drawImage(firma_img_path, ancho_util - 160, y_actual - 38, width=160, height=34, preserveAspectRatio=True, mask='auto')
         except:
             pass
-    p.drawString(x_margen + 350, y_actual - 35, "___________________________________")
-    p.drawString(x_margen + 350, y_actual - 43, "Firma de quien recibe conforme")
+    p.drawString(ancho_util - 180, y_actual - 38, "________________________________________")
+    p.drawString(ancho_util - 180, y_actual - 45, "Firma de quien recibe conforme")
 
     p.showPage()
     p.save()
@@ -1707,7 +1711,6 @@ elif rol in ["admin", "produccion"]:
     elif menu_limpio == "Órdenes Compra":
         st.subheader("Gestion de OC")
         try:
-            # Consultamos tanto el código como la descripción para mostrarlas unificadas en el selector
             refs_db_raw = ejecutar_consulta("SELECT codigo, descripcion FROM referencias")
             
             lista_refs_mostrar = ["-- Seleccione Referencia --"]
@@ -2214,21 +2217,22 @@ elif rol in ["admin", "produccion"]:
                     if st.session_state["mostrar_pantalla_firma"]:
                         st.markdown("""
                             <div style="background-color: rgba(255,122,0,0.15); padding: 15px; border-radius: 10px; border: 2px solid #FF7A00; text-align: center; margin-bottom: 15px;">
-                                <h3 style="color: #FF7A00; margin: 0;">MODO DE FIRMA AMPLIADO (PANTALLA TÁCTIL)</h3>
-                                <p style="color: #ddd; font-size: 0.9rem; margin: 5px 0 0 0;">Firme en el recuadro grande de abajo con el dedo o lápiz y pulse "Guardar y Cerrar Firma".</p>
+                                <h3 style="color: #FF7A00; margin: 0;">MODO DE FIRMA PANTALLA COMPLETA</h3>
+                                <p style="color: #ddd; font-size: 0.95rem; margin: 5px 0 0 0;">Firme con su dedo o lápiz en el recuadro y pulse "Guardar y Cerrar Firma".</p>
                             </div>
                         """, unsafe_allow_html=True)
                         
+                        # Panel de firma táctil ampliado (ocupa gran parte de la pantalla)
                         canvas_full = st_canvas(
                             fill_color="rgba(255, 165, 0, 0.3)",
-                            stroke_width=3,
+                            stroke_width=4,
                             stroke_color="#000000",
                             background_color="#FFFFFF",
-                            height=300,
-                            width=700,
+                            height=450,
+                            width=1100,
                             drawing_mode="freedraw",
                             return_image_data=True,
-                            key="canvas_firma_fullscreen",
+                            key="canvas_firma_fullscreen_opt",
                         )
                         
                         col_bf1, col_bf2 = st.columns(2)
@@ -2249,9 +2253,9 @@ elif rol in ["admin", "produccion"]:
                             if st.session_state.get("datos_firma_temporal") is not None:
                                 st.success("✅ Firma registrada correctamente (Lista para el PDF). Pulse el botón para modificarla.")
                             else:
-                                st.info("ℹ️ Ninguna firma registrada todavía. Pulse el botón para firmar en pantalla táctil ampliada.")
+                                st.info("ℹ️ Ninguna firma registrada todavía. Pulse el botón para abrir el panel de firma en pantalla completa.")
                         with col_s2:
-                            if st.button("✍️ Abrir Panel de Firma Táctil", use_container_width=True):
+                            if st.button("✍️ Abrir Panel de Firma Táctil (Pantalla Completa)", use_container_width=True):
                                 st.session_state["mostrar_pantalla_firma"] = True
                                 st.rerun()
 
