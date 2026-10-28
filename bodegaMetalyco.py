@@ -176,6 +176,38 @@ def ejecutar_comando(query, params=None):
     conn.close()
     ejecutar_consulta_cached.clear()
 
+# =====================================================
+# MODAL DE FIRMA DIGITAL CON st.dialog (ESTILO MODAL)
+# =====================================================
+@st.dialog("✍️ Panel de Firma Digital (Cargar, Firmar y Enviar)")
+def modal_firma_digital():
+    st.markdown("<p style='color: #aaa; font-size: 0.9rem;'>Dibuja tu firma con el dedo o con el mouse en el recuadro inferior. Al terminar, pulsa el botón de aceptar.</p>", unsafe_allow_html=True)
+    
+    # Canvas amplio y cómodo para la ventana modal
+    canvas_modal = st_canvas(
+        fill_color="rgba(255, 165, 0, 0.2)",
+        stroke_width=4,
+        stroke_color="#000000",
+        background_color="#FFFFFF",
+        height=300,
+        width=650,
+        drawing_mode="freedraw",
+        return_image_data=True,
+        key="canvas_modal_firma_definitivo",
+    )
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    col_m1, col_m2 = st.columns(2)
+    with col_m1:
+        if st.button("✔ Aplicar y Guardar Firma", type="primary", use_container_width=True):
+            if canvas_modal.image_data is not None:
+                st.session_state["datos_firma_temporal"] = canvas_modal.image_data
+            st.success("¡Firma guardada con éxito!")
+            st.rerun()
+    with col_m2:
+        if st.button("✖ Cerrar / Cancelar", use_container_width=True):
+            st.rerun()
+
 def inicializar_tablas_sistema():
     try:
         try:
