@@ -2082,7 +2082,6 @@ elif rol in ["admin", "produccion"]:
     elif menu_limpio == "Clases" and rol == "admin":
         st.subheader("Administración de Clases de Inventario")
         try:
-            clases_actuales = ejecutar_consulta("SELECT * FROM clases_inventario ORDER BY id DESC")
             with st.expander("Crear Clase", expanded=False):
                 with st.form("form_crear_clase", clear_on_submit=True):
                     nueva_clase = st.text_input("Nombre de la Clase")
@@ -2091,6 +2090,34 @@ elif rol in ["admin", "produccion"]:
                             ejecutar_comando("INSERT INTO clases_inventario (nombre) VALUES (%s) ON CONFLICT DO NOTHING", (nueva_clase.upper().strip(),))
                             st.success("Clase creada.")
                             st.rerun()
+
+            st.write("---")
+            st.markdown("#### Listado de Clases Registradas")
+            clases_actuales = ejecutar_consulta("SELECT id, nombre FROM clases_inventario ORDER BY id DESC")
+            
+            if not clases_actuales.empty:
+                clases_v = clases_actuales.copy()
+                clases_v.insert(0, "Seleccionar", False)
+                
+                edited_clases = st.data_editor(
+                    clases_v, 
+                    key="editor_clases_mult", 
+                    use_container_width=True, 
+                    hide_index=True
+                )
+                
+                ids_a_borrar_clases = edited_clases[edited_clases["Seleccionar"] == True]["id"].tolist()
+                
+                if st.button("Eliminar Clase(s) Seleccionada(s)", type="primary"):
+                    if ids_a_borrar_clases:
+                        for id_c in ids_a_borrar_clases:
+                            ejecutar_comando("DELETE FROM clases_inventario WHERE id = %s", (id_c,))
+                        st.success("¡Clase(s) eliminada(s) con éxito!")
+                        st.rerun()
+                    else:
+                        st.warning("Selecciona al menos una clase en la casilla de la izquierda para eliminar.")
+            else:
+                st.info("No hay clases registradas en la base de datos.")
         except Exception as e:
             st.error(f"Error: {e}")
 
