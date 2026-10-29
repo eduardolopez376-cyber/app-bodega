@@ -148,7 +148,6 @@ def mostrar_logo(ancho=200):
     else:
         st.markdown(f"<h2 style='color: #FF7A00; text-align:center;'>METAL&CO</h2>", unsafe_allow_html=True)
 
-# Cargando credenciales de forma segura desde st.secrets con respaldo local
 if "postgres" in st.secrets:
     DB_PARAMS = dict(st.secrets["postgres"])
 else:
@@ -1015,7 +1014,7 @@ with st.sidebar:
     elif rol == "produccion":
         opciones_menu = ["Vista General", "Programar", "Órdenes Compra", "Referencias", "Reportes", "Entregas", "Herramientas", "Cargue Ítems", "Inventario", "Despachos (F-02-02)"]
         iconos_menu = ["grid", "calendar3", "cart3", "journal-richtext", "file-earmark-bar-graph", "box-arrow-right", "wrench", "cloud-arrow-up", "archive", "truck"]
-    else:  # Admin
+    else:
         opciones_menu = [
             "Vista General", "Programar", "Órdenes Compra", "Máquinas", "Servicios", 
             "Referencias", "Reportes", "Entregas", "Herramientas", 
@@ -2064,7 +2063,6 @@ elif rol in ["admin", "produccion"]:
     elif menu_limpio == "Inventario":
         st.subheader("Inventario General y Reabastecimiento por Compras")
         try:
-            # Sección de Reabastecimiento Rápido (Entradas de Stock)
             inv_actual_raw = ejecutar_consulta("SELECT codigo, nombre, cantidad FROM inventario ORDER BY nombre ASC")
             if not inv_actual_raw.empty:
                 with st.expander("📦 Registrar Compra / Reabastecer Stock (Entrada)", expanded=False):
@@ -2082,9 +2080,10 @@ elif rol in ["admin", "produccion"]:
             st.write("---")
             st.markdown("#### Estado Actual de Existencias y Alertas")
             
-            inv_gen = ejecutar_consulta("SELECT codigo, nombre, tipo as clase, cantidad, stock_minimo FROM inventario")
+            inv_gen = ejecutar_consulta("SELECT codigo, nombre, tipo, cantidad, stock_minimo FROM inventario")
             if not inv_gen.empty:
-                # Agregar semáforo visual de stock
+                inv_gen.rename(columns={'tipo': 'clase'}, inplace=True)
+                
                 def evaluar_semaforo(row):
                     cant = row['cantidad']
                     min_val = row['stock_minimo']
