@@ -2043,39 +2043,75 @@ elif rol in ["admin", "produccion"]:
             st.error(f"Error: {e}")
 
     elif menu_limpio == "Cargue Ítems":
-        st.subheader("Cargue Único de Ítems al Inventario")
+        st.subheader("Crear / Registrar Nuevo Ítem en el Catálogo Base")
         try:
             clases_raw = ejecutar_consulta("SELECT nombre FROM clases_inventario")['nombre'].tolist() if not ejecutar_consulta("SELECT nombre FROM clases_inventario").empty else []
             lista_clases = ["-- Seleccione Clase --"] + clases_raw
             with st.form("form_cargue_item", clear_on_submit=True):
-                c_cod = st.text_input("Código del Ítem")
-                c_nom = st.text_input("Nombre del Ítem")
+                c_cod = st.text_input("Código del Ítem (Ej: DISC7INCH)")
+                c_nom = st.text_input("Nombre del Ítem (Ej: Disco de corte 7 pulg)")
                 c_clase = st.selectbox("Clase", lista_clases, index=0)
-                c_cant = st.number_input("Cantidad Inicial", min_value=0, value=10)
-                c_min = st.number_input("Stock Mínimo", min_value=0, value=5)
-                if st.form_submit_button("Guardar", type="primary", use_container_width=True):
+                c_cant = st.number_input("Cantidad Inicial (Si no sabes, déjalo en 0)", min_value=0, value=0)
+                c_min = st.number_input("Stock Mínimo (Alerta de escasez)", min_value=0, value=5)
+                if st.form_submit_button("Guardar Ítem", type="primary", use_container_width=True):
                     if c_cod.strip() and c_clase != "-- Seleccione Clase --":
-                        ejecutar_comando("INSERT INTO inventario (codigo, nombre, tipo, cantidad, stock_minimo) VALUES (%s, %s, %s, %s, %s)", (c_cod.upper().strip(), c_nom.strip(), c_clase, c_cant, c_min))
-                        st.success("Ítem cargado.")
+                        ejecutar_comando("INSERT INTO inventario (codigo, nombre, tipo, cantidad, stock_minimo) VALUES (%s, %s, %s, %s, %s) ON CONFLICT DO NOTHING", (c_cod.upper().strip(), c_nom.strip(), c_clase, c_cant, c_min))
+                        st.success("¡Ítem creado con éxito en el catálogo!")
                         st.rerun()
         except Exception as e:
             st.error(f"Error: {e}")
 
     elif menu_limpio == "Inventario":
-        st.subheader("Inventario General de la Planta")
+        st.subheader("Inventario General y Reabastecimiento por Compras")
         try:
+            # Sección de Reabastecimiento Rápido (Entradas de Stock)
+            inv_actual_raw = ejecutar_consulta("SELECT codigo, nombre, cantidad FROM inventario ORDER BY nombre ASC")
+            if not inv_actual_raw.empty:
+                with st.expander("📦 Registrar Compra / Reabastecer Stock (Entrada)", expanded=False):
+                    with st.form("form_reabastecer_stock", clear_on_submit=True):
+                        lista_items_reb = [f"{row['codigo']} - {row['nombre']} (Actual: {row['cantidad']} u.)" for _, row in inv_actual_raw.iterrows()]
+                        item_sel_reb = st.selectbox("Seleccionar Ítem a Reabastecer", lista_items_reb)
+                        cant_llegada = st.number_input("Cantidad que Llegó del Proveedor", min_value=1, value=10)
+                        
+                        if st.form_submit_button("Sumar al Inventario", type="primary", use_container_width=True):
+                            codigo_extraido = item_sel_reb.split(" - ")[0].strip()
+                            ejecutar_comando("UPDATE inventario SET cantidad = cantidad + %s WHERE codigo = %s", (cant_llegada, codigo_extraido))
+                            st.success(f"¡Se sumaron {cant_llegada} unidades al ítem `{codigo_extraido}` con éxito!")
+                            st.rerun()
+            
+            st.write("---")
+            st.markdown("#### Estado Actual de Existencias y Alertas")
+            
             inv_gen = ejecutar_consulta("SELECT codigo, nombre, tipo as clase, cantidad, stock_minimo FROM inventario")
             if not inv_gen.empty:
+                # Agregar semáforo visual de stock
+                def evaluar_semaforo(row):
+                    cant = row['cantidad']
+                    min_val = row['stock_minimo']
+                    if cant <= 0:
+                        return "🔴 Agotado"
+                    elif cant <= min_val:
+                        return "🟡 Stock Bajo"
+                    else:
+                        return "🟢 Normal"
+                
+                inv_gen['Estado'] = inv_gen.apply(evaluar_semaforo, axis=1)
+                
                 inv_gen_v = inv_gen.copy()
                 inv_gen_v.insert(0, "Seleccionar", False)
                 edited_inv = st.data_editor(inv_gen_v, key="editor_inv_mult", use_container_width=True, hide_index=True)
                 codigos_a_borrar_inv = edited_inv[edited_inv["Seleccionar"] == True]["codigo"].tolist()
-                if st.button("Eliminar", type="primary"):
+                
+                if st.button("Eliminar Ítem(s) Seleccionado(s)", type="primary"):
                     if codigos_a_borrar_inv:
                         for c_item in codigos_a_borrar_inv:
                             ejecutar_comando("DELETE FROM inventario WHERE codigo = %s", (c_item,))
-                        st.success("Ítems eliminados.")
+                        st.success("Ítems eliminados del inventario.")
                         st.rerun()
+                    else:
+                        st.warning("Selecciona al menos un ítem en la casilla de la izquierda para eliminar.")
+            else:
+                st.info("No hay ítems registrados en el inventario.")
         except Exception as e:
             st.error(f"Error: {e}")
 
