@@ -2054,7 +2054,13 @@ elif rol in ["admin", "produccion"]:
                 c_min = st.number_input("Stock Mínimo (Alerta de escasez)", min_value=0, value=5)
                 if st.form_submit_button("Guardar Ítem", type="primary", use_container_width=True):
                     if c_cod.strip() and c_clase != "-- Seleccione Clase --":
-                        ejecutar_comando("INSERT INTO inventario (codigo, nombre, tipo, cantidad, stock_minimo) VALUES (%s, %s, %s, %s, %s) ON CONFLICT DO NOTHING", (c_cod.upper().strip(), c_nom.strip(), c_clase, c_cant, c_min))
+                        ejecutar_comando(
+                            """INSERT INTO inventario (codigo, nombre, tipo, cantidad, stock_minimo) 
+                               VALUES (%s, %s, %s, %s, %s) 
+                               ON CONFLICT (codigo) 
+                               DO UPDATE SET nombre = EXCLUDED.nombre, tipo = EXCLUDED.tipo, stock_minimo = EXCLUDED.stock_minimo""", 
+                            (c_cod.upper().strip(), c_nom.strip(), c_clase, c_cant, c_min)
+                        )
                         st.success("¡Ítem creado con éxito en el catálogo!")
                         st.rerun()
         except Exception as e:
