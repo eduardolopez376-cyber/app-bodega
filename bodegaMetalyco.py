@@ -923,14 +923,12 @@ if not st.session_state["autenticado"]:
                             stored_pass = res.iloc[0]["password"]
                             acceso_concedido = False
                             
-                            # Validar si está encriptado con bcrypt o texto plano temporal
                             if stored_pass.startswith("$2b$") or stored_pass.startswith("$2a$"):
                                 if bcrypt.checkpw(pass_input.encode('utf-8'), stored_pass.encode('utf-8')):
                                     acceso_concedido = True
                             else:
                                 if pass_input == stored_pass:
                                     acceso_concedido = True
-                                    # Migrar automáticamente a hash seguro de bcrypt
                                     nuevo_hash = bcrypt.hashpw(pass_input.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
                                     ejecutar_comando("UPDATE usuarios SET password = %s WHERE username = %s", (nuevo_hash, user_input))
 
@@ -2156,7 +2154,6 @@ elif rol in ["admin", "produccion"]:
     elif menu_limpio == "Usuarios" and rol == "admin":
         st.subheader("Gestión y Seguridad de Usuarios del Sistema (Encriptación bcrypt)")
         try:
-            users_df = ejecutar_consulta("SELECT id, username, nombre, rol FROM usuarios ORDER BY id DESC")
             with st.expander("Crear Usuario con Contraseña Encriptada", expanded=False):
                 with st.form("form_crear_usuario", clear_on_submit=True):
                     u_user = st.text_input("Usuario")
@@ -2165,11 +2162,38 @@ elif rol in ["admin", "produccion"]:
                     u_rol = st.selectbox("Rol", ["-- Seleccione Rol --", "operario", "produccion", "admin"], index=0)
                     if st.form_submit_button("Guardar", type="primary", use_container_width=True):
                         if u_user.strip() and u_pass.strip() and u_nom.strip() and u_rol != "-- Seleccione Rol --":
-                            # Encriptar la contraseña de forma segura con bcrypt
                             hashed_password = bcrypt.hashpw(u_pass.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
                             ejecutar_comando("INSERT INTO usuarios (username, password, nombre, rol) VALUES (%s, %s, %s, %s)", (u_user.strip(), hashed_password, u_nom.strip(), u_rol))
                             st.success("Usuario creado con contraseña encriptada correctamente.")
                             st.rerun()
+
+            st.write("---")
+            st.markdown("#### Listado de Usuarios Registrados en el Sistema")
+            users_df = ejecutar_consulta("SELECT id, username, nombre, rol FROM usuarios ORDER BY id DESC")
+            
+            if not users_df.empty:
+                users_df_view = users_df.copy()
+                users_df_view.insert(0, "Seleccionar", False)
+                
+                edited_users = st.data_editor(
+                    users_df_view, 
+                    key="editor_usuarios_mult", 
+                    use_container_width=True, 
+                    hide_index=True
+                )
+                
+                ids_a_borrar_users = edited_users[edited_users["Seleccionar"] == True]["id"].tolist()
+                
+                if st.button("Eliminar Usuario(s) Seleccionado(s)", type="primary"):
+                    if ids_a_borrar_users:
+                        for id_u in ids_a_borrar_users:
+                            ejecutar_comando("DELETE FROM usuarios WHERE id = %s", (id_u,))
+                        st.success("¡Usuario(s) eliminado(s) con éxito!")
+                        st.rerun()
+                    else:
+                        st.warning("Selecciona al menos un usuario en la casilla de la izquierda para eliminar.")
+            else:
+                st.info("No hay usuarios adicionales registrados en la base de datos.")
         except Exception as e:
             st.error(f"Error: {e}")
 
