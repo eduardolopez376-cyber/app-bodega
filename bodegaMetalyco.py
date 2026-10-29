@@ -2054,11 +2054,10 @@ elif rol in ["admin", "produccion"]:
                 c_min = st.number_input("Stock Mínimo (Alerta de escasez)", min_value=0, value=5)
                 if st.form_submit_button("Guardar Ítem", type="primary", use_container_width=True):
                     if c_cod.strip() and c_clase != "-- Seleccione Clase --":
+                        # Inserción limpia que permite códigos repetidos con nombres diferentes
                         ejecutar_comando(
                             """INSERT INTO inventario (codigo, nombre, tipo, cantidad, stock_minimo) 
-                               VALUES (%s, %s, %s, %s, %s) 
-                               ON CONFLICT (codigo) 
-                               DO UPDATE SET nombre = EXCLUDED.nombre, tipo = EXCLUDED.tipo, stock_minimo = EXCLUDED.stock_minimo""", 
+                               VALUES (%s, %s, %s, %s, %s)""", 
                             (c_cod.upper().strip(), c_nom.strip(), c_clase, c_cant, c_min)
                         )
                         st.success("¡Ítem creado con éxito en el catálogo!")
@@ -2107,7 +2106,7 @@ elif rol in ["admin", "produccion"]:
                 edited_inv = st.data_editor(inv_gen_v, key="editor_inv_mult", use_container_width=True, hide_index=True)
                 codigos_a_borrar_inv = edited_inv[edited_inv["Seleccionar"] == True]["codigo"].tolist()
                 
-                if st.button("Eliminar Ítem(s) Seleccionado(s)", type="primary"):
+                if st.button("Eliminar Ítems Seleccionados", type="primary"):
                     if codigos_a_borrar_inv:
                         for c_item in codigos_a_borrar_inv:
                             ejecutar_comando("DELETE FROM inventario WHERE codigo = %s", (c_item,))
