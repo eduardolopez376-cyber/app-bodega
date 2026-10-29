@@ -8,3 +8,4 @@ plotly
 streamlit-option-menu
 streamlit-drawable-canvas
 Pillow
+bcrypt
