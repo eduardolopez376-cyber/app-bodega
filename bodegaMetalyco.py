@@ -182,7 +182,7 @@ def ejecutar_comando(query, params=None):
     ejecutar_consulta_cached.clear()
 
 # =====================================================
-# MODAL DE FIRMA DIGITAL CON st.dialog (ESTILO MODAL)
+# MODAL DE FIRMA DIGITAL CON st.dialog
 # =====================================================
 @st.dialog("✍️ Panel de Firma Digital (Cargar, Firmar y Enviar)")
 def modal_firma_digital():
@@ -1383,7 +1383,7 @@ if rol == "operario":
             st.error(f"Error al cargar formulario: {e}")
 
 # ====================================================
-# VISTA PARA ADMINISTRADOR Y PRODUCCIÓN (DASHBOARD PROFESIONAL)
+# VISTA PARA ADMINISTRADOR Y PRODUCCIÓN
 # ====================================================
 elif rol in ["admin", "produccion"]:
     
@@ -2168,7 +2168,7 @@ elif rol in ["admin", "produccion"]:
                             st.rerun()
 
             st.write("---")
-            st.markdown("#### Listado de Usuarios Registrados en el Sistema")
+            st.markdown("#### Listado y Edición de Usuarios Registrados")
             users_df = ejecutar_consulta("SELECT id, username, nombre, rol FROM usuarios ORDER BY id DESC")
             
             if not users_df.empty:
@@ -2184,16 +2184,41 @@ elif rol in ["admin", "produccion"]:
                 
                 ids_a_borrar_users = edited_users[edited_users["Seleccionar"] == True]["id"].tolist()
                 
-                if st.button("Eliminar Usuario(s) Seleccionado(s)", type="primary"):
-                    if ids_a_borrar_users:
-                        for id_u in ids_a_borrar_users:
-                            ejecutar_comando("DELETE FROM usuarios WHERE id = %s", (id_u,))
-                        st.success("¡Usuario(s) eliminado(s) con éxito!")
-                        st.rerun()
-                    else:
-                        st.warning("Selecciona al menos un usuario en la casilla de la izquierda para eliminar.")
+                col_u1, col_u2 = st.columns(2)
+                with col_u1:
+                    if st.button("Eliminar Usuario(s) Seleccionado(s)", type="primary"):
+                        if ids_a_borrar_users:
+                            for id_u in ids_a_borrar_users:
+                                ejecutar_comando("DELETE FROM usuarios WHERE id = %s", (id_u,))
+                            st.success("¡Usuario(s) eliminado(s) con éxito!")
+                            st.rerun()
+                        else:
+                            st.warning("Selecciona al menos un usuario en la casilla de la izquierda para eliminar.")
+                
+                st.write("---")
+                st.markdown("#### Editar Usuario o Cambiar Contraseña")
+                lista_nombres_usuarios = users_df['username'].tolist()
+                usuario_a_editar = st.selectbox("Selecciona el usuario a editar", ["-- Seleccione --"] + lista_nombres_usuarios)
+                
+                if usuario_a_editar != "-- Seleccione --":
+                    row_u = users_df[users_df['username'] == usuario_a_editar].iloc[0]
+                    with st.form("form_editar_usuario"):
+                        nuevo_nombre_completo = st.text_input("Nombre Completo", value=str(row_u['nombre']))
+                        nuevo_rol_usu = st.selectbox("Rol", ["operario", "produccion", "admin"], index=["operario", "produccion", "admin"].index(str(row_u['rol'])) if str(row_u['rol']) in ["operario", "produccion", "admin"] else 0)
+                        cambiar_clave_check = st.checkbox("¿Desea cambiar la contraseña de este usuario?")
+                        nueva_pass_input = st.text_input("Nueva Contraseña", type="password", value="")
+                        
+                        if st.form_submit_button("Actualizar Usuario", type="primary", use_container_width=True):
+                            if cambiar_clave_check and len(nueva_pass_input.strip()) > 0:
+                                nuevo_hash_pass = bcrypt.hashpw(nueva_pass_input.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                                ejecutar_comando("UPDATE usuarios SET nombre = %s, rol = %s, password = %s WHERE username = %s", (nuevo_nombre_completo.strip(), nuevo_rol_usu, nuevo_hash_pass, usuario_a_editar))
+                                st.success("¡Usuario y contraseña actualizados correctamente!")
+                            else:
+                                ejecutar_comando("UPDATE usuarios SET nombre = %s, rol = %s WHERE username = %s", (nuevo_nombre_completo.strip(), nuevo_rol_usu, usuario_a_editar))
+                                st.success("¡Información del usuario actualizada correctamente!")
+                            st.rerun()
             else:
-                st.info("No hay usuarios adicionales registrados en la base de datos.")
+                st.info("No hay usuarios registrados en la base de datos.")
         except Exception as e:
             st.error(f"Error: {e}")
 
@@ -2202,14 +2227,24 @@ elif rol in ["admin", "produccion"]:
         try:
             cfg_db = ejecutar_consulta("SELECT clave, valor FROM configuracion_empresa")
             cfg_dict = {row['clave']: row['valor'] for _, row in cfg_db.iterrows()} if not cfg_db.empty else {}
+            
             with st.form("form_configuracion_general"):
                 razon_social_val = st.text_input("Razón Social", value=cfg_dict.get("razon_social", "Industrias Metal&Co"))
-                if st.form_submit_button("Guardar", type="primary", use_container_width=True):
+                nit_val = st.text_input("NIT de la Empresa", value=cfg_dict.get("nit", "902024035"))
+                direccion_val = st.text_input("Dirección", value=cfg_dict.get("direccion", "Calle 79A No.16-168 La Romelia, Dosquebradas"))
+                telefono_val = st.text_input("Teléfono de Contacto", value=cfg_dict.get("telefono", "+57 310 4368657"))
+                correo_val = st.text_input("Correo Electrónico", value=cfg_dict.get("correo", "metalycosas@gmail.com"))
+                
+                if st.form_submit_button("Guardar Cambios de Configuración", type="primary", use_container_width=True):
                     ejecutar_comando("INSERT INTO configuracion_empresa (clave, valor) VALUES ('razon_social', %s) ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor", (razon_social_val,))
-                    st.success("Guardado con éxito.")
+                    ejecutar_comando("INSERT INTO configuracion_empresa (clave, valor) VALUES ('nit', %s) ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor", (nit_val,))
+                    ejecutar_comando("INSERT INTO configuracion_empresa (clave, valor) VALUES ('direccion', %s) ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor", (direccion_val,))
+                    ejecutar_comando("INSERT INTO configuracion_empresa (clave, valor) VALUES ('telefono', %s) ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor", (telefono_val,))
+                    ejecutar_comando("INSERT INTO configuracion_empresa (clave, valor) VALUES ('correo', %s) ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor", (correo_val,))
+                    st.success("¡Configuración guardada con éxito!")
                     st.rerun()
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"Error en configuración: {e}")
 
     elif menu_limpio == "Despachos (F-02-02)":
         st.subheader("Módulo de Despachos y Generación de Remisión (F-02-02)")
