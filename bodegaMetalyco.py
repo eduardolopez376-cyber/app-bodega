@@ -7,6 +7,7 @@ import io
 import urllib.parse
 import base64
 import uuid
+import bcrypt
 from datetime import datetime, time, date, timedelta
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.pdfgen import canvas
@@ -147,14 +148,18 @@ def mostrar_logo(ancho=200):
     else:
         st.markdown(f"<h2 style='color: #FF7A00; text-align:center;'>METAL&CO</h2>", unsafe_allow_html=True)
 
-DB_PARAMS = {
-    "dbname": "postgres",
-    "user": "postgres.ngwbaadrmzkbvoqeoync",
-    "password": "Metalgas2026",
-    "host": "aws-1-us-west-2.pooler.supabase.com",
-    "port": "6543",
-    "sslmode": "require"
-}
+# Cargando credenciales de forma segura desde st.secrets con respaldo local
+if "postgres" in st.secrets:
+    DB_PARAMS = dict(st.secrets["postgres"])
+else:
+    DB_PARAMS = {
+        "dbname": "postgres",
+        "user": "postgres.ngwbaadrmzkbvoqeoync",
+        "password": "Metalgas2026",
+        "host": "aws-1-us-west-2.pooler.supabase.com",
+        "port": "6543",
+        "sslmode": "require"
+    }
 
 @st.cache_data(ttl=5, show_spinner=False)
 def ejecutar_consulta_cached(query, params_key=None):
@@ -183,7 +188,6 @@ def ejecutar_comando(query, params=None):
 def modal_firma_digital():
     st.markdown("<p style='color: #aaa; font-size: 0.9rem;'>Dibuja tu firma con el dedo o con el mouse en el recuadro inferior. Al terminar, pulsa el botón de aceptar.</p>", unsafe_allow_html=True)
     
-    # Canvas amplio y cómodo para la ventana modal
     canvas_modal = st_canvas(
         fill_color="rgba(255, 165, 0, 0.2)",
         stroke_width=4,
@@ -912,23 +916,40 @@ if not st.session_state["autenticado"]:
                 if submit_login:
                     try:
                         res = ejecutar_consulta(
-                            "SELECT username, nombre, rol, avatar_path FROM usuarios WHERE username = %s AND password = %s",
-                            (user_input, pass_input)
+                            "SELECT username, nombre, rol, avatar_path, password FROM usuarios WHERE username = %s",
+                            (user_input,)
                         )
                         if not res.empty:
-                            nuevo_token = str(uuid.uuid4())
-                            ejecutar_comando(
-                                "UPDATE usuarios SET session_token = %s WHERE username = %s",
-                                (nuevo_token, res.iloc[0]["username"])
-                            )
+                            stored_pass = res.iloc[0]["password"]
+                            acceso_concedido = False
                             
-                            st.session_state["autenticado"] = True
-                            st.session_state["username"] = res.iloc[0]["username"]
-                            st.session_state["nombre_usuario"] = res.iloc[0]["nombre"]
-                            st.session_state["rol"] = res.iloc[0]["rol"]
-                            st.session_state["avatar_path"] = res.iloc[0]["avatar_path"]
-                            st.session_state["session_token"] = nuevo_token
-                            st.rerun()
+                            # Validar si está encriptado con bcrypt o texto plano temporal
+                            if stored_pass.startswith("$2b$") or stored_pass.startswith("$2a$"):
+                                if bcrypt.checkpw(pass_input.encode('utf-8'), stored_pass.encode('utf-8')):
+                                    acceso_concedido = True
+                            else:
+                                if pass_input == stored_pass:
+                                    acceso_concedido = True
+                                    # Migrar automáticamente a hash seguro de bcrypt
+                                    nuevo_hash = bcrypt.hashpw(pass_input.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                                    ejecutar_comando("UPDATE usuarios SET password = %s WHERE username = %s", (nuevo_hash, user_input))
+
+                            if acceso_concedido:
+                                nuevo_token = str(uuid.uuid4())
+                                ejecutar_comando(
+                                    "UPDATE usuarios SET session_token = %s WHERE username = %s",
+                                    (nuevo_token, res.iloc[0]["username"])
+                                )
+                                
+                                st.session_state["autenticado"] = True
+                                st.session_state["username"] = res.iloc[0]["username"]
+                                st.session_state["nombre_usuario"] = res.iloc[0]["nombre"]
+                                st.session_state["rol"] = res.iloc[0]["rol"]
+                                st.session_state["avatar_path"] = res.iloc[0]["avatar_path"]
+                                st.session_state["session_token"] = nuevo_token
+                                st.rerun()
+                            else:
+                                st.error("Usuario o contraseña incorrectos")
                         else:
                             st.error("Usuario o contraseña incorrectos")
                     except Exception as e:
@@ -2133,10 +2154,10 @@ elif rol in ["admin", "produccion"]:
             st.error(f"Error en gestión de clientes: {e}")
 
     elif menu_limpio == "Usuarios" and rol == "admin":
-        st.subheader("Gestión y Seguridad de Usuarios del Sistema")
+        st.subheader("Gestión y Seguridad de Usuarios del Sistema (Encriptación bcrypt)")
         try:
             users_df = ejecutar_consulta("SELECT id, username, nombre, rol FROM usuarios ORDER BY id DESC")
-            with st.expander("Crear Usuario", expanded=False):
+            with st.expander("Crear Usuario con Contraseña Encriptada", expanded=False):
                 with st.form("form_crear_usuario", clear_on_submit=True):
                     u_user = st.text_input("Usuario")
                     u_pass = st.text_input("Contraseña", type="password")
@@ -2144,8 +2165,10 @@ elif rol in ["admin", "produccion"]:
                     u_rol = st.selectbox("Rol", ["-- Seleccione Rol --", "operario", "produccion", "admin"], index=0)
                     if st.form_submit_button("Guardar", type="primary", use_container_width=True):
                         if u_user.strip() and u_pass.strip() and u_nom.strip() and u_rol != "-- Seleccione Rol --":
-                            ejecutar_comando("INSERT INTO usuarios (username, password, nombre, rol) VALUES (%s, %s, %s, %s)", (u_user.strip(), u_pass, u_nom.strip(), u_rol))
-                            st.success("Usuario creado.")
+                            # Encriptar la contraseña de forma segura con bcrypt
+                            hashed_password = bcrypt.hashpw(u_pass.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                            ejecutar_comando("INSERT INTO usuarios (username, password, nombre, rol) VALUES (%s, %s, %s, %s)", (u_user.strip(), hashed_password, u_nom.strip(), u_rol))
+                            st.success("Usuario creado con contraseña encriptada correctamente.")
                             st.rerun()
         except Exception as e:
             st.error(f"Error: {e}")
@@ -2243,7 +2266,6 @@ elif rol in ["admin", "produccion"]:
                     
                     st.markdown("#### ✍️ Firma Digital de Quien Recibe (Modal)")
                     
-                    # Botón para abrir la ventana modal de firma estilo referencia
                     if st.button("🖊️ Abrir Panel de Firma Digital", type="primary", use_container_width=True):
                         modal_firma_digital()
 
