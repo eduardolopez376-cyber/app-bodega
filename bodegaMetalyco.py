@@ -14,7 +14,6 @@ from reportlab.pdfgen import canvas
 import plotly.express as px
 import plotly.graph_objects as go
 from streamlit_option_menu import option_menu
-from streamlit_drawable_canvas import st_canvas
 from PIL import Image
 
 st.set_page_config(
@@ -179,37 +178,6 @@ def ejecutar_comando(query, params=None):
     cur.close()
     conn.close()
     ejecutar_consulta_cached.clear()
-
-# =====================================================
-# MODAL DE FIRMA DIGITAL CON st.dialog
-# =====================================================
-@st.dialog("✍️ Panel de Firma Digital (Cargar, Firmar y Enviar)")
-def modal_firma_digital():
-    st.markdown("<p style='color: #aaa; font-size: 0.9rem;'>Dibuja tu firma con el dedo o con el mouse en el recuadro inferior. Al terminar, pulsa el botón de aceptar.</p>", unsafe_allow_html=True)
-    
-    canvas_modal = st_canvas(
-        fill_color="rgba(255, 165, 0, 0.2)",
-        stroke_width=4,
-        stroke_color="#000000",
-        background_color="#FFFFFF",
-        height=300,
-        width=650,
-        drawing_mode="freedraw",
-        return_image_data=True,
-        key="canvas_modal_firma_definitivo",
-    )
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    col_m1, col_m2 = st.columns(2)
-    with col_m1:
-        if st.button("✔ Aplicar y Guardar Firma", type="primary", use_container_width=True):
-            if canvas_modal.image_data is not None:
-                st.session_state["datos_firma_temporal"] = canvas_modal.image_data
-            st.success("¡Firma guardada con éxito!")
-            st.rerun()
-    with col_m2:
-        if st.button("✖ Cerrar / Cancelar", use_container_width=True):
-            st.rerun()
 
 def inicializar_tablas_sistema():
     try:
@@ -544,7 +512,7 @@ def generar_pdf_f01_01(datos):
     buffer.seek(0)
     return buffer
 
-def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=None):
+def generar_pdf_remision_f02_02(datos_remision, items_despacho):
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=landscape(letter))
     width, height = landscape(letter)
@@ -787,11 +755,6 @@ def generar_pdf_remision_f02_02(datos_remision, items_despacho, firma_img_path=N
     p.drawString(x_margen + 300, y_actual - 12, f"ELABORADO: {datos_remision.get('elaborado', 'Felipe Valdés')}")
     p.drawString(x_margen + 8, y_actual - 28, f"RECIBE: {datos_remision.get('recibe_nombre', '')} - CC: {datos_remision.get('recibe_cc', '')}")
     
-    if firma_img_path and os.path.exists(firma_img_path):
-        try:
-            p.drawImage(firma_img_path, ancho_util - 220, y_actual - 45, width=220, height=42, preserveAspectRatio=True, mask='auto')
-        except:
-            pass
     p.drawString(ancho_util - 240, y_actual - 42, "_________________________________________________")
     p.drawString(ancho_util - 240, y_actual - 50, "Firma de quien recibe conforme")
 
@@ -812,10 +775,6 @@ if "session_token" not in st.session_state:
     st.session_state["session_token"] = None
 if "form_key_counter" not in st.session_state:
     st.session_state["form_key_counter"] = 0
-if "mostrar_panel_firma" not in st.session_state:
-    st.session_state["mostrar_panel_firma"] = False
-if "datos_firma_temporal" not in st.session_state:
-    st.session_state["datos_firma_temporal"] = None
 
 @st.fragment(run_every=5)
 def validar_sesion_tiempo_real():
@@ -2054,7 +2013,6 @@ elif rol in ["admin", "produccion"]:
                 c_min = st.number_input("Stock Mínimo (Alerta de escasez)", min_value=0, value=5)
                 if st.form_submit_button("Guardar Ítem", type="primary", use_container_width=True):
                     if c_cod.strip() and c_clase != "-- Seleccione Clase --":
-                        # Inserción limpia que permite códigos repetidos con nombres diferentes
                         ejecutar_comando(
                             """INSERT INTO inventario (codigo, nombre, tipo, cantidad, stock_minimo) 
                                VALUES (%s, %s, %s, %s, %s)""", 
@@ -2106,7 +2064,7 @@ elif rol in ["admin", "produccion"]:
                 edited_inv = st.data_editor(inv_gen_v, key="editor_inv_mult", use_container_width=True, hide_index=True)
                 codigos_a_borrar_inv = edited_inv[edited_inv["Seleccionar"] == True]["codigo"].tolist()
                 
-                if st.button("Eliminar Ítems Seleccionados", type="primary"):
+                if st.button("Eliminar Ítem(s) Seleccionado(s)", type="primary"):
                     if codigos_a_borrar_inv:
                         for c_item in codigos_a_borrar_inv:
                             ejecutar_comando("DELETE FROM inventario WHERE codigo = %s", (c_item,))
@@ -2389,16 +2347,6 @@ elif rol in ["admin", "produccion"]:
                         recibe_nombre_input = st.text_input("Nombre de quien recibe")
                     with col_f2:
                         recibe_cc_input = st.text_input("Cédula de quien recibe")
-                    
-                    st.markdown("#### ✍️ Firma Digital de Quien Recibe (Modal)")
-                    
-                    if st.button("🖊️ Abrir Panel de Firma Digital", type="primary", use_container_width=True):
-                        modal_firma_digital()
-
-                    if st.session_state.get("datos_firma_temporal") is not None:
-                        st.success("✅ Firma digital cargada y lista para incluirse en el PDF de remisión.")
-                    else:
-                        st.info("ℹ️ Pulsa el botón superior para abrir el panel de firma y firmar de manera cómoda.")
 
                     st.write("---")
                     if st.button("Generar Remisión F-02-02 (PDF)", type="primary", use_container_width=True):
@@ -2406,8 +2354,6 @@ elif rol in ["admin", "produccion"]:
                             st.error("Por favor ingrese el nombre y la cédula de la persona que recibe.")
                         elif filas_seleccionadas.empty and not troquel_incluir:
                             st.warning("Seleccione al menos un registro de producción o un ítem adicional para despachar.")
-                        elif st.session_state.get("datos_firma_temporal") is None:
-                            st.warning("Debe registrar y aplicar la firma digital antes de generar la remisión.")
                         else:
                             items_finales_despacho = []
                             ids_a_marcar_despachados = []
@@ -2456,16 +2402,6 @@ elif rol in ["admin", "produccion"]:
                                     "iva_porcentaje": float(troquel_iva),
                                     "subtotal": subtotal_troquel
                                 })
-                            
-                            firma_path_temp = None
-                            img_arr = st.session_state.get("datos_firma_temporal")
-                            if img_arr is not None:
-                                os.makedirs("firmas", exist_ok=True)
-                                firma_path_temp = f"firmas/firma_{num_remision_input}.png"
-                                pil_img = Image.fromarray(img_arr.astype('uint8'), mode="RGBA")
-                                background = Image.new("RGB", pil_img.size, (255, 255, 255))
-                                background.paste(pil_img, mask=pil_img.split()[3])
-                                background.save(firma_path_temp)
 
                             datos_remision_dict = {
                                 "numero_remision": num_remision_input,
@@ -2485,7 +2421,7 @@ elif rol in ["admin", "produccion"]:
                                 "recibe_cc": recibe_cc_input.strip()
                             }
                             
-                            pdf_remision_buffer = generar_pdf_remision_f02_02(datos_remision_dict, items_finales_despacho, firma_path_temp)
+                            pdf_remision_buffer = generar_pdf_remision_f02_02(datos_remision_dict, items_finales_despacho)
                             
                             for id_reg in ids_a_marcar_despachados:
                                 ejecutar_comando("UPDATE registro_produccion SET despachado = TRUE WHERE id = %s", (id_reg,))
